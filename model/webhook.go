@@ -42,6 +42,12 @@ type Userdomyikado struct {
 	GitHostUsername      string             `bson:"githostusername,omitempty" json:"githostusername,omitempty"`
 	Poin                 float64            `bson:"poin,omitempty" json:"poin,omitempty"`
 	GoogleProfilePicture string             `bson:"googleprofilepicture,omitempty" json:"picture,omitempty"`
+	Team                 string             `json:"team,omitempty" bson:"team,omitempty"`
+	Scope                string             `json:"scope,omitempty" bson:"scope,omitempty"`
+	Section              string             `json:"section,omitempty" bson:"section,omitempty"`
+	Chapter              string             `json:"chapter,omitempty" bson:"chapter,omitempty"`
+	LinkedDevice         string             `json:"linkeddevice,omitempty" bson:"linkeddevice,omitempty"`
+	JumlahAntrian        int                `json:"jumlahantrian,omitempty" bson:"jumlahantrian,omitempty"`
 }
 
 type Task struct {
@@ -58,8 +64,8 @@ type LoginRequest struct {
 }
 
 type Stp struct {
-	PhoneNumber		string `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
-	PasswordHash	string `bson:"password,omitempty" json:"password,omitempty"`
+	PhoneNumber  string    `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
+	PasswordHash string    `bson:"password,omitempty" json:"password,omitempty"`
 	CreatedAt    time.Time `bson:"createdAt,omitempty" json:"createdAt,omitempty"`
 }
 
