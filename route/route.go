@@ -25,6 +25,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetYesterdayDistincWAGroup(w, r)
 	case method == "GET" && path == "/data/user":
 		controller.GetDataUser(w, r)
+	//generate token akses untuk kirim wa jangka panjang token
+	case method == "PUT" && path == "/data/user":
+		controller.PutTokenDataUser(w, r)
 	case method == "GET" && path == "/data/user/task/todo":
 		controller.GetTaskUser(w, r)
 	case method == "GET" && path == "/data/user/task/doing":
