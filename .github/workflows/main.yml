@@ -34,7 +34,7 @@ jobs:
             --runtime=go122 \
             --trigger-http \
             --timeout=540s \
-            --set-env-vars MONGOSTRING='${{ secrets.MONGOSTRING }}',PRKEY='${{ secrets.PRKEY }}'
+            --set-env-vars MONGOSTRING='${{ secrets.MONGOSTRING }}',PRKEY='${{ secrets.PRKEY }}',PHONENUMBER='${{ secrets.PHONENUMBER }}'
       - name: 'Cek eksistensi fungsi'
         run: 'gcloud functions describe domyid --region=asia-southeast2'
       - name: 'Cek log debugging'
