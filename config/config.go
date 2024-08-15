@@ -14,13 +14,13 @@ var PrivateKey string = os.Getenv("PRKEY")
 
 var IPPort, Net = at.GetAddress()
 
-var PhoneNumber string
+var PhoneNumber string = os.Getenv("PHONENUMBER")
 
 func SetEnv() {
 	if ErrorMongoconn != nil {
 		log.Println(ErrorMongoconn.Error())
 	}
-	profile, err := atdb.GetOneDoc[model.Profile](Mongoconn, "profile", primitive.M{})
+	profile, err := atdb.GetOneDoc[model.Profile](Mongoconn, "profile", primitive.M{"phonenumber": PhoneNumber})
 	if err != nil {
 		log.Println(err)
 	}

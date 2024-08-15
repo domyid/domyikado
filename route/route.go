@@ -64,7 +64,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostWebHookGitlab(w, r)
 	case method == "POST" && path == "/notif/ux/postlaporan":
 		controller.PostLaporan(w, r)
-	case method == "POST" && path == "/notif/ux/postfeedback":
+	case method == "POST" && path == "/notif/ux/postfeedback": //posting feedback
 		controller.PostFeedback(w, r)
 	case method == "POST" && path == "/notif/ux/postrating": //resume atau risalah rapat dan feedback
 		controller.PostRatingLaporan(w, r)
