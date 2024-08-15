@@ -526,6 +526,16 @@ func PostFeedback(respw http.ResponseWriter, req *http.Request) {
 	lap.Phone = ValidasiNoHP(lap.Phone)
 	lap.Petugas = docuser.Name
 	lap.NoPetugas = docuser.PhoneNumber
+	//memastikan nomor yang dimintai feedback bukan anggota
+	for _, member := range prjuser.Members {
+		if lap.Phone == member.PhoneNumber {
+			var respn model.Response
+			respn.Status = "Feedback tidak boleh dari sendiri atau rekan satu tim " + member.Name
+			respn.Response = member.PhoneNumber
+			at.WriteJSON(respw, http.StatusForbidden, respn)
+			return
+		}
+	}
 
 	idlap, err := atdb.InsertOneDoc(config.Mongoconn, "uxlaporan", lap)
 	if err != nil {
