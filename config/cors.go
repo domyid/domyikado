@@ -13,6 +13,7 @@ var Origins = []string{
 	"https://my.my.id",
 	"https://whatsauth.github.io",
 	"https://www.do.my.id",
+	"https://domy.buxxed.me",
 }
 
 // Fungsi untuk memeriksa apakah origin diizinkan
