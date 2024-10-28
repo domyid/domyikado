@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -575,4 +576,52 @@ func ValidasiNoHP(nomor string) string {
 	nomor = strings.ReplaceAll(nomor, "+", "")
 	nomor = strings.ReplaceAll(nomor, "-", "")
 	return nomor
+}
+
+func GetUXReport(w http.ResponseWriter, r *http.Request) {
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(r)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusForbidden, respn)
+		return
+	}
+
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Pengguna tidak ditemukan"
+		respn.Info = payload.Id
+		respn.Location = "Get User Data"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusNotFound, respn)
+		return
+	}
+
+	filter := bson.M{"nopetugas": docuser.PhoneNumber}
+	cursor, err := config.Mongoconn.Collection("uxlaporan").Find(context.TODO(), filter)
+	if err != nil {
+		http.Error(w, "Gagal mengambil data dari database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	var logUXReport []model.LaporanHistory
+	if err = cursor.All(context.TODO(), &logUXReport); err != nil {
+		http.Error(w, "Gagal memproses data dari database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(logUXReport) == 0 {
+		http.Error(w, "Tidak ada data yang ditemukan untuk pengguna ini", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(logUXReport); err != nil {
+		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
+	}
 }
