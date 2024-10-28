@@ -58,6 +58,21 @@ type Task struct {
 	Done      bool               `bson:"done,omitempty" json:"done,omitempty"`
 }
 
+type ReportData struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	UserID      primitive.ObjectID `bson:"userid,omitempty" json:"userid,omitempty"`
+	Name        string             `bson:"name,omitempty" json:"name,omitempty"`
+	PhoneNumber string             `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
+	Email       string             `bson:"email,omitempty" json:"email,omitempty"`
+	ProjectID   primitive.ObjectID `bson:"projectid,omitempty" json:"projectid,omitempty"`
+	ProjectName string             `bson:"projectname,omitempty" json:"projectname,omitempty"`
+	Poin        float64            `bson:"poin,omitempty" json:"poin,omitempty"`
+	Activity    string             `bson:"activity,omitempty" json:"activity,omitempty"`
+	Detail      string             `bson:"detail,omitempty" json:"detail,omitempty"`
+	Info        string             `bson:"info,omitempty" json:"info,omitempty"`
+	URL         string             `bson:"url,omitempty" json:"url,omitempty"`
+}
+
 type LoginRequest struct {
 	PhoneNumber string `json:"phonenumber"`
 	Password    string `json:"password"`
