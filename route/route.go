@@ -80,6 +80,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostTaskList(w, r)
 	case method == "GET" && at.URLParam(path, "/notif/ux/getlaporan/:id"):
 		controller.GetLaporan(w, r)
+	case method == "GET" && path == "/notif/ux/getreportdata":
+		controller.GetUXReport(w, r)
 	case method == "POST" && at.URLParam(path, "/webhook/nomor/:nomorwa"):
 		controller.PostInboxNomor(w, r)
 	// LMS
