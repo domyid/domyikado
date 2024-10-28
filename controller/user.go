@@ -395,3 +395,57 @@ func ApproveBimbinganbyPoin(w http.ResponseWriter, r *http.Request) {
 
 	at.WriteJSON(w, http.StatusOK, responseMap)
 }
+
+func GetLogPoin(w http.ResponseWriter, r *http.Request) {
+	// Dekode token dari header
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(r)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusForbidden, respn)
+		return
+	}
+
+	// Ambil data pengguna berdasarkan nomor telepon dari payload
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Pengguna tidak ditemukan"
+		respn.Info = payload.Id
+		respn.Location = "Get User Data"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusNotFound, respn)
+		return
+	}
+
+	// Filter log poin berdasarkan UserID pengguna
+	filter := bson.M{"userid": docuser.ID}
+	cursor, err := config.Mongoconn.Collection("logpoin").Find(context.TODO(), filter)
+	if err != nil {
+		http.Error(w, "Gagal mengambil data dari database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	// Decode hasilnya ke slice dari struct `LogPoin`
+	var logPoins []model.ReportData
+	if err = cursor.All(context.TODO(), &logPoins); err != nil {
+		http.Error(w, "Gagal memproses data dari database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Jika tidak ada data ditemukan
+	if len(logPoins) == 0 {
+		http.Error(w, "Tidak ada data yang ditemukan untuk pengguna ini", http.StatusNotFound)
+		return
+	}
+
+	// Menulis respons dalam format JSON
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(logPoins); err != nil {
+		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
+	}
+}
