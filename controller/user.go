@@ -86,6 +86,57 @@ func GetDataUser(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, docuser)
 }
 
+func GetAllDataUser(respw http.ResponseWriter, req *http.Request) {
+	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Invalid Token"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	collection := config.Mongoconn.Collection("user")
+	ctx := context.TODO()
+	cur, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Database Query Failed"
+		respn.Location = "Database Query"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+	defer cur.Close(ctx)
+
+	var allUsers []model.Userdomyikado
+	for cur.Next(ctx) {
+		var user model.Userdomyikado
+		if err := cur.Decode(&user); err != nil {
+			var respn model.Response
+			respn.Status = "Error: Decoding Document"
+			respn.Location = "Cursor Iteration"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusInternalServerError, respn)
+			return
+		}
+		allUsers = append(allUsers, user)
+	}
+
+	if err := cur.Err(); err != nil {
+		var respn model.Response
+		respn.Status = "Error: Cursor Error"
+		respn.Location = "Cursor Final Check"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	at.WriteJSON(respw, http.StatusOK, allUsers)
+}
+
 func PostDataUser(respw http.ResponseWriter, req *http.Request) {
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
