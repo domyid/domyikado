@@ -98,6 +98,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.VerifyPasswordHandler(w, r)
 	case method == "POST" && path == "/auth/resend":
 		controller.ResendPasswordHandler(w, r)
+	// LMS
+	case method == "GET" && path == "/stats/commit":
+		controller.CountComits(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)
