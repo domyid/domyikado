@@ -101,6 +101,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// LMS
 	case method == "GET" && path == "/stats/commit":
 		controller.CountCommits(w, r)
+	case method == "GET" && path == "/stats/feedback":
+		controller.CountFeedback(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)
