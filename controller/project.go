@@ -69,22 +69,8 @@ func PostDataProject(respw http.ResponseWriter, req *http.Request) {
 }
 
 func GetDataProject(respw http.ResponseWriter, req *http.Request) {
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	docuser, err := watoken.ParseToken(respw, req)
 	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
-		return
-	}
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data user tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
 	existingprjs, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", primitive.M{"owner._id": docuser.ID})
@@ -106,15 +92,8 @@ func GetDataProject(respw http.ResponseWriter, req *http.Request) {
 }
 
 func PutDataProject(respw http.ResponseWriter, req *http.Request) {
-	// Decode token from header
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	docuser, err := watoken.ParseToken(respw, req)
 	if err != nil {
-		var respn model.Response
-		respn.Status = "Error: Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
 
@@ -126,16 +105,6 @@ func PutDataProject(respw http.ResponseWriter, req *http.Request) {
 		respn.Status = "Error: Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-
-	// Get user data from the database
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error: Data user tidak ditemukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
 
@@ -172,38 +141,21 @@ func PutDataProject(respw http.ResponseWriter, req *http.Request) {
 }
 
 func DeleteDataProject(respw http.ResponseWriter, req *http.Request) {
-	// Dekode token dari header permintaan
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	docuser, err := watoken.ParseToken(respw, req)
 	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
-
 	// Dekode nama proyek dari body permintaan
 	var reqBody struct {
 		ProjectName string `json:"project_name"`
 	}
+
 	err = json.NewDecoder(req.Body).Decode(&reqBody)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-
-	// Dapatkan data pengguna berdasarkan ID dari payload token
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data user tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
 
@@ -232,24 +184,11 @@ func DeleteDataProject(respw http.ResponseWriter, req *http.Request) {
 }
 
 func GetDataMemberProject(respw http.ResponseWriter, req *http.Request) {
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	docuser, err := watoken.ParseToken(respw, req)
 	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data user tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
-		return
-	}
+
 	existingprjs, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", primitive.M{"members._id": docuser.ID})
 	if err != nil {
 		var respn model.Response
@@ -269,16 +208,11 @@ func GetDataMemberProject(respw http.ResponseWriter, req *http.Request) {
 }
 
 func PostDataMemberProject(respw http.ResponseWriter, req *http.Request) {
-	var respn model.Response
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	docuserowner, err := watoken.ParseToken(respw, req)
 	if err != nil {
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
+	var respn model.Response
 	var idprjuser model.Userdomyikado
 	err = json.NewDecoder(req.Body).Decode(&idprjuser)
 	if err != nil {
@@ -287,13 +221,7 @@ func PostDataMemberProject(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	docuserowner, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		respn.Status = "Error : Data owner tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
-		return
-	}
+
 	existingprj, err := atdb.GetOneDoc[model.Project](config.Mongoconn, "project", primitive.M{"_id": idprjuser.ID, "owner._id": docuserowner.ID})
 	if err != nil {
 		respn.Status = "Error : Data project tidak di temukan"
@@ -327,13 +255,8 @@ func PostDataMemberProject(respw http.ResponseWriter, req *http.Request) {
 
 func DeleteDataMemberProject(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	docuserowner, err := watoken.ParseToken(respw, req)
 	if err != nil {
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
 
@@ -347,14 +270,6 @@ func DeleteDataMemberProject(respw http.ResponseWriter, req *http.Request) {
 		respn.Status = "Error : Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-
-	docuserowner, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		respn.Status = "Error : Data owner tidak ditemukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
 
