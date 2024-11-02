@@ -12,7 +12,7 @@ import (
 	"github.com/gocroot/model"
 )
 
-func CountComits(w http.ResponseWriter, r *http.Request) {
+func CountCommits(w http.ResponseWriter, r *http.Request) {
 	docuser, err := watoken.ParseToken(w, r)
 	if err != nil {
 		return

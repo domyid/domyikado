@@ -100,7 +100,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ResendPasswordHandler(w, r)
 	// LMS
 	case method == "GET" && path == "/stats/commit":
-		controller.CountComits(w, r)
+		controller.CountCommits(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)
