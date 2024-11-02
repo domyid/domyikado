@@ -18,7 +18,6 @@ func CountCommits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all projects for the user
 	existingprjs, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", primitive.M{"owner._id": docuser.ID})
 	if err != nil {
 		var respn model.Response
@@ -36,8 +35,7 @@ func CountCommits(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var allStats []model.StatData
-	totalCount := int64(0) // Initialize a total count variable
-
+	totalCount := int64(0)
 	for _, project := range existingprjs {
 		commitCount, err := atdb.GetCountDoc(config.Mongoconn, "logpoin", primitive.M{"userid": docuser.ID, "projectid": project.ID})
 		if err != nil {
@@ -47,28 +45,24 @@ func CountCommits(w http.ResponseWriter, r *http.Request) {
 			at.WriteJSON(w, http.StatusNotFound, respn)
 			return
 		}
-		// If no data found
 		if commitCount == 0 {
-			continue // Skip to the next project if no commits are found
+			continue
 		}
 
-		// Create a response for the current project
 		countResp := model.StatData{
 			ProjectID: project.ID,
 			Count:     commitCount,
 		}
-		allStats = append(allStats, countResp) // Add to the slice
-		totalCount += commitCount              // Add to the total count
+		allStats = append(allStats, countResp)
+		totalCount += commitCount
 	}
 
-	// Prepare the final response struct
 	finalResp := model.CountResponse{
 		UserID:     docuser.ID,
 		Projects:   allStats,
-		TotalCount: totalCount, // Add the total count here
+		TotalCount: totalCount,
 	}
 
-	// Write the response in JSON format
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(finalResp); err != nil {
 		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
@@ -81,7 +75,7 @@ func CountFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commitCount, err := atdb.GetCountDoc(config.Mongoconn, "uxlaporan", primitive.M{"nopetugas": docuser.PhoneNumber})
+	existingprjs, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", primitive.M{"owner._id": docuser.ID})
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Data project tidak di temukan"
@@ -89,19 +83,46 @@ func CountFeedback(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotFound, respn)
 		return
 	}
-	// Jika tidak ada data ditemukan
-	if commitCount == 0 {
-		http.Error(w, "Tidak ada data yang ditemukan untuk pengguna ini", http.StatusNotFound)
+	if len(existingprjs) == 0 {
+		var respn model.Response
+		respn.Status = "Error : Data project tidak di temukan"
+		respn.Response = "Kakak belum input proyek, silahkan input dulu ya"
+		at.WriteJSON(w, http.StatusNotFound, respn)
 		return
 	}
 
-	var countResp model.StatsRes0
-	countResp.UserID = docuser.ID
-	countResp.Commits = commitCount
+	var allStats []model.StatData
+	totalCount := int64(0)
 
-	// Menulis respons dalam format JSON
+	for _, project := range existingprjs {
+		commitCount, err := atdb.GetCountDoc(config.Mongoconn, "uxlaporan", primitive.M{"nopetugas": docuser.PhoneNumber, "project._id": project.ID})
+		if err != nil {
+			var respn model.Response
+			respn.Status = "Error : Data project tidak di temukan"
+			respn.Response = err.Error()
+			at.WriteJSON(w, http.StatusNotFound, respn)
+			return
+		}
+		if commitCount == 0 {
+			continue
+		}
+
+		countResp := model.StatData{
+			ProjectID: project.ID,
+			Count:     commitCount,
+		}
+		allStats = append(allStats, countResp)
+		totalCount += commitCount
+	}
+
+	finalResp := model.CountResponse{
+		UserID:     docuser.ID,
+		Projects:   allStats,
+		TotalCount: totalCount,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(countResp); err != nil {
+	if err := json.NewEncoder(w).Encode(finalResp); err != nil {
 		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
 	}
 }
