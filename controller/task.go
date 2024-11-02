@@ -76,21 +76,8 @@ func PutTaskUser(w http.ResponseWriter, r *http.Request) {
 // pindahkan task dari doing ke done
 func PostTaskUser(w http.ResponseWriter, r *http.Request) {
 	var respn model.Response
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	_, err := watoken.ParseToken(w, r)
 	if err != nil {
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(r)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(w, http.StatusForbidden, respn)
-		return
-	}
-	//check eksistensi user
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		docuser.PhoneNumber = payload.Id
-		docuser.Name = payload.Alias
-		at.WriteJSON(w, http.StatusNotFound, docuser)
 		return
 	}
 	var task report.TaskList
