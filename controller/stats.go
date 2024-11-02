@@ -32,7 +32,7 @@ func CountCommits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var countResp model.CoomitCount
+	var countResp model.StatsRes0
 	countResp.UserID = docuser.ID
 	countResp.Commits = commitCount
 

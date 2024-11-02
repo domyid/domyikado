@@ -100,8 +100,3 @@ type VerifyRequest struct {
 	PhoneNumber string `json:"phonenumber"`
 	Password    string `json:"password"`
 }
-
-type CoomitCount struct {
-	UserID  primitive.ObjectID `json:"userid"`
-	Commits int64              `json:"commits"`
-}
