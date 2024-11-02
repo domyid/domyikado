@@ -13,27 +13,8 @@ import (
 )
 
 func CountComits(w http.ResponseWriter, r *http.Request) {
-	// Dekode token dari header
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	docuser, err := watoken.ParseToken(w, r)
 	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(r)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(w, http.StatusForbidden, respn)
-		return
-	}
-
-	// Ambil data pengguna berdasarkan nomor telepon dari payload
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error: Pengguna tidak ditemukan"
-		respn.Info = payload.Id
-		respn.Location = "Get User Data"
-		respn.Response = err.Error()
-		at.WriteJSON(w, http.StatusNotFound, respn)
 		return
 	}
 
