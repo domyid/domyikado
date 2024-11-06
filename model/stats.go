@@ -3,8 +3,9 @@ package model
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
 type StatData struct {
-	ProjectID primitive.ObjectID `json:"projectid"`
-	Count     int64              `json:"count"`
+	ProjectID   primitive.ObjectID `json:"projectid"`
+	ProjectName string             `json:"prname"`
+	Count       int64              `json:"count"`
 }
 
 type CountResponse struct {
