@@ -91,14 +91,14 @@ func CountFeedback(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		var respn model.Response
-		respn.Status = "Error : Data project tidak di temukan"
+		respn.Status = "Error: Data project tidak ditemukan"
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotFound, respn)
 		return
 	}
 	if len(existingprjs) == 0 {
 		var respn model.Response
-		respn.Status = "Error : Data project tidak di temukan"
+		respn.Status = "Error: Data project tidak ditemukan"
 		respn.Response = "Kakak belum input proyek, silahkan input dulu ya"
 		at.WriteJSON(w, http.StatusNotFound, respn)
 		return
@@ -111,7 +111,7 @@ func CountFeedback(w http.ResponseWriter, r *http.Request) {
 		commitCount, err := atdb.GetCountDoc(config.Mongoconn, "uxlaporan", primitive.M{"nopetugas": docuser.PhoneNumber, "project._id": project.ID})
 		if err != nil {
 			var respn model.Response
-			respn.Status = "Error : Data project tidak di temukan"
+			respn.Status = "Error: Data project tidak ditemukan"
 			respn.Response = err.Error()
 			at.WriteJSON(w, http.StatusNotFound, respn)
 			return
@@ -121,8 +121,8 @@ func CountFeedback(w http.ResponseWriter, r *http.Request) {
 		}
 
 		countResp := model.StatData{
-			ProjectID: project.ID,
-			Count:     commitCount,
+			ProjectName: project.Name, // Use Project Name instead of ID
+			Count:       commitCount,
 		}
 		allStats = append(allStats, countResp)
 		totalCount += commitCount
