@@ -82,7 +82,13 @@ func CountFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existingprjs, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", primitive.M{"owner._id": docuser.ID})
+	existingprjs, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", primitive.M{
+		"members": primitive.M{
+			"$elemMatch": primitive.M{
+				"_id": docuser.ID,
+			},
+		},
+	})
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Data project tidak di temukan"
