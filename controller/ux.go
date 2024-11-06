@@ -264,9 +264,7 @@ func GetLaporan(respw http.ResponseWriter, req *http.Request) {
 
 func PostMeeting(w http.ResponseWriter, r *http.Request) {
 	var respn model.Response
-	fmt.Println("Starting PostMeeting function")
 
-	// Authorization and input validation
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
 		fmt.Println("Token decoding error:", err)
@@ -277,9 +275,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusForbidden, respn)
 		return
 	}
-	fmt.Println("Token decoded successfully:", payload.Id)
 
-	// Decode request body
 	var event gcallapi.SimpleEvent
 	err = json.NewDecoder(r.Body).Decode(&event)
 	if err != nil {
@@ -289,9 +285,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusBadRequest, respn)
 		return
 	}
-	fmt.Println("Request body decoded successfully")
 
-	// User validation
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		fmt.Println("User not found:", err)
@@ -300,9 +294,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotImplemented, respn)
 		return
 	}
-	fmt.Println("User data fetched successfully:", docuser.Name)
 
-	// Project validation
 	prjuser, err := atdb.GetOneDoc[model.Project](config.Mongoconn, "project", primitive.M{"_id": event.ProjectID})
 	if err != nil {
 		fmt.Println("Project not found:", err)
@@ -311,9 +303,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotImplemented, respn)
 		return
 	}
-	fmt.Println("Project data fetched successfully:", prjuser.Name)
 
-	// Prepare report data
 	var lap report.Laporan
 	lap.User = docuser
 	lap.Project = prjuser
@@ -323,7 +313,6 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 	lap.NoPetugas = docuser.PhoneNumber
 	lap.Solusi = event.Description
 
-	// Collect attendee emails and filter out any empty or malformed emails
 	var attendees []string
 	for _, member := range prjuser.Members {
 		if member.Email != "" && strings.Contains(member.Email, "@") {
@@ -334,9 +323,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	event.Attendees = attendees
-	fmt.Println("Valid attendee emails collected:", attendees)
 
-	// Continue to handle the Google Calendar event creation
 	gevt, err := gcallapi.HandlerCalendar(config.Mongoconn, event)
 	if err != nil {
 		fmt.Println("Failed to create Google Calendar event:", err)
@@ -345,9 +332,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
-	fmt.Println("Google Calendar event created")
 
-	// Insert meeting log into the database
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "meetinglog", gevt)
 	if err != nil {
 		fmt.Println("Failed to insert meeting log:", err)
@@ -356,9 +341,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
-	fmt.Println("Meeting log inserted into database")
 
-	// Insert event into the database
 	event.ID, err = atdb.InsertOneDoc(config.Mongoconn, "meeting", event)
 	if err != nil {
 		fmt.Println("Failed to insert meeting event:", err)
@@ -367,9 +350,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
-	fmt.Println("Meeting event inserted into database with ID:", event.ID.Hex())
 
-	// Update report with meeting details
 	lap.MeetID = event.ID
 	lap.MeetEvent = event
 	lap.Kode = gevt.HtmlLink
@@ -381,9 +362,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
-	fmt.Println("Report inserted into uxlaporan with ID:", lap.ID.Hex())
 
-	// Add report points
 	_, err = report.TambahPoinLaporanbyPhoneNumber(config.Mongoconn, prjuser, docuser.PhoneNumber, 1, "meeting")
 	if err != nil {
 		fmt.Println("Failed to add report points:", err)
@@ -392,9 +371,7 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusExpectationFailed, respn)
 		return
 	}
-	fmt.Println("Report points added")
 
-	// Construct message for WhatsApp
 	message := "*" + strings.TrimSpace(event.Summary) + "*\n" + lap.Kode + "\nLokasi:\n" + event.Location +
 		"\nAgenda:\n" + event.Description + "\nTanggal: " + event.Date + "\nJam: " + event.TimeStart + " - " +
 		event.TimeEnd + "\nNotulen : " + docuser.Name + "\nURL Input Risalah Pertemuan:\n" +
@@ -413,11 +390,8 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusUnauthorized, resp)
 		return
 	}
-	fmt.Println("WhatsApp message sent successfully")
 
-	// Final response with JSON
 	at.WriteJSON(w, http.StatusOK, lap)
-	fmt.Println("PostMeeting function completed successfully")
 }
 
 func PostLaporan(respw http.ResponseWriter, req *http.Request) {
