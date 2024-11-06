@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -263,9 +264,12 @@ func GetLaporan(respw http.ResponseWriter, req *http.Request) {
 
 func PostMeeting(w http.ResponseWriter, r *http.Request) {
 	var respn model.Response
-	//otorisasi dan validasi inputan
+	fmt.Println("Starting PostMeeting function")
+
+	// Authorization and input validation
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
+		fmt.Println("Token decoding error:", err)
 		respn.Status = "Error : Token Tidak Valid"
 		respn.Info = at.GetSecretFromHeader(r)
 		respn.Location = "Decode Token Error"
@@ -273,30 +277,43 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusForbidden, respn)
 		return
 	}
+	fmt.Println("Token decoded successfully:", payload.Id)
+
+	// Decode request body
 	var event gcallapi.SimpleEvent
 	err = json.NewDecoder(r.Body).Decode(&event)
 	if err != nil {
+		fmt.Println("Request body decoding error:", err)
 		respn.Status = "Error : Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusBadRequest, respn)
 		return
 	}
-	//check validasi user
+	fmt.Println("Request body decoded successfully")
+
+	// User validation
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
+		fmt.Println("User not found:", err)
 		respn.Status = "Error : Data user tidak di temukan: " + payload.Id
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotImplemented, respn)
 		return
 	}
+	fmt.Println("User data fetched successfully:", docuser.Name)
+
+	// Project validation
 	prjuser, err := atdb.GetOneDoc[model.Project](config.Mongoconn, "project", primitive.M{"_id": event.ProjectID})
 	if err != nil {
+		fmt.Println("Project not found:", err)
 		respn.Status = "Error : Data project tidak di temukan: " + event.ProjectID.Hex()
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotImplemented, respn)
 		return
 	}
-	//lojik inputan post
+	fmt.Println("Project data fetched successfully:", prjuser.Name)
+
+	// Prepare report data
 	var lap report.Laporan
 	lap.User = docuser
 	lap.Project = prjuser
@@ -305,67 +322,102 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 	lap.Petugas = docuser.Name
 	lap.NoPetugas = docuser.PhoneNumber
 	lap.Solusi = event.Description
-	//mengambil daftar email dari project member
+
+	// Collect attendee emails and filter out any empty or malformed emails
 	var attendees []string
 	for _, member := range prjuser.Members {
-		attendees = append(attendees, member.Email)
+		if member.Email != "" && strings.Contains(member.Email, "@") {
+			attendees = append(attendees, member.Email)
+		} else {
+			fmt.Println("Warning: Skipping invalid email:", member.Email)
+		}
 	}
-	event.Attendees = attendees
 
+	event.Attendees = attendees
+	fmt.Println("Valid attendee emails collected:", attendees)
+
+	// Continue to handle the Google Calendar event creation
 	gevt, err := gcallapi.HandlerCalendar(config.Mongoconn, event)
 	if err != nil {
+		fmt.Println("Failed to create Google Calendar event:", err)
 		respn.Status = "Gagal Membuat Google Calendar"
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
+	fmt.Println("Google Calendar event created")
+
+	// Insert meeting log into the database
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "meetinglog", gevt)
 	if err != nil {
+		fmt.Println("Failed to insert meeting log:", err)
 		respn.Status = "Gagal Insert Database meetinglog"
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
+	fmt.Println("Meeting log inserted into database")
+
+	// Insert event into the database
 	event.ID, err = atdb.InsertOneDoc(config.Mongoconn, "meeting", event)
 	if err != nil {
+		fmt.Println("Failed to insert meeting event:", err)
 		respn.Status = "Gagal Insert Database meeting"
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
+	fmt.Println("Meeting event inserted into database with ID:", event.ID.Hex())
+
+	// Update report with meeting details
 	lap.MeetID = event.ID
 	lap.MeetEvent = event
 	lap.Kode = gevt.HtmlLink
 	lap.ID, err = atdb.InsertOneDoc(config.Mongoconn, "uxlaporan", lap)
 	if err != nil {
+		fmt.Println("Failed to insert uxlaporan:", err)
 		respn.Status = "Gagal Insert Database"
 		respn.Response = err.Error()
 		at.WriteJSON(w, http.StatusNotModified, respn)
 		return
 	}
+	fmt.Println("Report inserted into uxlaporan with ID:", lap.ID.Hex())
+
+	// Add report points
 	_, err = report.TambahPoinLaporanbyPhoneNumber(config.Mongoconn, prjuser, docuser.PhoneNumber, 1, "meeting")
 	if err != nil {
-		var resp model.Response
-		resp.Info = "TambahPoinLaporanbyPhoneNumber gagal"
-		resp.Response = err.Error()
-		at.WriteJSON(w, http.StatusExpectationFailed, resp)
+		fmt.Println("Failed to add report points:", err)
+		respn.Info = "TambahPoinLaporanbyPhoneNumber gagal"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusExpectationFailed, respn)
 		return
 	}
+	fmt.Println("Report points added")
 
-	message := "*" + strings.TrimSpace(event.Summary) + "*\n" + lap.Kode + "\nLokasi:\n" + event.Location + "\nAgenda:\n" + event.Description + "\nTanggal: " + event.Date + "\nJam: " + event.TimeStart + " - " + event.TimeEnd + "\nNotulen : " + docuser.Name + "\nURL Input Risalah Pertemuan:\n" + "https://www.do.my.id/resume/#" + lap.ID.Hex()
+	// Construct message for WhatsApp
+	message := "*" + strings.TrimSpace(event.Summary) + "*\n" + lap.Kode + "\nLokasi:\n" + event.Location +
+		"\nAgenda:\n" + event.Description + "\nTanggal: " + event.Date + "\nJam: " + event.TimeStart + " - " +
+		event.TimeEnd + "\nNotulen : " + docuser.Name + "\nURL Input Risalah Pertemuan:\n" +
+		"https://www.do.my.id/resume/#" + lap.ID.Hex()
 	dt := &whatsauth.TextMessage{
 		To:       lap.Project.WAGroupID,
 		IsGroup:  true,
 		Messages: message,
 	}
+
 	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 	if err != nil {
+		fmt.Println("Failed to send WhatsApp message:", err)
 		resp.Info = "Tidak berhak"
 		resp.Response = err.Error()
 		at.WriteJSON(w, http.StatusUnauthorized, resp)
 		return
 	}
+	fmt.Println("WhatsApp message sent successfully")
+
+	// Final response with JSON
 	at.WriteJSON(w, http.StatusOK, lap)
+	fmt.Println("PostMeeting function completed successfully")
 }
 
 func PostLaporan(respw http.ResponseWriter, req *http.Request) {
