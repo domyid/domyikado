@@ -60,6 +60,12 @@ type TextMessage struct {
 	Messages string `json:"messages"`
 }
 
+type LogWhatsauth struct {
+	Data  TextMessage `bson:"data,omitempty"`
+	Token string      `bson:"token,omitempty"`
+	URL   string      `bson:"url,omitempty"`
+}
+
 type WhatsauthRequest struct {
 	Uuid        string `json:"uuid,omitempty" bson:"uuid,omitempty"`
 	Phonenumber string `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`

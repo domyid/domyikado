@@ -127,6 +127,12 @@ func PostWebHookGithub(respw http.ResponseWriter, req *http.Request) {
 			dt.To = prj.WAGroupID
 			dt.IsGroup = true
 		}
+		//log output
+		var logoutwa whatsauth.LogWhatsauth
+		logoutwa.Data = *dt
+		logoutwa.Token = config.WAAPIToken
+		logoutwa.URL = config.WAAPIMessage
+		go atdb.InsertOneDoc(config.Mongoconn, "logwa", logoutwa)
 		//_, resp, err =
 		go atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 		/* if err != nil {
