@@ -1,5 +1,7 @@
 package whatsauth
 
+import "time"
+
 type Header struct {
 	Secret string `reqHeader:"secret"`
 }
@@ -61,9 +63,10 @@ type TextMessage struct {
 }
 
 type LogWhatsauth struct {
-	Data  TextMessage `bson:"data,omitempty"`
-	Token string      `bson:"token,omitempty"`
-	URL   string      `bson:"url,omitempty"`
+	Data      TextMessage `bson:"data,omitempty"`
+	Token     string      `bson:"token,omitempty"`
+	URL       string      `bson:"url,omitempty"`
+	CreatedAt time.Time   `bson:"createdAt"`
 }
 
 type WhatsauthRequest struct {

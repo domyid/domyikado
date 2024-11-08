@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-playground/webhooks/gitlab"
 	"github.com/go-playground/webhooks/v6/github"
@@ -132,6 +133,7 @@ func PostWebHookGithub(respw http.ResponseWriter, req *http.Request) {
 		logoutwa.Data = *dt
 		logoutwa.Token = config.WAAPIToken
 		logoutwa.URL = config.WAAPIMessage
+		logoutwa.CreatedAt = time.Now()
 		go atdb.InsertOneDoc(config.Mongoconn, "logwa", logoutwa)
 		//_, resp, err =
 		go atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
