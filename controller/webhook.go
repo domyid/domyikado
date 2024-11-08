@@ -127,13 +127,14 @@ func PostWebHookGithub(respw http.ResponseWriter, req *http.Request) {
 			dt.To = prj.WAGroupID
 			dt.IsGroup = true
 		}
-		/* 		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-		   		if err != nil {
-		   			resp.Info = "Tidak berhak"
-		   			resp.Response = err.Error()
-		   			at.WriteJSON(respw, http.StatusUnauthorized, resp)
-		   			return
-		   		} */
+		//_, resp, err =
+		go atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		/* if err != nil {
+			resp.Info = "Tidak berhak"
+			resp.Response = err.Error()
+			at.WriteJSON(respw, http.StatusUnauthorized, resp)
+			return
+		} */
 	}
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
