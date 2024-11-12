@@ -124,7 +124,7 @@ func PostWebHookGithub(respw http.ResponseWriter, req *http.Request) {
 			IsGroup:  false,
 			Messages: msg,
 		}
-		if prj.WAGroupID != "" {
+		if prj.WAGroupID != "" && !strings.Contains(prj.WAGroupID, "-") {
 			dt.To = prj.WAGroupID
 			dt.IsGroup = true
 		}
