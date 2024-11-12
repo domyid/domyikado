@@ -27,7 +27,7 @@ func GetDataLaporanMasukHariini(db *mongo.Database, waGroupId string) (msg strin
 	return
 }
 
-func GenerateRekapMessageKemarinPerWAGroupID(db *mongo.Database, groupId string) (msg string, err error) {
+func GenerateRekapMessageKemarinPerWAGroupID(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
 	pushReportCounts, err := GetDataRepoMasukKemarinPerWaGroupID(db, groupId)
 	if err != nil {
 		return
@@ -71,6 +71,7 @@ func GenerateRekapMessageKemarinPerWAGroupID(db *mongo.Database, groupId string)
 
 		// Iterasi melalui nomor telepon dalam dokumen MongoDB
 		for _, doc := range projectDocuments {
+			perwakilanphone = doc.Owner.PhoneNumber
 			for _, member := range doc.Members {
 				phoneNumber := member.PhoneNumber
 				// Periksa apakah nomor telepon ada dalam map

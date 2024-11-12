@@ -18,7 +18,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case method == "GET" && path == "/":
 		controller.GetHome(w, r)
-	//jalan setiap jam 3 pagi
+	//jalan setiap jam 8 pagi dipasang di cronjob
 	case method == "GET" && path == "/refresh/token":
 		controller.GetNewToken(w, r)
 	case method == "GET" && path == "/data/pushrepo/kemarin":

@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/base64"
 	"errors"
+	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/atapi"
@@ -49,6 +50,11 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 				Filename:  project.Name + ".pdf",
 				Caption:   "Berikut ini rekap rapat kemaren ya kak untuk project " + project.Name,
 			}
+			//protokol baru untuk wa group id mengandung hyphen tidak bisa maka jangan kirim report ke group tapi owner
+			if strings.Contains(groupID, "-") {
+				dt.To = project.Owner.PhoneNumber
+				dt.IsGroup = false
+			}
 			_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIDocMessage)
 			if err != nil {
 				continue
@@ -75,7 +81,7 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 				}
 
 				//masalahnya disini pake token pribadi. kalo user awangga tidak masuk ke repo maka ga bisa
-				atapi.PostStructWithToken[model.LogInfo]("secret", conf.LeaflySecret, dt, conf.LeaflyURL)
+				go atapi.PostStructWithToken[model.LogInfo]("secret", conf.LeaflySecret, dt, conf.LeaflyURL)
 			}
 		}
 	}
@@ -100,8 +106,8 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 			lastErr = errors.New("wagroupid is not a string")
 			continue
 		}
-		var msg string
-		msg, err = GenerateRekapMessageKemarinPerWAGroupID(db, groupID)
+		var msg, perwakilanphone string
+		msg, perwakilanphone, err = GenerateRekapMessageKemarinPerWAGroupID(db, groupID)
 		if err != nil {
 			lastErr = errors.New("Gagal Membuat Rekapitulasi perhitungan per wa group id: " + err.Error())
 			continue
@@ -111,6 +117,12 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 			IsGroup:  true,
 			Messages: msg,
 		}
+		//protokol baru untuk wa group id mengandung hyphen tidak bisa maka jangan kirim report ke group tapi owner
+		if strings.Contains(groupID, "-") {
+			dt.To = perwakilanphone
+			dt.IsGroup = false
+		}
+		//kirim wa ke api
 		var resp model.Response
 		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 		if err != nil {
