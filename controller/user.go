@@ -563,3 +563,27 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 	newMember.ID = idMember
 	at.WriteJSON(respw, http.StatusOK, newMember)
 }
+
+// Handler untuk mendapatkan semua data grup
+func GetAllDataGroup(respw http.ResponseWriter, req *http.Request) {
+	// Query untuk mengambil semua data dari koleksi `group`
+	cursor, err := config.Mongoconn.Collection("group").Find(req.Context(), bson.M{})
+	if err != nil {
+		http.Error(respw, "Gagal mengambil data group: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(req.Context())
+
+	// Dekode data grup ke slice dari struct Group
+	var groups []model.Group
+	if err := cursor.All(req.Context(), &groups); err != nil {
+		http.Error(respw, "Gagal memproses data group: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Mengirim respons dalam format JSON
+	respw.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(respw).Encode(groups); err != nil {
+		http.Error(respw, "Gagal mengirim data group dalam format JSON: "+err.Error(), http.StatusInternalServerError)
+	}
+}
