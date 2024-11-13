@@ -449,3 +449,61 @@ func GetLogPoin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// Handler untuk menambahkan data group baru atau menggantinya jika sudah ada
+func PostGroup(respw http.ResponseWriter, req *http.Request) {
+	// Mendekode token untuk verifikasi dan mendapatkan data user
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Dekode request body ke struct Group
+	var group model.Group
+	err = json.NewDecoder(req.Body).Decode(&group)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Body tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Menggunakan nomor telepon dari token sebagai owner
+	group.Owner = payload.Id
+
+	// Cek apakah group dengan nama dan pemilik yang sama sudah ada
+	existingGroup, err := atdb.GetOneDoc[model.Group](config.Mongoconn, "group", primitive.M{"groupname": group.GroupName, "owner": group.Owner})
+	if err == nil && existingGroup.ID != primitive.NilObjectID {
+		// Jika sudah ada, perbarui data group
+		group.ID = existingGroup.ID
+		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "group", primitive.M{"_id": existingGroup.ID}, group)
+		if err != nil {
+			var respn model.Response
+			respn.Status = "Gagal memperbarui data group"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusConflict, respn)
+			return
+		}
+	} else {
+		// Jika belum ada, tambahkan group baru ke koleksi
+		idGroup, err := atdb.InsertOneDoc(config.Mongoconn, "group", group)
+		if err != nil {
+			var respn model.Response
+			respn.Status = "Gagal menambahkan data group"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusInternalServerError, respn)
+			return
+		}
+		group.ID = idGroup
+	}
+
+	// Mengirim respons sukses dalam format JSON
+	at.WriteJSON(respw, http.StatusOK, group)
+}
