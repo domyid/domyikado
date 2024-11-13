@@ -510,9 +510,8 @@ func PostGroup(respw http.ResponseWriter, req *http.Request) {
 
 // Handler untuk menambahkan anggota ke dalam grup
 func PostMember(respw http.ResponseWriter, req *http.Request) {
-	// Decode token untuk verifikasi pengguna
-	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
-	if err != nil {
+	// Verifikasi token tanpa menyimpan payload
+	if _, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req)); err != nil {
 		var respn model.Response
 		respn.Status = "Error: Token tidak valid"
 		respn.Info = at.GetSecretFromHeader(req)
@@ -524,7 +523,7 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 
 	// Decode request body ke struct Member
 	var newMember model.Member
-	err = json.NewDecoder(req.Body).Decode(&newMember)
+	err := json.NewDecoder(req.Body).Decode(&newMember)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error: Body tidak valid"
@@ -542,7 +541,7 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah member sudah ada di dalam grup
-	existingMember, err := atdb.GetOneDoc[model.Member](config.Mongoconn, "members", primitive.M{"groupid": newMember.GroupID, "userid": newMember.UserID})
+	existingMember, err := atdb.GetOneDoc[model.Member](config.Mongoconn, "member", primitive.M{"groupid": newMember.GroupID, "userid": newMember.UserID})
 	if err == nil && existingMember.ID != primitive.NilObjectID {
 		var respn model.Response
 		respn.Status = "Error: Anggota sudah ada di grup"
@@ -550,8 +549,8 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Tambahkan member baru ke dalam koleksi members
-	idMember, err := atdb.InsertOneDoc(config.Mongoconn, "members", newMember)
+	// Tambahkan member baru ke dalam koleksi member
+	idMember, err := atdb.InsertOneDoc(config.Mongoconn, "member", newMember)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Gagal menambahkan anggota ke grup"
