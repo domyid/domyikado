@@ -100,3 +100,16 @@ type VerifyRequest struct {
 	PhoneNumber string `json:"phonenumber"`
 	Password    string `json:"password"`
 }
+
+type Group struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	GroupName string             `json:"groupname"`
+	Owner     string             `json:"owner"`
+}
+
+type Member struct {
+	ID      primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	GroupID primitive.ObjectID `bson:"groupid,omitempty" json:"groupid,omitempty"`
+	UserID  primitive.ObjectID `bson:"userid,omitempty" json:"userid,omitempty"`
+	Role    bool               `json:"role"`
+}
