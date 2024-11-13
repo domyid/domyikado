@@ -507,3 +507,60 @@ func PostGroup(respw http.ResponseWriter, req *http.Request) {
 	// Mengirim respons sukses dalam format JSON
 	at.WriteJSON(respw, http.StatusOK, group)
 }
+
+// Handler untuk menambahkan anggota ke dalam grup
+func PostMember(respw http.ResponseWriter, req *http.Request) {
+	// Decode token untuk verifikasi pengguna
+	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Token tidak valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Decode request body ke struct Member
+	var newMember model.Member
+	err = json.NewDecoder(req.Body).Decode(&newMember)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Body tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Pastikan GroupID dan UserID ada dalam request
+	if newMember.GroupID == primitive.NilObjectID || newMember.UserID == primitive.NilObjectID {
+		var respn model.Response
+		respn.Status = "Error: GroupID atau UserID tidak ditemukan"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Cek apakah member sudah ada di dalam grup
+	existingMember, err := atdb.GetOneDoc[model.Member](config.Mongoconn, "members", primitive.M{"groupid": newMember.GroupID, "userid": newMember.UserID})
+	if err == nil && existingMember.ID != primitive.NilObjectID {
+		var respn model.Response
+		respn.Status = "Error: Anggota sudah ada di grup"
+		at.WriteJSON(respw, http.StatusConflict, respn)
+		return
+	}
+
+	// Tambahkan member baru ke dalam koleksi members
+	idMember, err := atdb.InsertOneDoc(config.Mongoconn, "members", newMember)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Gagal menambahkan anggota ke grup"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Set ID baru ke newMember dan kirimkan respons sukses
+	newMember.ID = idMember
+	at.WriteJSON(respw, http.StatusOK, newMember)
+}
