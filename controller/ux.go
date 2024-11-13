@@ -381,6 +381,11 @@ func PostMeeting(w http.ResponseWriter, r *http.Request) {
 		IsGroup:  true,
 		Messages: message,
 	}
+	//bug kalo group id ada hypens, maka kirim ke project owner bukan ke grup
+	if strings.Contains(lap.Project.WAGroupID, "-") {
+		dt.To = lap.Project.Owner.PhoneNumber
+		dt.IsGroup = false
+	}
 
 	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 	if err != nil {
