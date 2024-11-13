@@ -48,7 +48,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostDataUserFromWA(w, r)
 	case method == "POST" && path == "/data/proyek":
 		controller.PostDataProject(w, r)
-	case method == "POST" && path == "/data/group":
+	case method == "POST" && path == "/data/postgroup":
 		controller.PostGroup(w, r)
 	case method == "POST" && path == "/data/postmembers":
 		controller.PostMember(w, r)
