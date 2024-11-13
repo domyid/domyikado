@@ -50,6 +50,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostDataProject(w, r)
 	case method == "POST" && path == "/data/group":
 		controller.PostGroup(w, r)
+	case method == "POST" && path == "/data/members":
+		controller.PostMember(w, r)
 	case method == "GET" && path == "/data/proyek":
 		controller.GetDataProject(w, r)
 	case method == "PUT" && path == "/data/proyek":
