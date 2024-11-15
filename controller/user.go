@@ -510,10 +510,11 @@ func PostGroup(respw http.ResponseWriter, req *http.Request) {
 
 // Handler untuk menambahkan anggota ke dalam grup
 func PostMember(respw http.ResponseWriter, req *http.Request) {
-	// Verifikasi token tanpa menyimpan payload
-	if _, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req)); err != nil {
+	// Mendekode token untuk verifikasi dan mendapatkan PhoneNumber dari pengguna
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
 		var respn model.Response
-		respn.Status = "Error: Token tidak valid"
+		respn.Status = "Error: Token Tidak Valid"
 		respn.Info = at.GetSecretFromHeader(req)
 		respn.Location = "Decode Token Error"
 		respn.Response = err.Error()
@@ -521,9 +522,24 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Decode request body ke struct Member
-	var newMember model.Member
-	err := json.NewDecoder(req.Body).Decode(&newMember)
+	// Mendapatkan User ID dari token, yang dalam hal ini adalah nomor telepon
+	phoneNumber := payload.Id // Mengambil nomor telepon dari token
+
+	// Cari user berdasarkan nomor telepon untuk mendapatkan `UserID`
+	var user model.Userdomyikado
+	userFilter := bson.M{"phonenumber": phoneNumber}
+	err = config.Mongoconn.Collection("user").FindOne(req.Context(), userFilter).Decode(&user)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Pengguna tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Ambil data JSON dari request body untuk `Member`
+	var member model.Member
+	err = json.NewDecoder(req.Body).Decode(&member)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error: Body tidak valid"
@@ -532,58 +548,79 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Pastikan GroupID dan UserID ada dalam request
-	if newMember.GroupID == primitive.NilObjectID || newMember.UserID == primitive.NilObjectID {
-		var respn model.Response
-		respn.Status = "Error: GroupID atau UserID tidak ditemukan"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+	// Tetapkan UserID berdasarkan hasil pencarian
+	member.UserID = user.ID
 
-	// Cek apakah member sudah ada di dalam grup
-	existingMember, err := atdb.GetOneDoc[model.Member](config.Mongoconn, "member", primitive.M{"groupid": newMember.GroupID, "userid": newMember.UserID})
-	if err == nil && existingMember.ID != primitive.NilObjectID {
-		var respn model.Response
-		respn.Status = "Error: Anggota sudah ada di grup"
-		at.WriteJSON(respw, http.StatusConflict, respn)
-		return
-	}
-
-	// Tambahkan member baru ke dalam koleksi member
-	idMember, err := atdb.InsertOneDoc(config.Mongoconn, "member", newMember)
+	// Cek apakah grup ada berdasarkan GroupID yang diterima
+	groupFilter := bson.M{"_id": member.GroupID.ID}
+	var group model.Group
+	err = config.Mongoconn.Collection("group").FindOne(req.Context(), groupFilter).Decode(&group)
 	if err != nil {
 		var respn model.Response
-		respn.Status = "Gagal menambahkan anggota ke grup"
+		respn.Status = "Error: Grup tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Tambahkan anggota baru ke koleksi "members"
+	_, err = config.Mongoconn.Collection("members").InsertOne(req.Context(), member)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Gagal menambahkan anggota"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
 
-	// Set ID baru ke newMember dan kirimkan respons sukses
-	newMember.ID = idMember
-	at.WriteJSON(respw, http.StatusOK, newMember)
+	// Kirimkan respons sukses dalam format JSON
+	at.WriteJSON(respw, http.StatusOK, member)
 }
 
-// Handler untuk mendapatkan semua data grup
-func GetAllDataGroup(respw http.ResponseWriter, req *http.Request) {
-	// Query untuk mengambil semua data dari koleksi `group`
-	cursor, err := config.Mongoconn.Collection("group").Find(req.Context(), bson.M{})
-	if err != nil {
-		http.Error(respw, "Gagal mengambil data group: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer cursor.Close(req.Context())
-
-	// Dekode data grup ke slice dari struct Group
-	var groups []model.Group
-	if err := cursor.All(req.Context(), &groups); err != nil {
-		http.Error(respw, "Gagal memproses data group: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Mengirim respons dalam format JSON
-	respw.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(respw).Encode(groups); err != nil {
-		http.Error(respw, "Gagal mengirim data group dalam format JSON: "+err.Error(), http.StatusInternalServerError)
-	}
-}
+//// Handler untuk mendapatkan group berdasarkan MemberID (userid)
+//func GetGroupByMemberID(respw http.ResponseWriter, req *http.Request) {
+//	// Verifikasi token
+//	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+//	if err != nil {
+//		var respn model.Response
+//		respn.Status = "Error: Token tidak valid"
+//		respn.Info = at.GetSecretFromHeader(req)
+//		respn.Location = "Decode Token Error"
+//		respn.Response = err.Error()
+//		at.WriteJSON(respw, http.StatusForbidden, respn)
+//		return
+//	}
+//
+//	// Ambil MemberID dari URL parameter atau query
+//	memberID := req.URL.Query().Get("memberid")
+//	if memberID == "" {
+//		var respn model.Response
+//		respn.Status = "Error: MemberID tidak ditemukan dalam request"
+//		at.WriteJSON(respw, http.StatusBadRequest, respn)
+//		return
+//	}
+//
+//	// Query untuk mencari member berdasarkan MemberID dan UserID
+//	memberFilter := primitive.M{"_id": memberID, "userid": payload.Id}
+//	memberDoc, err := atdb.GetOneDoc[model.Member](config.Mongoconn, "member", memberFilter)
+//	if err != nil {
+//		var respn model.Response
+//		respn.Status = "Error: Anggota tidak ditemukan"
+//		respn.Response = err.Error()
+//		at.WriteJSON(respw, http.StatusNotFound, respn)
+//		return
+//	}
+//
+//	// Ambil data group berdasarkan GroupID dari member
+//	groupDoc, err := atdb.GetOneDoc[model.Group](config.Mongoconn, "group", primitive.M{"_id": memberDoc.GroupID})
+//	if err != nil {
+//		var respn model.Response
+//		respn.Status = "Error: Grup tidak ditemukan"
+//		respn.Response = err.Error()
+//		at.WriteJSON(respw, http.StatusNotFound, respn)
+//		return
+//	}
+//
+//	// Kirimkan data grup yang ditemukan
+//	at.WriteJSON(respw, http.StatusOK, groupDoc)
+//}
