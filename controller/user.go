@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"net/http"
 	"time"
 
@@ -559,50 +561,85 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, member)
 }
 
-//// Handler untuk mendapatkan group berdasarkan MemberID (userid)
-//func GetGroupByMemberID(respw http.ResponseWriter, req *http.Request) {
-//	// Verifikasi token
-//	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
-//	if err != nil {
-//		var respn model.Response
-//		respn.Status = "Error: Token tidak valid"
-//		respn.Info = at.GetSecretFromHeader(req)
-//		respn.Location = "Decode Token Error"
-//		respn.Response = err.Error()
-//		at.WriteJSON(respw, http.StatusForbidden, respn)
-//		return
-//	}
-//
-//	// Ambil MemberID dari URL parameter atau query
-//	memberID := req.URL.Query().Get("memberid")
-//	if memberID == "" {
-//		var respn model.Response
-//		respn.Status = "Error: MemberID tidak ditemukan dalam request"
-//		at.WriteJSON(respw, http.StatusBadRequest, respn)
-//		return
-//	}
-//
-//	// Query untuk mencari member berdasarkan MemberID dan UserID
-//	memberFilter := primitive.M{"_id": memberID, "userid": payload.Id}
-//	memberDoc, err := atdb.GetOneDoc[model.Member](config.Mongoconn, "member", memberFilter)
-//	if err != nil {
-//		var respn model.Response
-//		respn.Status = "Error: Anggota tidak ditemukan"
-//		respn.Response = err.Error()
-//		at.WriteJSON(respw, http.StatusNotFound, respn)
-//		return
-//	}
-//
-//	// Ambil data group berdasarkan GroupID dari member
-//	groupDoc, err := atdb.GetOneDoc[model.Group](config.Mongoconn, "group", primitive.M{"_id": memberDoc.GroupID})
-//	if err != nil {
-//		var respn model.Response
-//		respn.Status = "Error: Grup tidak ditemukan"
-//		respn.Response = err.Error()
-//		at.WriteJSON(respw, http.StatusNotFound, respn)
-//		return
-//	}
-//
-//	// Kirimkan data grup yang ditemukan
-//	at.WriteJSON(respw, http.StatusOK, groupDoc)
-//}
+// Handler untuk mendapatkan grup berdasarkan PhoneNumber yang ada di token
+func GetGroupByPhoneNumberFromMember(respw http.ResponseWriter, req *http.Request) {
+	// Mendekode token untuk verifikasi dan mendapatkan data user
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Ambil PhoneNumber dari payload
+	phoneNumber := payload.Id
+	if phoneNumber == "" {
+		var respn model.Response
+		respn.Status = "Error: PhoneNumber tidak ditemukan dalam payload"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Cari anggota dengan PhoneNumber yang sesuai di collection "members"
+	memberFilter := bson.M{"phonenumber": phoneNumber}
+
+	var members []model.Member
+	cursor, err := config.Mongoconn.Collection("members").Find(req.Context(), memberFilter)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			var respn model.Response
+			respn.Status = "Tidak ada grup ditemukan untuk nomor telepon ini"
+			at.WriteJSON(respw, http.StatusNotFound, respn)
+			return
+		}
+		var respn model.Response
+		respn.Status = "Error: Gagal mengambil data member"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+	defer cursor.Close(req.Context())
+
+	// Ambil semua member dengan PhoneNumber yang sesuai
+	if err := cursor.All(req.Context(), &members); err != nil {
+		var respn model.Response
+		respn.Status = "Error: Gagal memproses data member"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Ambil groupid dari anggota yang ditemukan
+	groupIDs := make([]primitive.ObjectID, len(members))
+	for i, member := range members {
+		groupIDs[i] = member.GroupID.ID
+	}
+
+	// Mengambil informasi grup berdasarkan groupid dari collection "members"
+	groupFilter := bson.M{"_id": bson.M{"$in": groupIDs}}
+	var groups []model.Group
+	cursor, err = config.Mongoconn.Collection("group").Find(req.Context(), groupFilter)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error: Gagal mengambil data grup"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+	defer cursor.Close(req.Context())
+
+	if err := cursor.All(req.Context(), &groups); err != nil {
+		var respn model.Response
+		respn.Status = "Error: Gagal memproses data grup"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Kirimkan respons sukses dengan data grup
+	at.WriteJSON(respw, http.StatusOK, groups)
+}
