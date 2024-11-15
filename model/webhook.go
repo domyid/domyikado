@@ -109,7 +109,7 @@ type Group struct {
 
 type Member struct {
 	ID      primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	GroupID primitive.ObjectID `bson:"groupid,omitempty" json:"groupid,omitempty"`
+	GroupID Group              `bson:"groupid" json:"groupid"`
 	UserID  primitive.ObjectID `bson:"userid,omitempty" json:"userid,omitempty"`
 	Role    bool               `json:"role"`
 }
