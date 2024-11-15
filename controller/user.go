@@ -510,8 +510,8 @@ func PostGroup(respw http.ResponseWriter, req *http.Request) {
 
 // Handler untuk menambahkan anggota ke dalam grup
 func PostMember(respw http.ResponseWriter, req *http.Request) {
-	// Mendekode token untuk verifikasi dan mendapatkan PhoneNumber dari pengguna
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	// Verifikasi token, tetapi tidak lagi mengambil nomor telepon dari token
+	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error: Token Tidak Valid"
@@ -519,21 +519,6 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 		respn.Location = "Decode Token Error"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusForbidden, respn)
-		return
-	}
-
-	// Mendapatkan User ID dari token, yang dalam hal ini adalah nomor telepon
-	phoneNumber := payload.Id // Mengambil nomor telepon dari token
-
-	// Cari user berdasarkan nomor telepon untuk mendapatkan `UserID`
-	var user model.Userdomyikado
-	userFilter := bson.M{"phonenumber": phoneNumber}
-	err = config.Mongoconn.Collection("user").FindOne(req.Context(), userFilter).Decode(&user)
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error: Pengguna tidak ditemukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotFound, respn)
 		return
 	}
 
@@ -548,10 +533,7 @@ func PostMember(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Tetapkan UserID berdasarkan hasil pencarian
-	member.UserID = user.ID
-
-	// Cek apakah grup ada berdasarkan GroupID yang diterima
+	// Cek apakah grup ada berdasarkan `GroupID` yang diterima
 	groupFilter := bson.M{"_id": member.GroupID.ID}
 	var group model.Group
 	err = config.Mongoconn.Collection("group").FindOne(req.Context(), groupFilter).Decode(&group)
