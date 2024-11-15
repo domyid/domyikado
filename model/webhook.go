@@ -108,8 +108,8 @@ type Group struct {
 }
 
 type Member struct {
-	ID      primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	GroupID Group              `bson:"groupid" json:"groupid"`
-	UserID  primitive.ObjectID `bson:"userid,omitempty" json:"userid,omitempty"`
-	Role    bool               `json:"role"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	GroupID     Group              `bson:"groupid" json:"groupid"`
+	PhoneNumber string             `bson:"phonenumber" json:"phonenumber"`
+	Role        bool               `json:"role"`
 }
