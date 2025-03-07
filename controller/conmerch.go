@@ -252,8 +252,8 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract payment amount with regex - format: "Pembayaran QRIS Rp1 berhasil diterima"
-	re := regexp.MustCompile(`Rp([\d.,]+)`)
+	// Extract payment amount with regex - format: "Pembayaran QRIS Rp 1 di Informatika Digital Bisnis, PRNGPNG telah diterima."
+	re := regexp.MustCompile(`Pembayaran QRIS Rp\s*(\d+(?:[.,]\d+)?)`)
 	matches := re.FindStringSubmatch(request.NotificationText)
 
 	if len(matches) < 2 {
