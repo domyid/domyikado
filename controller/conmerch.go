@@ -139,7 +139,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Success:      true,
 		OrderID:      orderID,
 		ExpiryTime:   expiryTime,
-		QRISImageURL: "/static/qris.jpeg",
+		QRISImageURL: "qris.png",
 	})
 }
 
