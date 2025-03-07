@@ -18,11 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// WebSocket clients
-var (
-	clients = make(map[*http.ResponseWriter]bool)
-)
-
 // CreateOrder handles the creation of a new payment order
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateOrderRequest
@@ -139,7 +134,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Success:      true,
 		OrderID:      orderID,
 		ExpiryTime:   expiryTime,
-		QRISImageURL: "qris.png",
+		QRISImageURL: "/static/qris.jpeg",
 	})
 }
 
@@ -168,7 +163,7 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 
 	var order model.Order
-	err := config.Mongoconn.Collection("orders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
+	err := config.Mongoconn.Collection("merchorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
 	if err != nil {
 		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
 			Success: false,
@@ -209,9 +204,6 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify all WebSocket clients (would be implemented with proper WebSocket handling)
-	// notifyPaymentSuccess(orderID)
-
 	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 		Success: true,
 		Message: "Payment confirmed",
@@ -237,91 +229,7 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ConfirmPaymentByAmount confirms payment based on the amount received
-func ConfirmPaymentByAmount(w http.ResponseWriter, r *http.Request) {
-	var request model.ConfirmByAmountRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
-			Success: false,
-			Message: "Invalid request body",
-		})
-		return
-	}
-
-	// Validation
-	if request.Amount <= 0 {
-		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
-			Success: false,
-			Message: "Invalid amount",
-		})
-		return
-	}
-
-	// Find order with matching amount and pending status
-	ctx := context.Background()
-	var order model.Order
-
-	// Create filter to find order with pending status and matching amount
-	filter := bson.M{
-		"amount": request.Amount,
-		"status": "pending",
-	}
-
-	// Add sort by latest timestamp to get the latest order with that amount
-	opts := options.FindOne().SetSort(bson.M{"timestamp": -1})
-
-	err := config.Mongoconn.Collection("merchorders").FindOne(ctx, filter, opts).Decode(&order)
-	if err != nil {
-		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
-			Success: false,
-			Message: "No pending order found with this amount",
-		})
-		return
-	}
-
-	// Update order status to success
-	_, err = config.Mongoconn.Collection("merchorders").UpdateOne(
-		ctx,
-		bson.M{"orderId": order.OrderID},
-		bson.M{"$set": bson.M{"status": "success"}},
-	)
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
-			Success: false,
-			Message: "Error updating order status",
-		})
-		return
-	}
-
-	// Reset queue
-	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$set": bson.M{
-			"isProcessing":   false,
-			"currentOrderId": "",
-			"expiryTime":     time.Time{},
-		}},
-	)
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
-			Success: false,
-			Message: "Error resetting queue",
-		})
-		return
-	}
-
-	// Log successful confirmation
-	log.Printf("Payment confirmed by amount: Rp%v for Order ID: %s", request.Amount, order.OrderID)
-
-	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
-		Success: true,
-		Message: "Payment confirmed",
-		OrderID: order.OrderID,
-	})
-}
-
-// ConfirmByNotification processes QRIS payment notifications from MacroDroid
+// ConfirmByNotification processes QRIS payment notifications
 func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	var request model.NotificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -344,8 +252,8 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract payment amount with regex
-	re := regexp.MustCompile(`Rp[\s]*([0-9.,]+)`)
+	// Extract payment amount with regex - format: "Pembayaran QRIS Rp1 berhasil diterima"
+	re := regexp.MustCompile(`Rp([\d.,]+)`)
 	matches := re.FindStringSubmatch(request.NotificationText)
 
 	if len(matches) < 2 {
@@ -435,16 +343,35 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 }
 
 // InitializeQueue creates the queue document if it doesn't exist
-func InitializeQueue() {
+func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
 	if err != nil {
 		// Queue document doesn't exist, create it
-		config.Mongoconn.Collection("merchqueue").InsertOne(context.Background(), model.Queue{
+		_, err = config.Mongoconn.Collection("merchqueue").InsertOne(context.Background(), model.Queue{
 			IsProcessing:   false,
 			CurrentOrderID: "",
 			ExpiryTime:     time.Time{},
 		})
+
+		if err != nil {
+			at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
+				Success: false,
+				Message: "Error initializing queue",
+			})
+			return
+		}
+
 		log.Println("Initialized payment queue successfully")
+		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
+			Success: true,
+			Message: "Queue initialized successfully",
+		})
+		return
 	}
+
+	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
+		Success: true,
+		Message: "Queue already exists",
+	})
 }

@@ -30,12 +30,7 @@ type CreateOrderRequest struct {
 	Amount float64 `json:"amount"`
 }
 
-// ConfirmByAmountRequest structure for payment confirmation by amount
-type ConfirmByAmountRequest struct {
-	Amount float64 `json:"amount"`
-}
-
-// NotificationRequest for receiving notification text from MacroDroid
+// NotificationRequest for receiving notification text from payment gateway
 type NotificationRequest struct {
 	NotificationText string `json:"notification_text"`
 }
