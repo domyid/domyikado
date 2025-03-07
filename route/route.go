@@ -109,6 +109,19 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.CountCommits(w, r)
 	case method == "GET" && path == "/stats/feedback":
 		controller.CountFeedback(w, r)
+		// QRIS Payment Routes
+	case method == "POST" && path == "/api/createOrder":
+		controller.CreateOrder(w, r)
+	case method == "GET" && at.URLParam(path, "/api/checkPayment/:orderId"):
+		controller.CheckPayment(w, r)
+	case method == "POST" && at.URLParam(path, "/api/confirmPayment/:orderId"):
+		controller.ConfirmPayment(w, r)
+	case method == "GET" && path == "/api/queueStatus":
+		controller.GetQueueStatus(w, r)
+	case method == "POST" && path == "/api/confirmPaymentByAmount":
+		controller.ConfirmPaymentByAmount(w, r)
+	case method == "POST" && path == "/api/confirmByNotification":
+		controller.ConfirmByNotification(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)
