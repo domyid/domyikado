@@ -18,8 +18,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Initalize total payments collection if it doesn't exist
-func initializePaymentTotal() {
+// InitializePaymentTotal initializes the total payments collection if it doesn't exist
+func InitializePaymentTotal() {
 	var total model.PaymentTotal
 	err := config.Mongoconn.Collection("merchtotals").FindOne(context.Background(), bson.M{}).Decode(&total)
 	if err != nil {
@@ -266,7 +266,7 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
 	if err != nil {
 		// If no queue document exists, initialize it
-		initializeQueue(w, r)
+		InitializeQueue(w, r)
 		return
 	}
 
@@ -283,7 +283,7 @@ func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
 	err := config.Mongoconn.Collection("merchtotals").FindOne(context.Background(), bson.M{}).Decode(&total)
 	if err != nil {
 		// Initialize totals if not found
-		initializePaymentTotal()
+		InitializePaymentTotal()
 		at.WriteJSON(w, http.StatusOK, model.PaymentTotal{
 			TotalAmount: 0,
 			Count:       0,
@@ -432,7 +432,7 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		// Initialize payment totals as well
-		initializePaymentTotal()
+		InitializePaymentTotal()
 		
 		log.Println("Initialized payment queue successfully")
 		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
