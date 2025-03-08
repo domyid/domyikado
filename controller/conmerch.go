@@ -25,29 +25,71 @@ const (
 	DiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
 )
 
-// Discord message structure
-type DiscordMessage struct {
-	Content string `json:"content"`
+// Discord embed structure
+type DiscordEmbed struct {
+	Title       string              `json:"title"`
+	Description string              `json:"description,omitempty"`
+	Color       int                 `json:"color"`
+	Fields      []DiscordEmbedField `json:"fields,omitempty"`
+	Footer      *DiscordEmbedFooter `json:"footer,omitempty"`
+	Timestamp   string              `json:"timestamp,omitempty"` // ISO8601 timestamp
 }
 
-// Helper function to send logs to Discord
-func sendDiscordLog(message string) {
-	// Prepare the message
-	discordMsg := DiscordMessage{
-		Content: message,
+// Discord embed field
+type DiscordEmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline,omitempty"`
+}
+
+// Discord embed footer
+type DiscordEmbedFooter struct {
+	Text string `json:"text"`
+}
+
+// Discord webhook message structure
+type DiscordWebhookMessage struct {
+	Username  string         `json:"username,omitempty"`
+	AvatarURL string         `json:"avatar_url,omitempty"`
+	Content   string         `json:"content,omitempty"`
+	Embeds    []DiscordEmbed `json:"embeds,omitempty"`
+}
+
+// Helper function to send logs to Discord with embeds
+func sendDiscordEmbed(title, description string, color int, fields []DiscordEmbedField) {
+	// Set timestamp to current time
+	timestamp := time.Now().Format(time.RFC3339)
+	
+	// Create embed
+	embed := DiscordEmbed{
+		Title:       title,
+		Description: description,
+		Color:       color,
+		Fields:      fields,
+		Footer: &DiscordEmbedFooter{
+			Text: "QRIS Payment System",
+		},
+		Timestamp: timestamp,
+	}
+	
+	// Create message with embed
+	webhookMsg := DiscordWebhookMessage{
+		Username:  "QRIS Payment Bot",
+		AvatarURL: "https://cdn-icons-png.flaticon.com/512/2168/2168252.png", // QR code icon
+		Embeds:    []DiscordEmbed{embed},
 	}
 	
 	// Convert to JSON
-	jsonData, err := json.Marshal(discordMsg)
+	jsonData, err := json.Marshal(webhookMsg)
 	if err != nil {
-		log.Printf("Error marshaling Discord message: %v", err)
+		log.Printf("Error marshaling Discord embed: %v", err)
 		return
 	}
 	
 	// Send to Discord webhook
 	resp, err := http.Post(DiscordWebhookURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Error sending message to Discord: %v", err)
+		log.Printf("Error sending embed to Discord: %v", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -56,6 +98,15 @@ func sendDiscordLog(message string) {
 		log.Printf("Discord webhook returned non-success status: %d", resp.StatusCode)
 	}
 }
+
+// Constants for Discord embed colors
+const (
+	ColorGreen  = 5763719  // Success color (green)
+	ColorRed    = 15548997 // Error color (red)
+	ColorBlue   = 3447003  // Info color (blue)
+	ColorYellow = 16776960 // Warning color (yellow)
+	ColorPurple = 10181046 // Special color (purple)
+)
 
 // InitializePaymentTotal initializes the total payments collection if it doesn't exist
 func InitializePaymentTotal() {
@@ -70,10 +121,22 @@ func InitializePaymentTotal() {
 		})
 		if err != nil {
 			log.Printf("Error initializing payment totals: %v", err)
-			sendDiscordLog("❌ **ERROR**: Failed to initialize payment totals: " + err.Error())
+			sendDiscordEmbed(
+				"🔴 Error: Payment Totals Initialization Failed",
+				"Failed to initialize payment totals database.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
 		} else {
 			log.Println("Initialized payment totals successfully")
-			sendDiscordLog("✅ **SUCCESS**: Payment totals initialized successfully")
+			sendDiscordEmbed(
+				"✅ System: Payment Totals Initialized",
+				"Successfully initialized the payment totals database.",
+				ColorGreen,
+				nil,
+			)
 		}
 	}
 }
@@ -102,9 +165,24 @@ func updatePaymentTotal(amount float64) {
 	
 	if err != nil {
 		log.Printf("Error updating payment totals: %v", err)
-		sendDiscordLog("❌ **ERROR**: Failed to update payment totals: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Payment Totals Update Failed",
+			"Failed to update payment totals in database.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 	} else {
-		sendDiscordLog("💰 **PAYMENT**: Updated total amount: +" + strconv.FormatFloat(amount, 'f', 2, 64) + " IDR")
+		sendDiscordEmbed(
+			"💰 Payment: Total Updated",
+			"Successfully updated payment totals.",
+			ColorGreen,
+			[]DiscordEmbedField{
+				{Name: "Amount Added", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+			},
+		)
 	}
 }
 
@@ -112,7 +190,14 @@ func updatePaymentTotal(amount float64) {
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendDiscordLog("❌ **ERROR**: Invalid request body in CreateOrder: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Invalid Request",
+			"Failed to process create order request.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
 			Message: "Invalid request body",
@@ -122,7 +207,15 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Validate request
 	if request.Name == "" || request.Amount <= 0 {
-		sendDiscordLog("❌ **ERROR**: Invalid order parameters. Name: " + request.Name + ", Amount: " + strconv.FormatFloat(request.Amount, 'f', 2, 64))
+		sendDiscordEmbed(
+			"🔴 Error: Invalid Order Parameters",
+			"Order creation failed due to invalid parameters.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Name", Value: request.Name, Inline: true},
+				{Name: "Amount", Value: strconv.FormatFloat(request.Amount, 'f', 2, 64), Inline: true},
+			},
+		)
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
 			Message: "Name and valid amount are required",
@@ -134,7 +227,16 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
 	if err == nil && queue.IsProcessing {
-		sendDiscordLog("⏳ **QUEUE**: Payment already in progress, request from " + request.Name + " for amount " + strconv.FormatFloat(request.Amount, 'f', 2, 64) + " IDR was queued")
+		sendDiscordEmbed(
+			"⏳ Queue: Payment in Progress",
+			"Another payment is already in progress.",
+			ColorYellow,
+			[]DiscordEmbedField{
+				{Name: "Customer", Value: request.Name, Inline: true},
+				{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(request.Amount, 'f', 2, 64)), Inline: true},
+				{Name: "Status", Value: "Queued", Inline: true},
+			},
+		)
 		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 			Success:     false,
 			Message:     "Sedang ada pembayaran berlangsung. Silakan tunggu.",
@@ -158,7 +260,14 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	_, err = config.Mongoconn.Collection("merchorders").InsertOne(context.Background(), newOrder)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to create order in database: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Database Error",
+			"Failed to create order in database.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 			Success: false,
 			Message: "Error creating order",
@@ -179,7 +288,14 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to update queue status: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Queue Update Failed",
+			"Failed to update payment queue.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 			Success: false,
 			Message: "Error updating queue",
@@ -188,10 +304,18 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log successful order creation
-	sendDiscordLog(fmt.Sprintf("🛒 **NEW ORDER**: %s created order for %s IDR. Order ID: %s", 
-		request.Name, 
-		strconv.FormatFloat(request.Amount, 'f', 2, 64),
-		orderID))
+	sendDiscordEmbed(
+		"🛒 New Order Created",
+		"A new payment order has been created.",
+		ColorBlue,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Customer", Value: request.Name, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(request.Amount, 'f', 2, 64)), Inline: true},
+			{Name: "Expires", Value: expiryTime.Format("15:04:05"), Inline: true},
+			{Name: "Status", Value: "Pending", Inline: true},
+		},
+	)
 
 	// Set up expiry timer
 	go func() {
@@ -214,7 +338,14 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			)
 			if err != nil {
 				log.Printf("Error updating order status: %v", err)
-				sendDiscordLog("❌ **ERROR**: Failed to update expired order status: " + err.Error())
+				sendDiscordEmbed(
+					"🔴 Error: Status Update Failed",
+					"Failed to update expired order status.",
+					ColorRed,
+					[]DiscordEmbedField{
+						{Name: "Error", Value: err.Error(), Inline: false},
+					},
+				)
 			}
 
 			// Reset queue
@@ -229,13 +360,27 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			)
 			if err != nil {
 				log.Printf("Error resetting queue: %v", err)
-				sendDiscordLog("❌ **ERROR**: Failed to reset queue after expiry: " + err.Error())
+				sendDiscordEmbed(
+					"🔴 Error: Queue Reset Failed",
+					"Failed to reset queue after order expiry.",
+					ColorRed,
+					[]DiscordEmbedField{
+						{Name: "Error", Value: err.Error(), Inline: false},
+					},
+				)
 			}
 			
-			sendDiscordLog(fmt.Sprintf("⏱️ **EXPIRED**: Order %s for %s (%s IDR) has expired", 
-				orderID, 
-				newOrder.Name, 
-				strconv.FormatFloat(newOrder.Amount, 'f', 2, 64)))
+			sendDiscordEmbed(
+				"⏱️ Order Expired",
+				"A payment order has expired.",
+				ColorYellow,
+				[]DiscordEmbedField{
+					{Name: "Order ID", Value: orderID, Inline: true},
+					{Name: "Customer", Value: newOrder.Name, Inline: true},
+					{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(newOrder.Amount, 'f', 2, 64)), Inline: true},
+					{Name: "Status", Value: "Expired", Inline: true},
+				},
+			)
 		}
 	}()
 
@@ -254,7 +399,15 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 	var order model.Order
 	err := config.Mongoconn.Collection("merchorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
 	if err != nil {
-		sendDiscordLog("❓ **CHECK**: Order not found - ID: " + orderID)
+		sendDiscordEmbed(
+			"❓ Check Payment",
+			"Payment status check for non-existent order.",
+			ColorYellow,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Status", Value: "Not Found", Inline: true},
+			},
+		)
 		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
 			Success: false,
 			Message: "Order not found",
@@ -275,7 +428,15 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 	var order model.Order
 	err := config.Mongoconn.Collection("merchorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to confirm payment - Order not found: " + orderID)
+		sendDiscordEmbed(
+			"🔴 Error: Manual Confirmation Failed",
+			"Failed to confirm payment manually.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: "Order not found", Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
 			Success: false,
 			Message: "Order not found",
@@ -290,7 +451,15 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		bson.M{"$set": bson.M{"status": "success"}},
 	)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to update order status during confirmation: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Status Update Failed",
+			"Failed to update order status during manual confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 			Success: false,
 			Message: "Error updating order status",
@@ -312,7 +481,14 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		}},
 	)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to reset queue after confirmation: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Queue Reset Failed",
+			"Failed to reset queue after manual confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 			Success: false,
 			Message: "Error resetting queue",
@@ -320,10 +496,17 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	sendDiscordLog(fmt.Sprintf("✅ **MANUAL CONFIRM**: Order %s for %s confirmed manually. Amount: %s IDR", 
-		orderID, 
-		order.Name, 
-		strconv.FormatFloat(order.Amount, 'f', 2, 64)))
+	sendDiscordEmbed(
+		"✅ Manual Payment Confirmation",
+		"A payment has been confirmed manually.",
+		ColorGreen,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Customer", Value: order.Name, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(order.Amount, 'f', 2, 64)), Inline: true},
+			{Name: "Status", Value: "Confirmed", Inline: true},
+		},
+	)
 
 	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 		Success: true,
@@ -370,7 +553,14 @@ func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
 func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	var request model.NotificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendDiscordLog("❌ **ERROR**: Invalid notification request: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Invalid Notification",
+			"Failed to process payment notification.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
 			Message: "Invalid request body",
@@ -380,11 +570,26 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 
 	// Log notification for debugging
 	log.Printf("Received notification: %s", request.NotificationText)
-	sendDiscordLog("📥 **NOTIFICATION**: Received notification: " + request.NotificationText)
+	sendDiscordEmbed(
+		"📥 Notification Received",
+		"Received a QRIS payment notification.",
+		ColorBlue,
+		[]DiscordEmbedField{
+			{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+		},
+	)
 
 	// Check if this is a QRIS payment notification
 	if !strings.Contains(request.NotificationText, "Pembayaran QRIS") {
-		sendDiscordLog("❌ **REJECTED**: Not a QRIS payment notification")
+		sendDiscordEmbed(
+			"❌ Notification Rejected",
+			"The received notification is not a QRIS payment.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+				{Name: "Reason", Value: "Not a QRIS payment notification", Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
 			Message: "Not a QRIS payment notification",
@@ -397,7 +602,14 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	matches := re.FindStringSubmatch(request.NotificationText)
 	
 	if len(matches) < 2 {
-		sendDiscordLog("❌ **ERROR**: Cannot extract payment amount from notification")
+		sendDiscordEmbed(
+			"🔴 Error: Amount Extraction Failed",
+			"Could not extract payment amount from notification.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
 			Message: "Cannot extract payment amount from notification",
@@ -412,7 +624,15 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	// Convert to float
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Invalid payment amount: " + amountStr)
+		sendDiscordEmbed(
+			"🔴 Error: Invalid Amount",
+			"The extracted payment amount is invalid.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Extracted Amount", Value: amountStr, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
 			Message: "Invalid payment amount",
@@ -435,7 +655,15 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	
 	err = config.Mongoconn.Collection("merchorders").FindOne(ctx, filter, opts).Decode(&order)
 	if err != nil {
-		sendDiscordLog(fmt.Sprintf("❌ **PAYMENT FAILED**: No pending order found with exact amount: %s IDR", amountStr))
+		sendDiscordEmbed(
+			"❌ Payment Failed",
+			"No pending order found with the exact amount.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+				{Name: "Status", Value: "Failed to Match", Inline: true},
+			},
+		)
 		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
 			Success: false,
 			Message: "No pending order found with amount: " + amountStr,
@@ -450,7 +678,15 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		bson.M{"$set": bson.M{"status": "success"}},
 	)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to update order status: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Status Update Failed",
+			"Failed to update order status after notification.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: order.OrderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 			Success: false,
 			Message: "Error updating order status",
@@ -472,7 +708,14 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		}},
 	)
 	if err != nil {
-		sendDiscordLog("❌ **ERROR**: Failed to reset queue after notification confirmation: " + err.Error())
+		sendDiscordEmbed(
+			"🔴 Error: Queue Reset Failed",
+			"Failed to reset queue after payment confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
 		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 			Success: false,
 			Message: "Error resetting queue",
@@ -482,10 +725,17 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 
 	// Log successful confirmation
 	log.Printf("Payment confirmed from notification for amount: Rp%v, Order ID: %s", amount, order.OrderID)
-	sendDiscordLog(fmt.Sprintf("✅ **PAYMENT SUCCESS**: Order %s for %s confirmed via notification. Amount: %s IDR", 
-		order.OrderID, 
-		order.Name, 
-		strconv.FormatFloat(amount, 'f', 2, 64)))
+	sendDiscordEmbed(
+		"✅ Payment Successful",
+		"A payment has been confirmed via notification.",
+		ColorGreen,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: order.OrderID, Inline: true},
+			{Name: "Customer", Value: order.Name, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+			{Name: "Status", Value: "Confirmed", Inline: true},
+		},
+	)
 
 	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 		Success: true,
@@ -507,7 +757,14 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 		})
 		
 		if err != nil {
-			sendDiscordLog("❌ **ERROR**: Failed to initialize queue: " + err.Error())
+			sendDiscordEmbed(
+				"🔴 Error: Queue Initialization Failed",
+				"Failed to initialize payment queue.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
 			at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 				Success: false,
 				Message: "Error initializing queue",
@@ -519,7 +776,12 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 		InitializePaymentTotal()
 		
 		log.Println("Initialized payment queue successfully")
-		sendDiscordLog("✅ **SYSTEM**: Payment queue initialized successfully")
+		sendDiscordEmbed(
+			"✅ System Initialized",
+			"Payment queue initialized successfully.",
+			ColorGreen,
+			nil,
+		)
 		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 			Success: true,
 			Message: "Queue initialized successfully",
