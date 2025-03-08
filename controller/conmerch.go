@@ -276,7 +276,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(50 * time.Second)
+	expiryTime := time.Now().Add(100 * time.Second)
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -319,7 +319,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(50 * time.Second)
+		time.Sleep(100 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.Queue
