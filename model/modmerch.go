@@ -18,10 +18,10 @@ type Order struct {
 
 // Queue struct to manage payment processing
 type Queue struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	IsProcessing   bool               `json:"isProcessing" bson:"isProcessing"`
-	CurrentOrderID string             `json:"currentOrderId" bson:"currentOrderId"`
-	ExpiryTime     time.Time          `json:"expiryTime" bson:"expiryTime"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	IsProcessing  bool               `json:"isProcessing" bson:"isProcessing"`
+	CurrentOrderID string            `json:"currentOrderId" bson:"currentOrderId"`
+	ExpiryTime    time.Time          `json:"expiryTime" bson:"expiryTime"`
 }
 
 // CreateOrderRequest represents the request body for creating an order
@@ -45,4 +45,12 @@ type PaymentResponse struct {
 	QueueStatus  bool      `json:"queueStatus,omitempty"`
 	Status       string    `json:"status,omitempty"`
 	IsProcessing bool      `json:"isProcessing,omitempty"`
+}
+
+// PaymentTotal struct to track total payments
+type PaymentTotal struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	TotalAmount float64            `json:"totalAmount" bson:"totalAmount"`
+	Count       int                `json:"count" bson:"count"`
+	LastUpdated time.Time          `json:"lastUpdated" bson:"lastUpdated"`
 }

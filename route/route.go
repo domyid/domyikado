@@ -118,6 +118,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ConfirmPayment(w, r)
 	case method == "GET" && path == "/api/queueStatus":
 		controller.GetQueueStatus(w, r)
+	case method == "GET" && path == "/api/totalPayments":
+		controller.GetTotalPayments(w, r)
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotification(w, r)
 	// Google Auth

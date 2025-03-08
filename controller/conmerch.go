@@ -18,6 +18,52 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// Initalize total payments collection if it doesn't exist
+func initializePaymentTotal() {
+	var total model.PaymentTotal
+	err := config.Mongoconn.Collection("merchtotals").FindOne(context.Background(), bson.M{}).Decode(&total)
+	if err != nil {
+		// Total document doesn't exist, create it
+		_, err = config.Mongoconn.Collection("merchtotals").InsertOne(context.Background(), model.PaymentTotal{
+			TotalAmount: 0,
+			Count:       0,
+			LastUpdated: time.Now(),
+		})
+		if err != nil {
+			log.Printf("Error initializing payment totals: %v", err)
+		} else {
+			log.Println("Initialized payment totals successfully")
+		}
+	}
+}
+
+// Helper function to update payment totals
+func updatePaymentTotal(amount float64) {
+	opts := options.FindOneAndUpdate().SetUpsert(true)
+	
+	update := bson.M{
+		"$inc": bson.M{
+			"totalAmount": amount,
+			"count":       1,
+		},
+		"$set": bson.M{
+			"lastUpdated": time.Now(),
+		},
+	}
+	
+	var result model.PaymentTotal
+	err := config.Mongoconn.Collection("merchtotals").FindOneAndUpdate(
+		context.Background(),
+		bson.M{},
+		update,
+		opts,
+	).Decode(&result)
+	
+	if err != nil {
+		log.Printf("Error updating payment totals: %v", err)
+	}
+}
+
 // CreateOrder handles the creation of a new payment order
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateOrderRequest
@@ -42,10 +88,11 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
 	if err == nil && queue.IsProcessing {
-		at.WriteJSON(w, http.StatusConflict, model.PaymentResponse{
+		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 			Success:     false,
 			Message:     "Sedang ada pembayaran berlangsung. Silakan tunggu.",
 			QueueStatus: true,
+			ExpiryTime:  queue.ExpiryTime,
 		})
 		return
 	}
@@ -186,6 +233,9 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update payment totals
+	updatePaymentTotal(order.Amount)
+
 	// Reset queue
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
 		context.Background(),
@@ -215,10 +265,8 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
 	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
-			Success: false,
-			Message: "Error checking queue",
-		})
+		// If no queue document exists, initialize it
+		initializeQueue(w, r)
 		return
 	}
 
@@ -227,6 +275,24 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 		IsProcessing: queue.IsProcessing,
 		ExpiryTime:   queue.ExpiryTime,
 	})
+}
+
+// GetTotalPayments returns the total payment amount and count
+func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
+	var total model.PaymentTotal
+	err := config.Mongoconn.Collection("merchtotals").FindOne(context.Background(), bson.M{}).Decode(&total)
+	if err != nil {
+		// Initialize totals if not found
+		initializePaymentTotal()
+		at.WriteJSON(w, http.StatusOK, model.PaymentTotal{
+			TotalAmount: 0,
+			Count:       0,
+			LastUpdated: time.Now(),
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, total)
 }
 
 // ConfirmByNotification processes QRIS payment notifications
@@ -255,7 +321,7 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	// Extract payment amount with regex - format: "Pembayaran QRIS Rp 1 di Informatika Digital Bisnis, PRNGPNG telah diterima."
 	re := regexp.MustCompile(`Pembayaran QRIS Rp\s*(\d+(?:[.,]\d+)?)`)
 	matches := re.FindStringSubmatch(request.NotificationText)
-
+	
 	if len(matches) < 2 {
 		at.WriteJSON(w, http.StatusBadRequest, model.PaymentResponse{
 			Success: false,
@@ -263,11 +329,11 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
+	
 	// Clean number format
 	amountStr := strings.ReplaceAll(matches[1], ".", "")
 	amountStr = strings.ReplaceAll(amountStr, ",", "")
-
+	
 	// Convert to float
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
@@ -281,16 +347,16 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	// Find order with matching amount and pending status
 	ctx := context.Background()
 	var order model.Order
-
+	
 	// Create filter to find order with pending status and matching amount
 	filter := bson.M{
 		"amount": amount,
 		"status": "pending",
 	}
-
+	
 	// Add sort by latest timestamp
 	opts := options.FindOne().SetSort(bson.M{"timestamp": -1})
-
+	
 	err = config.Mongoconn.Collection("merchorders").FindOne(ctx, filter, opts).Decode(&order)
 	if err != nil {
 		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
@@ -313,6 +379,9 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Update payment totals
+	updatePaymentTotal(amount)
 
 	// Reset queue
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
@@ -353,7 +422,7 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 			CurrentOrderID: "",
 			ExpiryTime:     time.Time{},
 		})
-
+		
 		if err != nil {
 			at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
 				Success: false,
@@ -361,7 +430,10 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-
+		
+		// Initialize payment totals as well
+		initializePaymentTotal()
+		
 		log.Println("Initialized payment queue successfully")
 		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 			Success: true,
@@ -369,9 +441,11 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
+	
 	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
-		Success: true,
-		Message: "Queue already exists",
+		Success:      true,
+		Message:      "Queue already exists",
+		IsProcessing: queue.IsProcessing,
+		ExpiryTime:   queue.ExpiryTime,
 	})
 }
