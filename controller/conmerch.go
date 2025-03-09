@@ -283,11 +283,6 @@ func updatePaymentTotal(amount float64) {
 	}
 }
 
-// CreateOrder handles the creation of a new payment order
-func CreateOrderHandler(w http.ResponseWriter, r *http.Request) {
-	BasicAuth(CreateOrder)(w, r)
-}
-
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -377,7 +372,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(100 * time.Second)
+	expiryTime := time.Now().Add(105 * time.Second)
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -420,7 +415,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(100 * time.Second)
+		time.Sleep(105 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.Queue
@@ -493,11 +488,6 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CheckPayment checks the payment status of an order
-func CheckPaymentHandler(w http.ResponseWriter, r *http.Request) {
-	BasicAuth(CheckPayment)(w, r)
-}
-
 func CheckPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 
@@ -524,11 +514,6 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 		Status:  order.Status,
 	})
-}
-
-// ConfirmPayment confirms a payment manually (simulation)
-func ConfirmPaymentHandler(w http.ResponseWriter, r *http.Request) {
-	BasicAuth(ConfirmPayment)(w, r)
 }
 
 func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
@@ -623,11 +608,6 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetQueueStatus returns the current status of the payment queue
-func GetQueueStatusHandler(w http.ResponseWriter, r *http.Request) {
-	BasicAuth(GetQueueStatus)(w, r)
-}
-
 func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
@@ -642,11 +622,6 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 		IsProcessing: queue.IsProcessing,
 		ExpiryTime:   queue.ExpiryTime,
 	})
-}
-
-// GetTotalPayments returns the total payment amount and count
-func GetTotalPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	BasicAuth(GetTotalPayments)(w, r)
 }
 
 func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
@@ -881,11 +856,6 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 		Message: "Payment confirmed",
 		OrderID: order.OrderID,
 	})
-}
-
-// InitializeQueue creates the queue document if it doesn't exist
-func InitializeQueueHandler(w http.ResponseWriter, r *http.Request) {
-	BasicAuth(InitializeQueue)(w, r)
 }
 
 func InitializeQueue(w http.ResponseWriter, r *http.Request) {
