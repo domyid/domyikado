@@ -27,12 +27,6 @@ const (
 	DiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
 )
 
-// Default Auth credentials (used only if database credentials are not available)
-const (
-	DefaultAuthUsername = "ayam"
-	DefaultAuthPassword = "ayam123"
-)
-
 // AuthCredentials stores basic auth credentials
 type AuthCredentials struct {
 	Username string    `bson:"username" json:"username"`
@@ -89,27 +83,21 @@ func BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 
 		// Get credentials from database
 		var dbCreds AuthCredentials
-		err = config.Mongoconn.Collection("gomerchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
-		
-		// Use provided username/password (or fallback to default if database retrieval fails)
-		username := DefaultAuthUsername
-		password := DefaultAuthPassword
-		
-		if err == nil {
-			// Use credentials from database
-			username = dbCreds.Username
-			password = dbCreds.Password
-		} else {
+		err = config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
+		if err != nil {
 			// Log error but continue with default credentials
-			log.Printf("Warning: Could not retrieve auth credentials from database: %v. Using default credentials.", err)
-			
-			// Try to initialize credentials
-			go initializeAuthCredentials()
+			log.Printf("Warning: Could not retrieve auth credentials from database: %v.", err)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.PaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Server error retrieving credentials",
+			})
+			return
 		}
 
 		// Verify credentials using constant time comparison to prevent timing attacks
-		if subtle.ConstantTimeCompare([]byte(pair[0]), []byte(username)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(pair[1]), []byte(password)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(pair[0]), []byte(dbCreds.Username)) != 1 ||
+			subtle.ConstantTimeCompare([]byte(pair[1]), []byte(dbCreds.Password)) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 			sendDiscordEmbed(
 				"🔒 Authentication Failed",
@@ -216,45 +204,6 @@ const (
 	ColorYellow = 16776960 // Warning color (yellow)
 	ColorPurple = 10181046 // Special color (purple)
 )
-
-// Initialize authentication credentials in MongoDB
-func initializeAuthCredentials() {
-	// Check if credentials already exist
-	var creds AuthCredentials
-	err := config.Mongoconn.Collection("gomerchsecret").FindOne(context.Background(), bson.M{}).Decode(&creds)
-	if err != nil {
-		// Create new credentials
-		newCreds := AuthCredentials{
-			Username: DefaultAuthUsername,
-			Password: DefaultAuthPassword,
-			Created:  time.Now(),
-		}
-		
-		_, err = config.Mongoconn.Collection("gomerchsecret").InsertOne(context.Background(), newCreds)
-		if err != nil {
-			log.Printf("Error initializing auth credentials: %v", err)
-			sendDiscordEmbed(
-				"🔴 Error: Auth Initialization Failed",
-				"Failed to initialize authentication credentials.",
-				ColorRed,
-				[]DiscordEmbedField{
-					{Name: "Error", Value: err.Error(), Inline: false},
-				},
-			)
-		} else {
-			log.Println("Initialized auth credentials successfully")
-			sendDiscordEmbed(
-				"🔐 Auth Credentials Initialized",
-				"Authentication credentials have been initialized in the database.",
-				ColorBlue,
-				[]DiscordEmbedField{
-					{Name: "Username", Value: DefaultAuthUsername, Inline: true},
-					{Name: "Password", Value: "********", Inline: true}, // Never log actual password
-				},
-			)
-		}
-	}
-}
 
 // InitializePaymentTotal initializes the total payments collection if it doesn't exist
 func InitializePaymentTotal() {
@@ -428,7 +377,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(50 * time.Second)
+	expiryTime := time.Now().Add(100 * time.Second)
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -471,7 +420,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(50 * time.Second)
+		time.Sleep(100 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.Queue
@@ -540,7 +489,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Success:      true,
 		OrderID:      orderID,
 		ExpiryTime:   expiryTime,
-		QRISImageURL: "/static/qris.jpeg",
+		QRISImageURL: "qris.png",
 	})
 }
 
@@ -719,7 +668,7 @@ func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
 
 // ConfirmByNotification processes QRIS payment notifications
 func ConfirmByNotificationHandler(w http.ResponseWriter, r *http.Request) {
-	ConfirmByNotification(w, r) // No auth for webhook callbacks
+	BasicAuth(ConfirmByNotification)(w, r)
 }
 
 func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
@@ -969,9 +918,6 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 		// Initialize payment totals as well
 		InitializePaymentTotal()
 		
-		// Initialize authentication credentials
-		initializeAuthCredentials()
-		
 		log.Println("Initialized payment queue successfully")
 		sendDiscordEmbed(
 			"✅ System Initialized",
@@ -992,50 +938,4 @@ func InitializeQueue(w http.ResponseWriter, r *http.Request) {
 		IsProcessing: queue.IsProcessing,
 		ExpiryTime:   queue.ExpiryTime,
 	})
-}
-
-// AuthCredentials stores basic auth credentials
-type AuthCredentials struct {
-	Username string `bson:"username" json:"username"`
-	Password string `bson:"password" json:"password"`
-	Created  time.Time `bson:"created" json:"created"`
-}
-
-// Initialize authentication credentials in MongoDB
-func initializeAuthCredentials() {
-	// Check if credentials already exist
-	var creds AuthCredentials
-	err := config.Mongoconn.Collection("gomerchsecret").FindOne(context.Background(), bson.M{}).Decode(&creds)
-	if err != nil {
-		// Create new credentials
-		newCreds := AuthCredentials{
-			Username: AuthUsername,
-			Password: AuthPassword,
-			Created:  time.Now(),
-		}
-		
-		_, err = config.Mongoconn.Collection("gomerchsecret").InsertOne(context.Background(), newCreds)
-		if err != nil {
-			log.Printf("Error initializing auth credentials: %v", err)
-			sendDiscordEmbed(
-				"🔴 Error: Auth Initialization Failed",
-				"Failed to initialize authentication credentials.",
-				ColorRed,
-				[]DiscordEmbedField{
-					{Name: "Error", Value: err.Error(), Inline: false},
-				},
-			)
-		} else {
-			log.Println("Initialized auth credentials successfully")
-			sendDiscordEmbed(
-				"🔐 Auth Credentials Initialized",
-				"Authentication credentials have been initialized in the database.",
-				ColorBlue,
-				[]DiscordEmbedField{
-					{Name: "Username", Value: AuthUsername, Inline: true},
-					{Name: "Password", Value: "********", Inline: true}, // Never log actual password
-				},
-			)
-		}
-	}
 }

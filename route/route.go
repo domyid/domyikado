@@ -120,8 +120,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetQueueStatusHandler(w, r)
 	case method == "GET" && path == "/api/totalPayments":
 		controller.GetTotalPaymentsHandler(w, r)
-		
-		// This endpoint needs to be public (no auth) as it's called by external service
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
 	// Google Auth
