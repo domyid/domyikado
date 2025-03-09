@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -24,6 +26,113 @@ const (
 	// Discord webhook URL for logging
 	DiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
 )
+
+// Default Auth credentials (used only if database credentials are not available)
+const (
+	DefaultAuthUsername = "ayam"
+	DefaultAuthPassword = "ayam123"
+)
+
+// AuthCredentials stores basic auth credentials
+type AuthCredentials struct {
+	Username string    `bson:"username" json:"username"`
+	Password string    `bson:"password" json:"password"`
+	Created  time.Time `bson:"created" json:"created"`
+}
+
+// Basic Auth middleware that fetches credentials from MongoDB
+func BasicAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get auth header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.PaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Authentication required",
+			})
+			return
+		}
+
+		// Parse auth header
+		authParts := strings.Split(authHeader, " ")
+		if len(authParts) != 2 || authParts[0] != "Basic" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.PaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication format",
+			})
+			return
+		}
+
+		// Decode credentials
+		payload, err := base64.StdEncoding.DecodeString(authParts[1])
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.PaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication credentials",
+			})
+			return
+		}
+
+		// Split username and password
+		pair := strings.SplitN(string(payload), ":", 2)
+		if len(pair) != 2 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.PaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication credentials",
+			})
+			return
+		}
+
+		// Get credentials from database
+		var dbCreds AuthCredentials
+		err = config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
+		
+		// Use provided username/password (or fallback to default if database retrieval fails)
+		username := DefaultAuthUsername
+		password := DefaultAuthPassword
+		
+		if err == nil {
+			// Use credentials from database
+			username = dbCreds.Username
+			password = dbCreds.Password
+		} else {
+			// Log error but continue with default credentials
+			log.Printf("Warning: Could not retrieve auth credentials from database: %v. Using default credentials.", err)
+			
+			// Try to initialize credentials
+			go initializeAuthCredentials()
+		}
+
+		// Verify credentials using constant time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(pair[0]), []byte(username)) != 1 ||
+			subtle.ConstantTimeCompare([]byte(pair[1]), []byte(password)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			sendDiscordEmbed(
+				"🔒 Authentication Failed",
+				"Someone tried to access the API with invalid credentials.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "IP Address", Value: r.RemoteAddr, Inline: true},
+					{Name: "URL Path", Value: r.URL.Path, Inline: true},
+					{Name: "User Agent", Value: r.UserAgent(), Inline: false},
+					{Name: "Provided Username", Value: pair[0], Inline: true},
+				},
+			)
+			at.WriteJSON(w, http.StatusUnauthorized, model.PaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid username or password",
+			})
+			return
+		}
+
+		// Authentication successful, call the next handler
+		next(w, r)
+	}
+}
 
 // Discord embed structure
 type DiscordEmbed struct {
@@ -108,6 +217,45 @@ const (
 	ColorPurple = 10181046 // Special color (purple)
 )
 
+// Initialize authentication credentials in MongoDB
+func initializeAuthCredentials() {
+	// Check if credentials already exist
+	var creds AuthCredentials
+	err := config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&creds)
+	if err != nil {
+		// Create new credentials
+		newCreds := AuthCredentials{
+			Username: DefaultAuthUsername,
+			Password: DefaultAuthPassword,
+			Created:  time.Now(),
+		}
+		
+		_, err = config.Mongoconn.Collection("merchsecret").InsertOne(context.Background(), newCreds)
+		if err != nil {
+			log.Printf("Error initializing auth credentials: %v", err)
+			sendDiscordEmbed(
+				"🔴 Error: Auth Initialization Failed",
+				"Failed to initialize authentication credentials.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
+		} else {
+			log.Println("Initialized auth credentials successfully")
+			sendDiscordEmbed(
+				"🔐 Auth Credentials Initialized",
+				"Authentication credentials have been initialized in the database.",
+				ColorBlue,
+				[]DiscordEmbedField{
+					{Name: "Username", Value: DefaultAuthUsername, Inline: true},
+					{Name: "Password", Value: "********", Inline: true}, // Never log actual password
+				},
+			)
+		}
+	}
+}
+
 // InitializePaymentTotal initializes the total payments collection if it doesn't exist
 func InitializePaymentTotal() {
 	var total model.PaymentTotal
@@ -187,6 +335,10 @@ func updatePaymentTotal(amount float64) {
 }
 
 // CreateOrder handles the creation of a new payment order
+func CreateOrderHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(CreateOrder)(w, r)
+}
+
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -276,7 +428,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(100 * time.Second)
+	expiryTime := time.Now().Add(105 * time.Second)
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -319,7 +471,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(100 * time.Second)
+		time.Sleep(105 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.Queue
@@ -393,6 +545,10 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 // CheckPayment checks the payment status of an order
+func CheckPaymentHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(CheckPayment)(w, r)
+}
+
 func CheckPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 
@@ -422,6 +578,10 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 // ConfirmPayment confirms a payment manually (simulation)
+func ConfirmPaymentHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(ConfirmPayment)(w, r)
+}
+
 func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 
@@ -515,6 +675,10 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetQueueStatus returns the current status of the payment queue
+func GetQueueStatusHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(GetQueueStatus)(w, r)
+}
+
 func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
@@ -532,6 +696,10 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetTotalPayments returns the total payment amount and count
+func GetTotalPaymentsHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(GetTotalPayments)(w, r)
+}
+
 func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
 	var total model.PaymentTotal
 	err := config.Mongoconn.Collection("merchtotals").FindOne(context.Background(), bson.M{}).Decode(&total)
@@ -550,6 +718,10 @@ func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
 }
 
 // ConfirmByNotification processes QRIS payment notifications
+func ConfirmByNotificationHandler(w http.ResponseWriter, r *http.Request) {
+	ConfirmByNotification(w, r) // No auth for webhook callbacks
+}
+
 func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	var request model.NotificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -572,7 +744,7 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received notification: %s", request.NotificationText)
 	sendDiscordEmbed(
 		"📥 Notification Received",
-		"Received a QRIS payment notification.",
+		"Received a payment notification.",
 		ColorBlue,
 		[]DiscordEmbedField{
 			{Name: "Notification Text", Value: request.NotificationText, Inline: false},
@@ -655,6 +827,7 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 	
 	err = config.Mongoconn.Collection("merchorders").FindOne(ctx, filter, opts).Decode(&order)
 	if err != nil {
+		// Log the attempted payment even if it doesn't match any order
 		sendDiscordEmbed(
 			"❌ Payment Failed",
 			"No pending order found with the exact amount.",
@@ -662,9 +835,25 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 			[]DiscordEmbedField{
 				{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
 				{Name: "Status", Value: "Failed to Match", Inline: true},
+				{Name: "Notification", Value: request.NotificationText, Inline: false},
 			},
 		)
-		at.WriteJSON(w, http.StatusNotFound, model.PaymentResponse{
+		
+		// Store this as a failed payment attempt in database
+		failedPayment := model.Order{
+			OrderID:   "unmatched-" + uuid.New().String(),
+			Name:      "Unknown",
+			Amount:    amount,
+			Timestamp: time.Now(),
+			Status:    "failed", // Mark as failed directly
+		}
+		
+		_, dbErr := config.Mongoconn.Collection("merchorders").InsertOne(context.Background(), failedPayment)
+		if dbErr != nil {
+			log.Printf("Error storing failed payment: %v", dbErr)
+		}
+		
+		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
 			Success: false,
 			Message: "No pending order found with amount: " + amountStr,
 		})
@@ -683,116 +872,4 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 			"Failed to update order status after notification.",
 			ColorRed,
 			[]DiscordEmbedField{
-				{Name: "Order ID", Value: order.OrderID, Inline: true},
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
-			Success: false,
-			Message: "Error updating order status",
-		})
-		return
-	}
-
-	// Update payment totals
-	updatePaymentTotal(amount)
-
-	// Reset queue
-	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$set": bson.M{
-			"isProcessing":   false,
-			"currentOrderId": "",
-			"expiryTime":     time.Time{},
-		}},
-	)
-	if err != nil {
-		sendDiscordEmbed(
-			"🔴 Error: Queue Reset Failed",
-			"Failed to reset queue after payment confirmation.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
-			Success: false,
-			Message: "Error resetting queue",
-		})
-		return
-	}
-
-	// Log successful confirmation
-	log.Printf("Payment confirmed from notification for amount: Rp%v, Order ID: %s", amount, order.OrderID)
-	sendDiscordEmbed(
-		"✅ Payment Successful",
-		"A payment has been confirmed via notification.",
-		ColorGreen,
-		[]DiscordEmbedField{
-			{Name: "Order ID", Value: order.OrderID, Inline: true},
-			{Name: "Customer", Value: order.Name, Inline: true},
-			{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
-			{Name: "Status", Value: "Confirmed", Inline: true},
-		},
-	)
-
-	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
-		Success: true,
-		Message: "Payment confirmed",
-		OrderID: order.OrderID,
-	})
-}
-
-// InitializeQueue creates the queue document if it doesn't exist
-func InitializeQueue(w http.ResponseWriter, r *http.Request) {
-	var queue model.Queue
-	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
-	if err != nil {
-		// Queue document doesn't exist, create it
-		_, err = config.Mongoconn.Collection("merchqueue").InsertOne(context.Background(), model.Queue{
-			IsProcessing:   false,
-			CurrentOrderID: "",
-			ExpiryTime:     time.Time{},
-		})
-		
-		if err != nil {
-			sendDiscordEmbed(
-				"🔴 Error: Queue Initialization Failed",
-				"Failed to initialize payment queue.",
-				ColorRed,
-				[]DiscordEmbedField{
-					{Name: "Error", Value: err.Error(), Inline: false},
-				},
-			)
-			at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
-				Success: false,
-				Message: "Error initializing queue",
-			})
-			return
-		}
-		
-		// Initialize payment totals as well
-		InitializePaymentTotal()
-		
-		log.Println("Initialized payment queue successfully")
-		sendDiscordEmbed(
-			"✅ System Initialized",
-			"Payment queue initialized successfully.",
-			ColorGreen,
-			nil,
-		)
-		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
-			Success: true,
-			Message: "Queue initialized successfully",
-		})
-		return
-	}
-	
-	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
-		Success:      true,
-		Message:      "Queue already exists",
-		IsProcessing: queue.IsProcessing,
-		ExpiryTime:   queue.ExpiryTime,
-	})
-}
+				{Name: "Order ID", Value: order.
