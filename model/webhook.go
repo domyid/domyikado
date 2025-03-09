@@ -50,6 +50,7 @@ type Userdomyikado struct {
 	JumlahAntrian        int                `json:"jumlahantrian,omitempty" bson:"jumlahantrian,omitempty"`
 	ParentName           string             `json:"parentname,omitempty" bson:"parentname,omitempty"`
 	ParentPhoneNumber    string             `json:"parentphonenumber,omitempty" bson:"parentphonenumber,omitempty"`
+	StravaProfilePicture string             `json:"stravaprofilepicture,omitempty" bson:"stravaprofilepicture,omitempty"`
 }
 
 type Task struct {
