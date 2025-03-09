@@ -282,7 +282,10 @@ func updatePaymentTotal(amount float64) {
 		)
 	}
 }
-
+// CreateOrderHandler TANPA Basic Auth
+func CreateOrderHandler(w http.ResponseWriter, r *http.Request) {
+    CreateOrder(w, r) // Langsung panggil CreateOrder tanpa Basic Auth
+}
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var request model.CreateOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -488,6 +491,10 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func CheckPaymentHandler(w http.ResponseWriter, r *http.Request) {
+    CheckPayment(w, r) // Langsung panggil CheckPayment tanpa Basic Auth
+}
+
 func CheckPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 
@@ -514,6 +521,10 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 		Status:  order.Status,
 	})
+}
+
+func ConfirmPaymentHandler(w http.ResponseWriter, r *http.Request) {
+    ConfirmPayment(w, r) // Langsung panggil ConfirmPayment tanpa Basic Auth
 }
 
 func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
@@ -608,6 +619,10 @@ func ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func GetQueueStatusHandler(w http.ResponseWriter, r *http.Request) {
+    GetQueueStatus(w, r) // Langsung panggil GetQueueStatus tanpa Basic Auth
+}
+
 func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	var queue model.Queue
 	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
@@ -622,6 +637,10 @@ func GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 		IsProcessing: queue.IsProcessing,
 		ExpiryTime:   queue.ExpiryTime,
 	})
+}
+
+func GetTotalPaymentsHandler(w http.ResponseWriter, r *http.Request) {
+    GetTotalPayments(w, r) // Langsung panggil GetTotalPayments tanpa Basic Auth
 }
 
 func GetTotalPayments(w http.ResponseWriter, r *http.Request) {
