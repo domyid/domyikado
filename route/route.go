@@ -109,19 +109,21 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.CountCommits(w, r)
 	case method == "GET" && path == "/stats/feedback":
 		controller.CountFeedback(w, r)
-	// QRIS Payment Routes
+	// QRIS Payment Routes - with Basic Auth
 	case method == "POST" && path == "/api/createOrder":
-		controller.CreateOrder(w, r)
+		controller.CreateOrderHandler(w, r)
 	case method == "GET" && at.URLParam(path, "/api/checkPayment/:orderId"):
-		controller.CheckPayment(w, r)
+		controller.CheckPaymentHandler(w, r)
 	case method == "POST" && at.URLParam(path, "/api/confirmPayment/:orderId"):
-		controller.ConfirmPayment(w, r)
+		controller.ConfirmPaymentHandler(w, r)
 	case method == "GET" && path == "/api/queueStatus":
-		controller.GetQueueStatus(w, r)
+		controller.GetQueueStatusHandler(w, r)
 	case method == "GET" && path == "/api/totalPayments":
-		controller.GetTotalPayments(w, r)
+		controller.GetTotalPaymentsHandler(w, r)
+		
+		// This endpoint needs to be public (no auth) as it's called by external service
 	case method == "POST" && path == "/api/confirmByNotification":
-		controller.ConfirmByNotification(w, r)
+		controller.ConfirmByNotificationHandler(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)

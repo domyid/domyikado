@@ -89,7 +89,7 @@ func BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 
 		// Get credentials from database
 		var dbCreds AuthCredentials
-		err = config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
+		err = config.Mongoconn.Collection("gomerchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
 		
 		// Use provided username/password (or fallback to default if database retrieval fails)
 		username := DefaultAuthUsername
@@ -221,7 +221,7 @@ const (
 func initializeAuthCredentials() {
 	// Check if credentials already exist
 	var creds AuthCredentials
-	err := config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&creds)
+	err := config.Mongoconn.Collection("gomerchsecret").FindOne(context.Background(), bson.M{}).Decode(&creds)
 	if err != nil {
 		// Create new credentials
 		newCreds := AuthCredentials{
@@ -230,7 +230,7 @@ func initializeAuthCredentials() {
 			Created:  time.Now(),
 		}
 		
-		_, err = config.Mongoconn.Collection("merchsecret").InsertOne(context.Background(), newCreds)
+		_, err = config.Mongoconn.Collection("gomerchsecret").InsertOne(context.Background(), newCreds)
 		if err != nil {
 			log.Printf("Error initializing auth credentials: %v", err)
 			sendDiscordEmbed(
@@ -428,7 +428,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(105 * time.Second)
+	expiryTime := time.Now().Add(50 * time.Second)
 	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -471,7 +471,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(105 * time.Second)
+		time.Sleep(50 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.Queue
@@ -540,7 +540,7 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Success:      true,
 		OrderID:      orderID,
 		ExpiryTime:   expiryTime,
-		QRISImageURL: "qris.png",
+		QRISImageURL: "/static/qris.jpeg",
 	})
 }
 
@@ -872,4 +872,170 @@ func ConfirmByNotification(w http.ResponseWriter, r *http.Request) {
 			"Failed to update order status after notification.",
 			ColorRed,
 			[]DiscordEmbedField{
-				{Name: "Order ID", Value: order.
+				{Name: "Order ID", Value: order.OrderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
+			Success: false,
+			Message: "Error updating order status",
+		})
+		return
+	}
+
+	// Update payment totals
+	updatePaymentTotal(amount)
+
+	// Reset queue
+	_, err = config.Mongoconn.Collection("merchqueue").UpdateOne(
+		ctx,
+		bson.M{},
+		bson.M{"$set": bson.M{
+			"isProcessing":   false,
+			"currentOrderId": "",
+			"expiryTime":     time.Time{},
+		}},
+	)
+	if err != nil {
+		sendDiscordEmbed(
+			"🔴 Error: Queue Reset Failed",
+			"Failed to reset queue after payment confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
+			Success: false,
+			Message: "Error resetting queue",
+		})
+		return
+	}
+
+	// Log successful confirmation
+	log.Printf("Payment confirmed from notification for amount: Rp%v, Order ID: %s", amount, order.OrderID)
+	sendDiscordEmbed(
+		"✅ Payment Successful",
+		"A payment has been confirmed via notification.",
+		ColorGreen,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: order.OrderID, Inline: true},
+			{Name: "Customer", Value: order.Name, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+			{Name: "Status", Value: "Confirmed", Inline: true},
+			{Name: "Notification", Value: request.NotificationText, Inline: false},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
+		Success: true,
+		Message: "Payment confirmed",
+		OrderID: order.OrderID,
+	})
+}
+
+// InitializeQueue creates the queue document if it doesn't exist
+func InitializeQueueHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(InitializeQueue)(w, r)
+}
+
+func InitializeQueue(w http.ResponseWriter, r *http.Request) {
+	var queue model.Queue
+	err := config.Mongoconn.Collection("merchqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
+	if err != nil {
+		// Queue document doesn't exist, create it
+		_, err = config.Mongoconn.Collection("merchqueue").InsertOne(context.Background(), model.Queue{
+			IsProcessing:   false,
+			CurrentOrderID: "",
+			ExpiryTime:     time.Time{},
+		})
+		
+		if err != nil {
+			sendDiscordEmbed(
+				"🔴 Error: Queue Initialization Failed",
+				"Failed to initialize payment queue.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
+			at.WriteJSON(w, http.StatusInternalServerError, model.PaymentResponse{
+				Success: false,
+				Message: "Error initializing queue",
+			})
+			return
+		}
+		
+		// Initialize payment totals as well
+		InitializePaymentTotal()
+		
+		// Initialize authentication credentials
+		initializeAuthCredentials()
+		
+		log.Println("Initialized payment queue successfully")
+		sendDiscordEmbed(
+			"✅ System Initialized",
+			"Payment queue initialized successfully.",
+			ColorGreen,
+			nil,
+		)
+		at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
+			Success: true,
+			Message: "Queue initialized successfully",
+		})
+		return
+	}
+	
+	at.WriteJSON(w, http.StatusOK, model.PaymentResponse{
+		Success:      true,
+		Message:      "Queue already exists",
+		IsProcessing: queue.IsProcessing,
+		ExpiryTime:   queue.ExpiryTime,
+	})
+}
+
+// AuthCredentials stores basic auth credentials
+type AuthCredentials struct {
+	Username string `bson:"username" json:"username"`
+	Password string `bson:"password" json:"password"`
+	Created  time.Time `bson:"created" json:"created"`
+}
+
+// Initialize authentication credentials in MongoDB
+func initializeAuthCredentials() {
+	// Check if credentials already exist
+	var creds AuthCredentials
+	err := config.Mongoconn.Collection("gomerchsecret").FindOne(context.Background(), bson.M{}).Decode(&creds)
+	if err != nil {
+		// Create new credentials
+		newCreds := AuthCredentials{
+			Username: AuthUsername,
+			Password: AuthPassword,
+			Created:  time.Now(),
+		}
+		
+		_, err = config.Mongoconn.Collection("gomerchsecret").InsertOne(context.Background(), newCreds)
+		if err != nil {
+			log.Printf("Error initializing auth credentials: %v", err)
+			sendDiscordEmbed(
+				"🔴 Error: Auth Initialization Failed",
+				"Failed to initialize authentication credentials.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
+		} else {
+			log.Println("Initialized auth credentials successfully")
+			sendDiscordEmbed(
+				"🔐 Auth Credentials Initialized",
+				"Authentication credentials have been initialized in the database.",
+				ColorBlue,
+				[]DiscordEmbedField{
+					{Name: "Username", Value: AuthUsername, Inline: true},
+					{Name: "Password", Value: "********", Inline: true}, // Never log actual password
+				},
+			)
+		}
+	}
+}
