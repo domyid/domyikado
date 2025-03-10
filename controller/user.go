@@ -183,6 +183,7 @@ func PostDataUser(respw http.ResponseWriter, req *http.Request) {
 	docuser.SponsorName = usr.SponsorName
 	docuser.SponsorPhoneNumber = usr.SponsorPhoneNumber
 	docuser.NPM = usr.NPM
+	docuser.Wonpaywallet = usr.Wonpaywallet
 	docuser.StravaProfilePicture = usr.StravaProfilePicture
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id}, docuser)
 	if err != nil {
