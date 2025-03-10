@@ -28,7 +28,7 @@ const (
 	MicroBitcoinAPIURL = "https://microbitcoinorg.github.io/api"
 
 	// MerchCoinExpiryMinutes is how long a payment is valid before expiring
-	MerchCoinExpiryMinutes = 5
+	MerchCoinExpiryMinutes = 9
 
 	// MerchCoinCollection is the MongoDB collection name
 	MerchCoinCollection = "merchcoin"
