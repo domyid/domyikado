@@ -19,9 +19,9 @@ import (
 
 const (
 	// Discord webhook URL for logging (optional)
-	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/your-webhook-url"
+	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/1348599740664647772/svXeCm0CPQ1uVK-R7TkYLtVX2DRpmlhW7tfiBEqY9J4Mc0IpLIpCdKFm-1rv7kx0zIyc"
 	// QR code image URL
-	MerchCoinQRImageURL = "static/wonpay.png"
+	MerchCoinQRImageURL = "wonpay.png"
 	// MicroBitcoin API URL
 	MicroBitcoinAPIURL = "https://microbitcoinorg.github.io/api/"
 )

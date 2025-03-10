@@ -18,10 +18,10 @@ type MerchCoinOrder struct {
 
 // MerchCoinQueue manages the payment processing queue
 type MerchCoinQueue struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	IsProcessing   bool               `json:"isProcessing" bson:"isProcessing"`
-	CurrentOrderID string             `json:"currentOrderId" bson:"currentOrderId"`
-	ExpiryTime     time.Time          `json:"expiryTime" bson:"expiryTime"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	IsProcessing  bool               `json:"isProcessing" bson:"isProcessing"`
+	CurrentOrderID string            `json:"currentOrderId" bson:"currentOrderId"`
+	ExpiryTime    time.Time          `json:"expiryTime" bson:"expiryTime"`
 }
 
 // MerchCoinTotal tracks payment statistics
