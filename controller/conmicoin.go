@@ -13,8 +13,6 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
-	"github.com/gocroot/helper/atdb"
-	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -23,9 +21,6 @@ import (
 const (
 	// ReceiverWalletAddress is the wallet address where payments should be sent
 	ReceiverWalletAddress = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
-
-	// MicroBitcoinAPIURL is the API endpoint to check transactions
-	MicroBitcoinAPIURL = "https://microbitcoinorg.github.io/api"
 
 	// MerchCoinExpiryMinutes is how long a payment is valid before expiring
 	MerchCoinExpiryMinutes = 5
@@ -137,10 +132,24 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, response)
 }
 
-// CheckMerchCoinPayment checks the status of a payment
+// CheckMerchCoinPayment checks the status of a payment with step-by-step verification
 func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 	var response model.MerchCoinPaymentStatusResponse
+
+	// Get the verification step from query params, default to 0 (check all)
+	step := r.URL.Query().Get("step")
+	stepInt := 0
+	if step != "" {
+		var err error
+		stepInt, err = strconv.Atoi(step)
+		if err != nil {
+			stepInt = 0
+		}
+	}
+
+	// Get txHash from query params if provided (for step 3)
+	txHash := r.URL.Query().Get("txHash")
 
 	if orderID == "" {
 		response.Success = false
@@ -188,7 +197,7 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 		)
 
 		response.Success = true
-		response.Status = "failed"
+		response.Status = "expired"
 		response.Message = "Payment has expired"
 		response.OrderID = payment.OrderID
 		response.WalletCode = payment.SenderWallet
@@ -196,118 +205,189 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For pending payments, check the MicroBitcoin API for transactions
-	found, amount, txHash, err := checkMicroBitcoinTransactions(payment.SenderWallet)
-
-	// Calculate remaining time regardless of API results
+	// Calculate remaining time regardless of verification step
 	remainingSeconds := int(time.Until(payment.ExpiryTime).Seconds())
 	if remainingSeconds < 0 {
 		remainingSeconds = 0
 	}
+	response.RemainingTime = remainingSeconds
 
-	// If we found a transaction, update the payment status
-	if found && err == nil {
-		// Update payment status to success
-		now := time.Now()
-		_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-			context.Background(),
-			bson.M{"orderid": orderID},
-			bson.M{"$set": bson.M{
-				"status":    "success",
-				"amount":    amount,
-				"txhash":    txHash,
-				"updatedat": now,
-			}},
-		)
+	// Process based on verification step
+	if stepInt == 1 {
+		// Step 1: Check mempool for transactions
+		foundInMempool, txHash, err := checkMempoolForTransactions(payment.SenderWallet)
+		if err != nil {
+			fmt.Printf("Error checking mempool: %v\n", err)
+		}
 
-		if updateErr != nil {
-			// If update fails, still return success but note the database error
-			response.Success = true
+		response.Success = true
+		response.Status = "pending"
+		response.Message = "Checking mempool for transactions"
+		response.OrderID = payment.OrderID
+		response.WalletCode = payment.SenderWallet
+		response.FoundInMempool = foundInMempool
+
+		if foundInMempool {
+			response.TxHash = txHash
+		}
+
+		at.WriteJSON(w, http.StatusOK, response)
+		return
+	} else if stepInt == 2 {
+		// Step 2: Check blockchain history for transactions
+		foundInHistory, txHash, err := checkBlockchainHistory(payment.SenderWallet)
+		if err != nil {
+			fmt.Printf("Error checking blockchain history: %v\n", err)
+		}
+
+		response.Success = true
+		response.Status = "pending"
+		response.Message = "Checking blockchain history for transactions"
+		response.OrderID = payment.OrderID
+		response.WalletCode = payment.SenderWallet
+		response.FoundInHistory = foundInHistory
+
+		if foundInHistory {
+			response.TxHash = txHash
+		}
+
+		at.WriteJSON(w, http.StatusOK, response)
+		return
+	} else if stepInt == 3 && txHash != "" {
+		// Step 3: Verify transaction details
+		verified, amount, err := verifyTransactionDetails(txHash, payment.SenderWallet)
+		if err != nil {
+			fmt.Printf("Error verifying transaction details: %v\n", err)
+			response.Success = false
 			response.Status = "pending"
-			response.Message = "Payment detected but failed to update status"
-			response.OrderID = payment.OrderID
-			response.WalletCode = payment.SenderWallet
-			response.RemainingTime = remainingSeconds
+			response.Message = fmt.Sprintf("Error verifying transaction details: %v", err)
 			at.WriteJSON(w, http.StatusOK, response)
 			return
 		}
 
-		// Payment successful
-		response.Success = true
-		response.Status = "success"
-		response.Message = "Payment has been successfully processed"
-		response.OrderID = payment.OrderID
-		response.WalletCode = payment.SenderWallet
-		response.Amount = amount
-		response.TxHash = txHash
-		response.CreatedAt = payment.CreatedAt
-		response.ProcessedAt = now
-
-		// Send WhatsApp notification if configured
-		if payment.SenderWallet != "" && config.WAAPIToken != "" && config.WAAPIMessage != "" {
-			amountStr := strconv.FormatFloat(amount, 'f', 8, 64)
-			message := fmt.Sprintf(
-				"*Payment Confirmed*\nOrderID: %s\nWallet: %s\nAmount: %s MBC\nTransaction Hash: %s",
-				orderID, payment.SenderWallet, amountStr, txHash,
+		if verified {
+			// Transaction verified, update payment status
+			now := time.Now()
+			_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
+				context.Background(),
+				bson.M{"orderid": orderID},
+				bson.M{"$set": bson.M{
+					"status":    "success",
+					"amount":    amount,
+					"txhash":    txHash,
+					"updatedat": now,
+				}},
 			)
 
-			// This is just a placeholder - you would need to determine the phone number
-			phonenumber := "6285716349516" // Example default number
-
-			// Send WhatsApp notification
-			notif := &whatsauth.TextMessage{
-				To:       phonenumber,
-				IsGroup:  false,
-				Messages: message,
+			if updateErr != nil {
+				fmt.Printf("Error updating payment: %v\n", updateErr)
+				response.Success = false
+				response.Status = "pending"
+				response.Message = "Transaction verified but failed to update payment status"
+				at.WriteJSON(w, http.StatusOK, response)
+				return
 			}
 
-			go notifyPaymentStatus(notif)
+			// Payment successful
+			response.Success = true
+			response.Status = "success"
+			response.Message = "Payment has been successfully processed"
+			response.OrderID = payment.OrderID
+			response.WalletCode = payment.SenderWallet
+			response.Amount = amount
+			response.TxHash = txHash
+			response.CreatedAt = payment.CreatedAt
+			response.ProcessedAt = now
+		} else {
+			response.Success = false
+			response.Status = "pending"
+			response.Message = "Transaction verification failed"
 		}
 
 		at.WriteJSON(w, http.StatusOK, response)
 		return
 	}
 
-	// If there was an error checking transactions, log it but continue checking
-	if err != nil {
-		fmt.Printf("Error checking MicroBitcoin transactions: %v\n", err)
+	// If no specific step is requested, check the transaction through all steps
+	foundInMempool, mempoolTxHash, _ := checkMempoolForTransactions(payment.SenderWallet)
+	if foundInMempool {
+		// Found in mempool, verify transaction details
+		verified, amount, err := verifyTransactionDetails(mempoolTxHash, payment.SenderWallet)
+		if err == nil && verified {
+			// Transaction verified, update payment status
+			now := time.Now()
+			_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
+				context.Background(),
+				bson.M{"orderid": orderID},
+				bson.M{"$set": bson.M{
+					"status":    "success",
+					"amount":    amount,
+					"txhash":    mempoolTxHash,
+					"updatedat": now,
+				}},
+			)
+
+			if updateErr == nil {
+				// Payment successful
+				response.Success = true
+				response.Status = "success"
+				response.Message = "Payment has been successfully processed"
+				response.OrderID = payment.OrderID
+				response.WalletCode = payment.SenderWallet
+				response.Amount = amount
+				response.TxHash = mempoolTxHash
+				response.CreatedAt = payment.CreatedAt
+				response.ProcessedAt = now
+
+				at.WriteJSON(w, http.StatusOK, response)
+				return
+			}
+		}
 	}
 
-	// If payment is still valid (not expired), return pending status
-	if remainingSeconds > 0 {
-		// Payment is still pending and within expiry time
-		response.Success = true
-		response.Status = "pending"
-		response.Message = "Payment is pending. Waiting for transaction confirmation."
-		response.OrderID = payment.OrderID
-		response.WalletCode = payment.SenderWallet
-		response.RemainingTime = remainingSeconds
-		at.WriteJSON(w, http.StatusOK, response)
-		return
+	// Check blockchain history for transactions
+	foundInHistory, historyTxHash, _ := checkBlockchainHistory(payment.SenderWallet)
+	if foundInHistory {
+		// Found in history, verify transaction details
+		verified, amount, err := verifyTransactionDetails(historyTxHash, payment.SenderWallet)
+		if err == nil && verified {
+			// Transaction verified, update payment status
+			now := time.Now()
+			_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
+				context.Background(),
+				bson.M{"orderid": orderID},
+				bson.M{"$set": bson.M{
+					"status":    "success",
+					"amount":    amount,
+					"txhash":    historyTxHash,
+					"updatedat": now,
+				}},
+			)
+
+			if updateErr == nil {
+				// Payment successful
+				response.Success = true
+				response.Status = "success"
+				response.Message = "Payment has been successfully processed"
+				response.OrderID = payment.OrderID
+				response.WalletCode = payment.SenderWallet
+				response.Amount = amount
+				response.TxHash = historyTxHash
+				response.CreatedAt = payment.CreatedAt
+				response.ProcessedAt = now
+
+				at.WriteJSON(w, http.StatusOK, response)
+				return
+			}
+		}
 	}
 
-	// If payment is expired, update its status and return failed
-	now := time.Now()
-	_, err = config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-		context.Background(),
-		bson.M{"orderid": orderID},
-		bson.M{"$set": bson.M{
-			"status":    "expired",
-			"updatedat": now,
-		}},
-	)
-
-	if err != nil {
-		fmt.Printf("Error updating expired payment: %v\n", err)
-	}
-
+	// If we reach here, payment is still pending
 	response.Success = true
-	response.Status = "failed"
-	response.Message = "Payment has expired"
+	response.Status = "pending"
+	response.Message = "Payment is pending. Waiting for transaction confirmation."
 	response.OrderID = payment.OrderID
 	response.WalletCode = payment.SenderWallet
-	response.RemainingTime = 0
-
 	at.WriteJSON(w, http.StatusOK, response)
 }
 
@@ -373,49 +453,9 @@ func ManuallyConfirmMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send WhatsApp notification if configured
-	if payment.SenderWallet != "" && config.WAAPIToken != "" && config.WAAPIMessage != "" {
-		amountStr := strconv.FormatFloat(confirmData.Amount, 'f', 8, 64)
-		message := fmt.Sprintf(
-			"*Payment Confirmed*\nOrderID: %s\nWallet: %s\nAmount: %s MBC\nTransaction Hash: %s",
-			orderID, payment.SenderWallet, amountStr, confirmData.TxHash,
-		)
-
-		// This is just a placeholder - you would need to determine the phone number
-		// to send to based on your application logic
-		phonenumber := "6285716349516" // Example default number
-
-		// Send WhatsApp notification
-		notif := &whatsauth.TextMessage{
-			To:       phonenumber,
-			IsGroup:  false,
-			Messages: message,
-		}
-
-		go notifyPaymentStatus(notif)
-	}
-
 	response.Response = "Payment confirmed successfully"
 	response.Status = "success"
 	at.WriteJSON(w, http.StatusOK, response)
-}
-
-// notifyPaymentStatus sends a WhatsApp notification about payment status
-func notifyPaymentStatus(msg *whatsauth.TextMessage) {
-	// This function is called in a goroutine to avoid blocking the response
-	// to the client. It will attempt to send a WhatsApp notification.
-
-	// Insert to database as a log regardless of whether sending succeeds
-	var logoutwa whatsauth.LogWhatsauth
-	logoutwa.Data = *msg
-	logoutwa.Token = config.WAAPIToken
-	logoutwa.URL = config.WAAPIMessage
-	logoutwa.CreatedAt = time.Now()
-
-	_, err := atdb.InsertOneDoc(config.Mongoconn, "logwa", logoutwa)
-	if err != nil {
-		fmt.Printf("Failed to log WhatsApp notification: %v\n", err)
-	}
 }
 
 // GetMerchCoinQueueStatus checks if there is an active payment being processed
@@ -640,28 +680,29 @@ func SimulateMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, response)
 }
 
-// checkMicroBitcoinTransactions checks the MicroBitcoin blockchain for transactions to our wallet
-func checkMicroBitcoinTransactions(senderWallet string) (bool, float64, string, error) {
+// checkMempoolForTransactions checks the mempool for unconfirmed transactions
+func checkMempoolForTransactions(senderWallet string) (bool, string, error) {
 	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	// Step 1: Check mempool first for pending transactions
+	// Create API URL to check mempool
 	mempoolURL := fmt.Sprintf("https://api.mbc.wiki/mempool/%s", ReceiverWalletAddress)
 
-	mempoolResp, err := client.Get(mempoolURL)
+	// Make the request
+	resp, err := client.Get(mempoolURL)
 	if err != nil {
-		return false, 0, "", fmt.Errorf("failed to connect to MicroBitcoin mempool API: %v", err)
+		return false, "", fmt.Errorf("failed to connect to MicroBitcoin mempool API: %v", err)
 	}
-	defer mempoolResp.Body.Close()
+	defer resp.Body.Close()
 
 	// Check response status
-	if mempoolResp.StatusCode != http.StatusOK {
-		return false, 0, "", fmt.Errorf("mempool API returned error status: %d", mempoolResp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return false, "", fmt.Errorf("mempool API returned error status: %d", resp.StatusCode)
 	}
 
-	// Decode the mempool response
+	// Decode the response
 	var mempoolResponse struct {
 		Error  interface{} `json:"error"`
 		ID     string      `json:"id"`
@@ -671,39 +712,45 @@ func checkMicroBitcoinTransactions(senderWallet string) (bool, float64, string, 
 		} `json:"result"`
 	}
 
-	if err := json.NewDecoder(mempoolResp.Body).Decode(&mempoolResponse); err != nil {
-		return false, 0, "", fmt.Errorf("failed to decode mempool API response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&mempoolResponse); err != nil {
+		return false, "", fmt.Errorf("failed to decode mempool API response: %v", err)
 	}
 
-	// Check for transactions in mempool
-	for _, txID := range mempoolResponse.Result.Tx {
-		// For each transaction in mempool, check if it's from our sender
-		found, amount, err := checkTransaction(client, txID, senderWallet)
-		if err != nil {
-			fmt.Printf("Error checking mempool transaction %s: %v\n", txID, err)
-			continue
-		}
-
-		if found {
-			return true, amount, txID, nil
+	// Check if there are transactions in the mempool
+	if mempoolResponse.Result.TxCount > 0 {
+		// Return the first transaction hash
+		if len(mempoolResponse.Result.Tx) > 0 {
+			return true, mempoolResponse.Result.Tx[0], nil
 		}
 	}
 
-	// Step 2: Check transaction history if nothing in mempool
+	// No transactions found in mempool
+	return false, "", nil
+}
+
+// checkBlockchainHistory checks the blockchain transaction history
+func checkBlockchainHistory(senderWallet string) (bool, string, error) {
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// Create API URL to check blockchain history
 	historyURL := fmt.Sprintf("https://api.mbc.wiki/history/%s", ReceiverWalletAddress)
 
-	historyResp, err := client.Get(historyURL)
+	// Make the request
+	resp, err := client.Get(historyURL)
 	if err != nil {
-		return false, 0, "", fmt.Errorf("failed to connect to MicroBitcoin history API: %v", err)
+		return false, "", fmt.Errorf("failed to connect to MicroBitcoin history API: %v", err)
 	}
-	defer historyResp.Body.Close()
+	defer resp.Body.Close()
 
 	// Check response status
-	if historyResp.StatusCode != http.StatusOK {
-		return false, 0, "", fmt.Errorf("history API returned error status: %d", historyResp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return false, "", fmt.Errorf("history API returned error status: %d", resp.StatusCode)
 	}
 
-	// Decode the history response
+	// Decode the response
 	var historyResponse struct {
 		Error  interface{} `json:"error"`
 		ID     string      `json:"id"`
@@ -713,53 +760,61 @@ func checkMicroBitcoinTransactions(senderWallet string) (bool, float64, string, 
 		} `json:"result"`
 	}
 
-	if err := json.NewDecoder(historyResp.Body).Decode(&historyResponse); err != nil {
-		return false, 0, "", fmt.Errorf("failed to decode history API response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&historyResponse); err != nil {
+		return false, "", fmt.Errorf("failed to decode history API response: %v", err)
 	}
 
-	// Check for transactions in history
-	for _, txID := range historyResponse.Result.Tx {
-		// For each transaction in history, check if it's from our sender
-		found, amount, err := checkTransaction(client, txID, senderWallet)
-		if err != nil {
-			fmt.Printf("Error checking history transaction %s: %v\n", txID, err)
-			continue
-		}
+	// Check if there are transactions in the history
+	if historyResponse.Result.TxCount > 0 && len(historyResponse.Result.Tx) > 0 {
+		// We need to verify each transaction to find one from our sender
+		for _, txHash := range historyResponse.Result.Tx {
+			// Verify if this transaction is from our sender
+			verified, _, err := verifyTransactionDetails(txHash, senderWallet)
+			if err != nil {
+				fmt.Printf("Error verifying transaction %s: %v\n", txHash, err)
+				continue
+			}
 
-		if found {
-			return true, amount, txID, nil
+			if verified {
+				return true, txHash, nil
+			}
 		}
 	}
 
-	// No matching transaction found
-	return false, 0, "", nil
+	// No matching transactions found in history
+	return false, "", nil
 }
 
-// checkTransaction checks a specific transaction to see if it's from the sender wallet
-func checkTransaction(client *http.Client, txID string, senderWallet string) (bool, float64, error) {
-	// Step 3: Check transaction details
-	txURL := fmt.Sprintf("https://api.mbc.wiki/transaction/%s", txID)
+// verifyTransactionDetails verifies if a transaction is from the sender wallet to the receiver wallet
+func verifyTransactionDetails(txHash string, senderWallet string) (bool, float64, error) {
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 
-	txResp, err := client.Get(txURL)
+	// Create API URL to check transaction details
+	txURL := fmt.Sprintf("https://api.mbc.wiki/transaction/%s", txHash)
+
+	// Make the request
+	resp, err := client.Get(txURL)
 	if err != nil {
 		return false, 0, fmt.Errorf("failed to connect to MicroBitcoin transaction API: %v", err)
 	}
-	defer txResp.Body.Close()
+	defer resp.Body.Close()
 
 	// Check response status
-	if txResp.StatusCode != http.StatusOK {
-		return false, 0, fmt.Errorf("transaction API returned error status: %d", txResp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return false, 0, fmt.Errorf("transaction API returned error status: %d", resp.StatusCode)
 	}
 
-	// Decode the transaction response
+	// Decode the response
 	var txResponse struct {
 		Error  interface{} `json:"error"`
 		ID     string      `json:"id"`
 		Result struct {
 			Amount        float64 `json:"amount"`
-			Txid          string  `json:"txid"`
+			TxID          string  `json:"txid"`
 			Confirmations int     `json:"confirmations"`
-			Blockhash     string  `json:"blockhash"`
 			Vin           []struct {
 				ScriptPubKey struct {
 					Address   string   `json:"address"`
@@ -768,56 +823,67 @@ func checkTransaction(client *http.Client, txID string, senderWallet string) (bo
 				Value float64 `json:"value"`
 			} `json:"vin"`
 			Vout []struct {
+				N            int     `json:"n"`
+				Value        float64 `json:"value"`
 				ScriptPubKey struct {
 					Address   string   `json:"address"`
 					Addresses []string `json:"addresses"`
+					Type      string   `json:"type"`
 				} `json:"scriptPubKey"`
-				Value float64 `json:"value"`
-				N     int     `json:"n"`
 			} `json:"vout"`
 		} `json:"result"`
 	}
 
-	if err := json.NewDecoder(txResp.Body).Decode(&txResponse); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&txResponse); err != nil {
 		return false, 0, fmt.Errorf("failed to decode transaction API response: %v", err)
 	}
 
+	// Make sure transaction is valid
+	if txResponse.Error != nil {
+		return false, 0, fmt.Errorf("transaction API returned error: %v", txResponse.Error)
+	}
+
 	// Check if this transaction is from our sender wallet
+	isSenderFound := false
 	for _, input := range txResponse.Result.Vin {
-		// Check if the input address matches our sender wallet
 		if input.ScriptPubKey.Address == senderWallet {
-			// Found a transaction from our sender
-			// Now verify that the recipient is our receiving wallet
-			for _, output := range txResponse.Result.Vout {
-				// Find the output that's sent to our receiving wallet
-				if output.ScriptPubKey.Address == ReceiverWalletAddress {
-					return true, output.Value, nil
-				}
+			isSenderFound = true
+			break
+		}
+
+		// Check addresses array too
+		for _, addr := range input.ScriptPubKey.Addresses {
+			if addr == senderWallet {
+				isSenderFound = true
+				break
 			}
 		}
 
-		// Also check the addresses array
-		for _, addr := range input.ScriptPubKey.Addresses {
-			if addr == senderWallet {
-				// Found a transaction from our sender
-				// Now verify that the recipient is our receiving wallet
-				for _, output := range txResponse.Result.Vout {
-					// Find the output that's sent to our receiving wallet
-					if output.ScriptPubKey.Address == ReceiverWalletAddress {
-						return true, output.Value, nil
-					}
+		if isSenderFound {
+			break
+		}
+	}
 
-					// Also check the addresses array
-					for _, outAddr := range output.ScriptPubKey.Addresses {
-						if outAddr == ReceiverWalletAddress {
-							return true, output.Value, nil
-						}
-					}
-				}
+	// If sender isn't found, this isn't our transaction
+	if !isSenderFound {
+		return false, 0, nil
+	}
+
+	// Check if the receiver wallet is in the outputs
+	for _, output := range txResponse.Result.Vout {
+		if output.ScriptPubKey.Address == ReceiverWalletAddress {
+			// Found output to our receiver wallet
+			return true, output.Value, nil
+		}
+
+		// Check addresses array too
+		for _, addr := range output.ScriptPubKey.Addresses {
+			if addr == ReceiverWalletAddress {
+				return true, output.Value, nil
 			}
 		}
 	}
 
-	// This transaction is not from our sender wallet to our receiver wallet
+	// Didn't find output to our receiver wallet
 	return false, 0, nil
 }

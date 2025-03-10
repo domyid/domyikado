@@ -40,7 +40,7 @@ type MerchCoinOrderResponse struct {
 type MerchCoinPaymentStatusResponse struct {
 	Success       bool      `json:"success"`
 	OrderID       string    `json:"orderId,omitempty"`
-	Status        string    `json:"status,omitempty"` // pending, success, failed
+	Status        string    `json:"status,omitempty"` // pending, success, failed, expired
 	Message       string    `json:"message,omitempty"`
 	WalletCode    string    `json:"walletCode,omitempty"`
 	Amount        float64   `json:"amount,omitempty"`
@@ -48,6 +48,9 @@ type MerchCoinPaymentStatusResponse struct {
 	CreatedAt     time.Time `json:"createdAt,omitempty"`
 	ProcessedAt   time.Time `json:"processedAt,omitempty"`
 	RemainingTime int       `json:"remainingTime,omitempty"`
+	// Step-by-step verification fields
+	FoundInMempool bool `json:"foundInMempool,omitempty"`
+	FoundInHistory bool `json:"foundInHistory,omitempty"`
 }
 
 // MerchCoinQueueStatusResponse represents the response for the queue status check
