@@ -15,6 +15,16 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	config.SetEnv()
 
 	var method, path string = r.Method, r.URL.Path
+
+	if method == http.MethodOptions && path == "/api/tracker" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	switch {
 	case method == "GET" && path == "/":
 		controller.GetHome(w, r)
