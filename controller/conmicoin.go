@@ -1,904 +1,1005 @@
 package controller
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
-	"strconv"
-	"sync"
 	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/model"
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
-	// ReceiverWalletAddress is the wallet address where payments should be sent
-	ReceiverWalletAddress = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
-
-	// MerchCoinExpiryMinutes is how long a payment is valid before expiring
-	MerchCoinExpiryMinutes = 5
-
-	// MerchCoinCollection is the MongoDB collection name
-	MerchCoinCollection = "merchcoin"
+	// Discord webhook URL for logging
+	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
+	MerchCoinWalletAddress     = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
 )
 
-var (
-	// activeOrderMutex protects concurrent access to the active order
-	activeOrderMutex sync.Mutex
-)
-
-// generateOrderID creates a random order ID
-func generateOrderID() (string, error) {
-	b := make([]byte, 8)
-	_, err := rand.Read(b)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
+// Discord embed structure
+type MerchCoinDiscordEmbed struct {
+	Title       string                       `json:"title"`
+	Description string                       `json:"description,omitempty"`
+	Color       int                          `json:"color"`
+	Fields      []MerchCoinDiscordEmbedField `json:"fields,omitempty"`
+	Footer      *MerchCoinDiscordEmbedFooter `json:"footer,omitempty"`
+	Timestamp   string                       `json:"timestamp,omitempty"` // ISO8601 timestamp
 }
 
-// CreateMerchCoinOrder handles creation of a new payment order
-func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
-	var requestData model.MerchCoinOrderRequest
-	var response model.MerchCoinOrderResponse
+// Discord embed field
+type MerchCoinDiscordEmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline,omitempty"`
+}
 
-	// Decode request body
-	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		response.Success = false
-		response.Message = "Invalid request format"
-		at.WriteJSON(w, http.StatusBadRequest, response)
-		return
-	}
+// Discord embed footer
+type MerchCoinDiscordEmbedFooter struct {
+	Text string `json:"text"`
+}
 
-	// Validate wallet code
-	if requestData.WalletCode == "" {
-		response.Success = false
-		response.Message = "Wallet code is required"
-		at.WriteJSON(w, http.StatusBadRequest, response)
-		return
-	}
+// Discord webhook message structure
+type MerchCoinDiscordWebhookMessage struct {
+	Username  string                  `json:"username,omitempty"`
+	AvatarURL string                  `json:"avatar_url,omitempty"`
+	Content   string                  `json:"content,omitempty"`
+	Embeds    []MerchCoinDiscordEmbed `json:"embeds,omitempty"`
+}
 
-	// Check if there's already an active order
-	activeOrderMutex.Lock()
-	defer activeOrderMutex.Unlock()
+// Helper function to send logs to Discord with embeds
+func sendMerchCoinDiscordEmbed(title, description string, color int, fields []MerchCoinDiscordEmbedField) {
+	// Set timestamp to current time
+	timestamp := time.Now().Format(time.RFC3339)
 
-	var activeOrder model.MerchCoinPayment
-	err := config.Mongoconn.Collection(MerchCoinCollection).FindOne(
-		context.Background(),
-		bson.M{
-			"status":     "pending",
-			"expirytime": bson.M{"$gt": time.Now()},
+	// Create embed
+	embed := MerchCoinDiscordEmbed{
+		Title:       title,
+		Description: description,
+		Color:       color,
+		Fields:      fields,
+		Footer: &MerchCoinDiscordEmbedFooter{
+			Text: "MerchCoin Payment System",
 		},
-	).Decode(&activeOrder)
-
-	if err == nil {
-		response.Success = false
-		response.Message = "There is already an active payment process. Please wait."
-		response.OrderID = activeOrder.OrderID
-		response.WalletCode = activeOrder.SenderWallet
-		response.ExpiryTime = activeOrder.ExpiryTime
-		at.WriteJSON(w, http.StatusOK, response)
-		return
+		Timestamp: timestamp,
 	}
 
-	// Generate a new order ID
-	orderID, err := generateOrderID()
+	// Create message with embed
+	webhookMsg := MerchCoinDiscordWebhookMessage{
+		Username:  "MerchCoin Payment Bot",
+		AvatarURL: "https://cdn-icons-png.flaticon.com/512/2168/2168252.png", // QR code icon
+		Embeds:    []MerchCoinDiscordEmbed{embed},
+	}
+
+	// Convert to JSON (only log errors, don't fail the transaction)
+	jsonData, err := json.Marshal(webhookMsg)
 	if err != nil {
-		response.Success = false
-		response.Message = "Failed to generate order ID"
-		at.WriteJSON(w, http.StatusInternalServerError, response)
+		log.Printf("Error marshaling Discord embed: %v", err)
 		return
 	}
 
-	// Create payment document
-	now := time.Now()
-	expiryTime := now.Add(MerchCoinExpiryMinutes * time.Minute)
+	// Send to Discord webhook asynchronously
+	go func() {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Post(MerchCoinDiscordWebhookURL, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Error sending embed to Discord: %v", err)
+			return
+		}
+		defer resp.Body.Close()
 
-	payment := model.MerchCoinPayment{
-		OrderID:      orderID,
-		SenderWallet: requestData.WalletCode,
-		Status:       "pending",
-		CreatedAt:    now,
-		ExpiryTime:   expiryTime,
-	}
-
-	// Insert into database
-	_, err = config.Mongoconn.Collection(MerchCoinCollection).InsertOne(context.Background(), payment)
-	if err != nil {
-		response.Success = false
-		response.Message = "Failed to create payment record"
-		at.WriteJSON(w, http.StatusInternalServerError, response)
-		return
-	}
-
-	// Generate QR code data and URL
-	qrImageURL := "wonpay.png" // Default static QR image
-
-	// Prepare successful response
-	response.Success = true
-	response.Message = "Payment order created successfully"
-	response.OrderID = orderID
-	response.WalletCode = requestData.WalletCode
-	response.ExpiryTime = expiryTime
-	response.QRImageURL = qrImageURL
-
-	at.WriteJSON(w, http.StatusOK, response)
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			log.Printf("Discord webhook returned non-success status: %d", resp.StatusCode)
+		}
+	}()
 }
 
-// CheckMerchCoinPayment checks the status of a payment with step-by-step verification
-func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
-	orderID := at.GetParam(r)
-	var response model.MerchCoinPaymentStatusResponse
-
-	// Get the verification step from query params, default to 0 (check all)
-	step := r.URL.Query().Get("step")
-	stepInt := 0
-	if step != "" {
-		var err error
-		stepInt, err = strconv.Atoi(step)
+// Initialize MerchCoin payment total
+func InitializeMerchCoinPaymentTotal() {
+	var total model.MerchCoinPaymentTotal
+	err := config.Mongoconn.Collection("merchcointotals").FindOne(context.Background(), bson.M{}).Decode(&total)
+	if err != nil {
+		// Total document doesn't exist, create it
+		_, err = config.Mongoconn.Collection("merchcointotals").InsertOne(context.Background(), model.MerchCoinPaymentTotal{
+			TotalAmount: 0,
+			Count:       0,
+			LastUpdated: time.Now(),
+		})
 		if err != nil {
-			stepInt = 0
+			log.Printf("Error initializing MerchCoin payment totals: %v", err)
+			sendMerchCoinDiscordEmbed(
+				"🔴 Error: MerchCoin Payment Totals Initialization Failed",
+				"Failed to initialize MerchCoin payment totals database.",
+				15548997, // ColorRed
+				[]MerchCoinDiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
+		} else {
+			log.Println("Initialized MerchCoin payment totals successfully")
+			sendMerchCoinDiscordEmbed(
+				"✅ System: MerchCoin Payment Totals Initialized",
+				"Successfully initialized the MerchCoin payment totals database.",
+				5763719, // ColorGreen
+				nil,
+			)
 		}
 	}
+}
 
-	// Get txHash from query params if provided (for step 3)
-	txHash := r.URL.Query().Get("txHash")
+// Initialize MerchCoin queue
+func InitializeMerchCoinQueue() {
+	var queue model.MerchCoinQueue
+	err := config.Mongoconn.Collection("merchcoinqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
+	if err != nil {
+		// Queue document doesn't exist, create it
+		_, err = config.Mongoconn.Collection("merchcoinqueue").InsertOne(context.Background(), model.MerchCoinQueue{
+			IsProcessing:   false,
+			CurrentOrderID: "",
+			ExpiryTime:     time.Time{},
+		})
 
-	if orderID == "" {
-		response.Success = false
-		response.Message = "Order ID is required"
-		at.WriteJSON(w, http.StatusBadRequest, response)
-		return
+		if err != nil {
+			log.Printf("Error initializing MerchCoin queue: %v", err)
+			sendMerchCoinDiscordEmbed(
+				"🔴 Error: MerchCoin Queue Initialization Failed",
+				"Failed to initialize MerchCoin payment queue.",
+				15548997, // ColorRed
+				[]MerchCoinDiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+				},
+			)
+		} else {
+			log.Println("Initialized MerchCoin queue successfully")
+			sendMerchCoinDiscordEmbed(
+				"✅ System: MerchCoin Queue Initialized",
+				"MerchCoin payment queue initialized successfully.",
+				5763719, // ColorGreen
+				nil,
+			)
+		}
+	}
+}
+
+// Helper function to update MerchCoin payment totals
+func updateMerchCoinPaymentTotal(amount float64) {
+	opts := options.FindOneAndUpdate().SetUpsert(true)
+
+	update := bson.M{
+		"$inc": bson.M{
+			"totalAmount": amount,
+			"count":       1,
+		},
+		"$set": bson.M{
+			"lastUpdated": time.Now(),
+		},
 	}
 
-	// Find the payment in database
-	var payment model.MerchCoinPayment
-	err := config.Mongoconn.Collection(MerchCoinCollection).FindOne(
+	var result model.MerchCoinPaymentTotal
+	err := config.Mongoconn.Collection("merchcointotals").FindOneAndUpdate(
 		context.Background(),
-		bson.M{"orderid": orderID},
-	).Decode(&payment)
+		bson.M{},
+		update,
+		opts,
+	).Decode(&result)
 
 	if err != nil {
-		response.Success = false
-		response.Message = "Payment not found"
-		at.WriteJSON(w, http.StatusNotFound, response)
-		return
-	}
-
-	// Check if payment is already processed
-	if payment.Status == "success" {
-		response.Success = true
-		response.Status = "success"
-		response.Message = "Payment has been successfully processed"
-		response.OrderID = payment.OrderID
-		response.WalletCode = payment.SenderWallet
-		response.Amount = payment.Amount
-		response.TxHash = payment.TxHash
-		response.CreatedAt = payment.CreatedAt
-		response.ProcessedAt = payment.UpdatedAt
-		at.WriteJSON(w, http.StatusOK, response)
-		return
-	}
-
-	// Check if payment is expired
-	if time.Now().After(payment.ExpiryTime) && payment.Status == "pending" {
-		// Update payment status to expired
-		_, err = config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-			context.Background(),
-			bson.M{"orderid": orderID},
-			bson.M{"$set": bson.M{"status": "expired", "updatedat": time.Now()}},
+		log.Printf("Error updating MerchCoin payment totals: %v", err)
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: MerchCoin Payment Totals Update Failed",
+			"Failed to update MerchCoin payment totals in database.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Amount", Value: fmt.Sprintf("%f MBC", amount), Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
 		)
+	} else {
+		sendMerchCoinDiscordEmbed(
+			"💰 MerchCoin Payment: Total Updated",
+			"Successfully updated MerchCoin payment totals.",
+			5763719, // ColorGreen
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Amount Added", Value: fmt.Sprintf("%f MBC", amount), Inline: true},
+			},
+		)
+	}
+}
 
-		response.Success = true
-		response.Status = "expired"
-		response.Message = "Payment has expired"
-		response.OrderID = payment.OrderID
-		response.WalletCode = payment.SenderWallet
-		at.WriteJSON(w, http.StatusOK, response)
+// CreateMerchCoinOrder creates a new MerchCoin payment order
+func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
+	var request model.MerchCoinCreateOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Invalid Request",
+			"Failed to process create MerchCoin order request.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Invalid request body",
+		})
 		return
 	}
 
-	// Calculate remaining time regardless of verification step
-	remainingSeconds := int(time.Until(payment.ExpiryTime).Seconds())
-	if remainingSeconds < 0 {
-		remainingSeconds = 0
+	// Validate request - in this case, we only need the wonpay code
+	if request.WonpayCode == "" {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Invalid Order Parameters",
+			"MerchCoin order creation failed due to missing Wonpay code.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Wonpay Code", Value: "Missing", Inline: true},
+			},
+		)
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Wonpay code is required",
+		})
+		return
 	}
-	response.RemainingTime = remainingSeconds
 
-	// Process based on verification step
-	if stepInt == 1 {
-		// Step 1: Check mempool for transactions
-		foundInMempool, txHash, err := checkMempoolForTransactions(payment.SenderWallet)
-		if err != nil {
-			fmt.Printf("Error checking mempool: %v\n", err)
-		}
-
-		response.Success = true
-		response.Status = "pending"
-		response.Message = "Checking mempool for transactions"
-		response.OrderID = payment.OrderID
-		response.WalletCode = payment.SenderWallet
-		response.FoundInMempool = foundInMempool
-
-		if foundInMempool {
-			response.TxHash = txHash
-		}
-
-		at.WriteJSON(w, http.StatusOK, response)
+	// Check if someone is currently paying
+	var queue model.MerchCoinQueue
+	err := config.Mongoconn.Collection("merchcoinqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
+	if err != nil {
+		// Initialize queue if it doesn't exist
+		InitializeMerchCoinQueue()
+	} else if queue.IsProcessing {
+		sendMerchCoinDiscordEmbed(
+			"⏳ Queue: MerchCoin Payment in Progress",
+			"Another MerchCoin payment is already in progress.",
+			16776960, // ColorYellow
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Wonpay Code", Value: request.WonpayCode, Inline: true},
+				{Name: "Status", Value: "Queued", Inline: true},
+			},
+		)
+		at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+			Success:     false,
+			Message:     "Sedang ada pembayaran berlangsung. Silakan tunggu.",
+			QueueStatus: true,
+			ExpiryTime:  queue.ExpiryTime,
+		})
 		return
-	} else if stepInt == 2 {
-		// Step 2: Check blockchain history for transactions
-		foundInHistory, txHash, err := checkBlockchainHistory(payment.SenderWallet)
-		if err != nil {
-			fmt.Printf("Error checking blockchain history: %v\n", err)
-		}
+	}
 
-		response.Success = true
-		response.Status = "pending"
-		response.Message = "Checking blockchain history for transactions"
-		response.OrderID = payment.OrderID
-		response.WalletCode = payment.SenderWallet
-		response.FoundInHistory = foundInHistory
+	// Create order ID
+	orderID := uuid.New().String()
 
-		if foundInHistory {
-			response.TxHash = txHash
-		}
+	// Create new order in database
+	newOrder := model.MerchCoinOrder{
+		OrderID:    orderID,
+		WonpayCode: request.WonpayCode,
+		Timestamp:  time.Now(),
+		Status:     "pending",
+	}
 
-		at.WriteJSON(w, http.StatusOK, response)
+	_, err = config.Mongoconn.Collection("merchcoinorders").InsertOne(context.Background(), newOrder)
+	if err != nil {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Database Error",
+			"Failed to create MerchCoin order in database.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error creating order",
+		})
 		return
-	} else if stepInt == 3 && txHash != "" {
-		// Step 3: Verify transaction details
-		verified, amount, err := verifyTransactionDetails(txHash, payment.SenderWallet)
+	}
+
+	// Update queue status
+	expiryTime := time.Now().Add(300 * time.Second) // 5 minutes expiry
+	_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
+		context.Background(),
+		bson.M{},
+		bson.M{"$set": bson.M{
+			"isProcessing":   true,
+			"currentOrderId": orderID,
+			"expiryTime":     expiryTime,
+		}},
+		options.Update().SetUpsert(true),
+	)
+
+	if err != nil {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Queue Update Failed",
+			"Failed to update MerchCoin payment queue.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error updating queue",
+		})
+		return
+	}
+
+	// Log successful order creation
+	sendMerchCoinDiscordEmbed(
+		"🛒 New MerchCoin Order Created",
+		"A new MerchCoin payment order has been created.",
+		3447003, // ColorBlue
+		[]MerchCoinDiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Wonpay Code", Value: request.WonpayCode, Inline: true},
+			{Name: "Expires", Value: expiryTime.Format("15:04:05"), Inline: true},
+			{Name: "Status", Value: "Pending", Inline: true},
+		},
+	)
+
+	// Set up expiry timer
+	go func() {
+		time.Sleep(300 * time.Second)
+
+		// Check if this order is still the current one
+		var currentQueue model.MerchCoinQueue
+		err := config.Mongoconn.Collection("merchcoinqueue").FindOne(context.Background(), bson.M{}).Decode(&currentQueue)
 		if err != nil {
-			fmt.Printf("Error verifying transaction details: %v\n", err)
-			response.Success = false
-			response.Status = "pending"
-			response.Message = fmt.Sprintf("Error verifying transaction details: %v", err)
-			at.WriteJSON(w, http.StatusOK, response)
+			log.Printf("Error checking MerchCoin queue for timeout: %v", err)
 			return
 		}
 
-		if verified {
-			// Transaction verified, update payment status
-			now := time.Now()
-			_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
+		if currentQueue.CurrentOrderID == orderID {
+			// Update order status to failed
+			_, err = config.Mongoconn.Collection("merchcoinorders").UpdateOne(
 				context.Background(),
-				bson.M{"orderid": orderID},
-				bson.M{"$set": bson.M{
-					"status":    "success",
-					"amount":    amount,
-					"txhash":    txHash,
-					"updatedat": now,
-				}},
+				bson.M{"orderId": orderID},
+				bson.M{"$set": bson.M{"status": "failed"}},
 			)
-
-			if updateErr != nil {
-				fmt.Printf("Error updating payment: %v\n", updateErr)
-				response.Success = false
-				response.Status = "pending"
-				response.Message = "Transaction verified but failed to update payment status"
-				at.WriteJSON(w, http.StatusOK, response)
-				return
+			if err != nil {
+				log.Printf("Error updating MerchCoin order status: %v", err)
+				sendMerchCoinDiscordEmbed(
+					"🔴 Error: Status Update Failed",
+					"Failed to update expired MerchCoin order status.",
+					15548997, // ColorRed
+					[]MerchCoinDiscordEmbedField{
+						{Name: "Error", Value: err.Error(), Inline: false},
+					},
+				)
 			}
 
-			// Payment successful
-			response.Success = true
-			response.Status = "success"
-			response.Message = "Payment has been successfully processed"
-			response.OrderID = payment.OrderID
-			response.WalletCode = payment.SenderWallet
-			response.Amount = amount
-			response.TxHash = txHash
-			response.CreatedAt = payment.CreatedAt
-			response.ProcessedAt = now
-		} else {
-			response.Success = false
-			response.Status = "pending"
-			response.Message = "Transaction verification failed"
-		}
+			// Reset queue
+			_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
+				context.Background(),
+				bson.M{},
+				bson.M{"$set": bson.M{
+					"isProcessing":   false,
+					"currentOrderId": "",
+					"expiryTime":     time.Time{},
+				}},
+			)
+			if err != nil {
+				log.Printf("Error resetting MerchCoin queue: %v", err)
+				sendMerchCoinDiscordEmbed(
+					"🔴 Error: Queue Reset Failed",
+					"Failed to reset MerchCoin queue after order expiry.",
+					15548997, // ColorRed
+					[]MerchCoinDiscordEmbedField{
+						{Name: "Error", Value: err.Error(), Inline: false},
+					},
+				)
+			}
 
-		at.WriteJSON(w, http.StatusOK, response)
+			sendMerchCoinDiscordEmbed(
+				"⏱️ MerchCoin Order Expired",
+				"A MerchCoin payment order has expired.",
+				16776960, // ColorYellow
+				[]MerchCoinDiscordEmbedField{
+					{Name: "Order ID", Value: orderID, Inline: true},
+					{Name: "Wonpay Code", Value: newOrder.WonpayCode, Inline: true},
+					{Name: "Status", Value: "Expired", Inline: true},
+				},
+			)
+		}
+	}()
+
+	at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+		Success:       true,
+		OrderID:       orderID,
+		ExpiryTime:    expiryTime,
+		QRImageURL:    "wonpay.png",
+		WalletAddress: MerchCoinWalletAddress,
+	})
+}
+
+// CheckMerchCoinPayment checks the status of a MerchCoin payment
+func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
+	orderID := at.GetParam(r)
+
+	// Find the order
+	var order model.MerchCoinOrder
+	err := config.Mongoconn.Collection("merchcoinorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
+	if err != nil {
+		sendMerchCoinDiscordEmbed(
+			"❓ Check MerchCoin Payment",
+			"MerchCoin payment status check for non-existent order.",
+			16776960, // ColorYellow
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Status", Value: "Not Found", Inline: true},
+			},
+		)
+		at.WriteJSON(w, http.StatusNotFound, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Order not found",
+		})
 		return
 	}
 
-	// If no specific step is requested, check the transaction through all steps
-	foundInMempool, mempoolTxHash, _ := checkMempoolForTransactions(payment.SenderWallet)
-	if foundInMempool {
-		// Found in mempool, verify transaction details
-		verified, amount, err := verifyTransactionDetails(mempoolTxHash, payment.SenderWallet)
-		if err == nil && verified {
-			// Transaction verified, update payment status
-			now := time.Now()
-			_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-				context.Background(),
-				bson.M{"orderid": orderID},
-				bson.M{"$set": bson.M{
-					"status":    "success",
-					"amount":    amount,
-					"txhash":    mempoolTxHash,
-					"updatedat": now,
-				}},
-			)
+	// If payment is still pending, check mempool
+	if order.Status == "pending" {
+		// Step 1: Check mempool
+		mempoolStatus, txid, amount, err := checkMerchCoinMempool()
 
-			if updateErr == nil {
-				// Payment successful
-				response.Success = true
-				response.Status = "success"
-				response.Message = "Payment has been successfully processed"
-				response.OrderID = payment.OrderID
-				response.WalletCode = payment.SenderWallet
-				response.Amount = amount
-				response.TxHash = mempoolTxHash
-				response.CreatedAt = payment.CreatedAt
-				response.ProcessedAt = now
+		if err != nil {
+			// Error checking mempool
+			at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+				Success:       true,
+				Status:        "pending",
+				Message:       "Checking mempool failed: " + err.Error(),
+				Step1Complete: false,
+			})
+			return
+		}
 
-				at.WriteJSON(w, http.StatusOK, response)
+		if !mempoolStatus {
+			// No transaction in mempool
+			at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+				Success:       true,
+				Status:        "pending",
+				Message:       "No transaction in mempool.",
+				Step1Complete: false,
+			})
+			return
+		}
+
+		// If we found a transaction in mempool, proceed to step 2
+		if txid != "" {
+			// Step 2: Check transaction history to see if txid exists
+			txHistory, err := checkMerchCoinTxHistory(txid)
+			if err != nil {
+				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction found in mempool, but error checking history: " + err.Error(),
+					Step1Complete: true,
+					Step2Complete: false,
+					TxID:          txid,
+					Amount:        amount,
+				})
 				return
 			}
+
+			if !txHistory {
+				// Transaction not yet in history
+				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction found in mempool, but not yet in history.",
+					Step1Complete: true,
+					Step2Complete: false,
+					TxID:          txid,
+					Amount:        amount,
+				})
+				return
+			}
+
+			// Step 3: Verify transaction details
+			txDetails, actualAmount, err := checkMerchCoinTxDetails(txid)
+			if err != nil {
+				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction found, but error checking details: " + err.Error(),
+					Step1Complete: true,
+					Step2Complete: true,
+					Step3Complete: false,
+					TxID:          txid,
+					Amount:        amount,
+				})
+				return
+			}
+
+			if !txDetails {
+				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction found, but details verification failed.",
+					Step1Complete: true,
+					Step2Complete: true,
+					Step3Complete: false,
+					TxID:          txid,
+					Amount:        amount,
+				})
+				return
+			}
+
+			// All steps complete, mark payment as successful
+			// Update order status to success
+			_, err = config.Mongoconn.Collection("merchcoinorders").UpdateOne(
+				context.Background(),
+				bson.M{"orderId": orderID},
+				bson.M{"$set": bson.M{
+					"status": "success",
+					"txid":   txid,
+					"amount": actualAmount,
+				}},
+			)
+			if err != nil {
+				log.Printf("Error updating MerchCoin order status: %v", err)
+				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction verified but error updating order status: " + err.Error(),
+					Step1Complete: true,
+					Step2Complete: true,
+					Step3Complete: true,
+					TxID:          txid,
+					Amount:        actualAmount,
+				})
+				return
+			}
+
+			// Update payment totals
+			updateMerchCoinPaymentTotal(actualAmount)
+
+			// Reset queue
+			_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
+				context.Background(),
+				bson.M{},
+				bson.M{"$set": bson.M{
+					"isProcessing":   false,
+					"currentOrderId": "",
+					"expiryTime":     time.Time{},
+				}},
+			)
+			if err != nil {
+				log.Printf("Error resetting MerchCoin queue: %v", err)
+			}
+
+			sendMerchCoinDiscordEmbed(
+				"✅ MerchCoin Payment Successful",
+				"A MerchCoin payment has been confirmed automatically.",
+				5763719, // ColorGreen
+				[]MerchCoinDiscordEmbedField{
+					{Name: "Order ID", Value: orderID, Inline: true},
+					{Name: "Wonpay Code", Value: order.WonpayCode, Inline: true},
+					{Name: "Transaction ID", Value: txid, Inline: true},
+					{Name: "Amount", Value: fmt.Sprintf("%f MBC", actualAmount), Inline: true},
+				},
+			)
+
+			// Return success response
+			at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+				Success:       true,
+				Status:        "success",
+				Message:       "Payment confirmed successfully!",
+				Step1Complete: true,
+				Step2Complete: true,
+				Step3Complete: true,
+				TxID:          txid,
+				Amount:        actualAmount,
+			})
+			return
 		}
 	}
 
-	// Check blockchain history for transactions
-	foundInHistory, historyTxHash, _ := checkBlockchainHistory(payment.SenderWallet)
-	if foundInHistory {
-		// Found in history, verify transaction details
-		verified, amount, err := verifyTransactionDetails(historyTxHash, payment.SenderWallet)
-		if err == nil && verified {
-			// Transaction verified, update payment status
-			now := time.Now()
-			_, updateErr := config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-				context.Background(),
-				bson.M{"orderid": orderID},
-				bson.M{"$set": bson.M{
-					"status":    "success",
-					"amount":    amount,
-					"txhash":    historyTxHash,
-					"updatedat": now,
-				}},
-			)
-
-			if updateErr == nil {
-				// Payment successful
-				response.Success = true
-				response.Status = "success"
-				response.Message = "Payment has been successfully processed"
-				response.OrderID = payment.OrderID
-				response.WalletCode = payment.SenderWallet
-				response.Amount = amount
-				response.TxHash = historyTxHash
-				response.CreatedAt = payment.CreatedAt
-				response.ProcessedAt = now
-
-				at.WriteJSON(w, http.StatusOK, response)
-				return
-			}
-		}
-	}
-
-	// If we reach here, payment is still pending
-	response.Success = true
-	response.Status = "pending"
-	response.Message = "Payment is pending. Waiting for transaction confirmation."
-	response.OrderID = payment.OrderID
-	response.WalletCode = payment.SenderWallet
-	at.WriteJSON(w, http.StatusOK, response)
+	// If payment is already processed (success or failed)
+	at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+		Success: true,
+		Status:  order.Status,
+		TxID:    order.TxID,
+		Amount:  order.Amount,
+	})
 }
 
-// ManuallyConfirmMerchCoinPayment manually confirms a payment (for admin use)
+// Step 1: Check mempool for transactions
+func checkMerchCoinMempool() (bool, string, float64, error) {
+	// API URL for checking mempool
+	url := "https://api.mbc.wiki/mempool/" + MerchCoinWalletAddress
+
+	// Make the request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false, "", 0, err
+	}
+	defer resp.Body.Close()
+
+	// Parse response
+	var mempoolResp model.MerchCoinMempoolResponse
+	if err := json.NewDecoder(resp.Body).Decode(&mempoolResp); err != nil {
+		return false, "", 0, err
+	}
+
+	// Check for errors in API response
+	if mempoolResp.Error != nil {
+		return false, "", 0, errors.New("API error: " + *mempoolResp.Error)
+	}
+
+	// Check if there are transactions in mempool
+	if mempoolResp.Result.TxCount > 0 && len(mempoolResp.Result.Tx) > 0 {
+		// Return the first transaction from mempool
+		tx := mempoolResp.Result.Tx[0]
+		amount := float64(tx.Satoshis) / 100000000 // Convert satoshis to MBC
+		return true, tx.TxID, amount, nil
+	}
+
+	return false, "", 0, nil
+}
+
+// Step 2: Check if transaction exists in history
+func checkMerchCoinTxHistory(txid string) (bool, error) {
+	// API URL for checking transaction history
+	url := "https://api.mbc.wiki/history/" + MerchCoinWalletAddress
+
+	// Make the request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// Parse response
+	var historyResp model.MerchCoinHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&historyResp); err != nil {
+		return false, err
+	}
+
+	// Check for errors in API response
+	if historyResp.Error != nil {
+		return false, errors.New("API error: " + *historyResp.Error)
+	}
+
+	// Check if transaction exists in history
+	for _, tx := range historyResp.Result.Tx {
+		if tx == txid {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// Step 3: Verify transaction details
+func checkMerchCoinTxDetails(txid string) (bool, float64, error) {
+	// API URL for getting transaction details
+	url := "https://api.mbc.wiki/transaction/" + txid
+
+	// Make the request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false, 0, err
+	}
+	defer resp.Body.Close()
+
+	// Parse response
+	var txResp model.MerchCoinTransactionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
+		return false, 0, err
+	}
+
+	// Check for errors in API response
+	if txResp.Error != nil {
+		return false, 0, errors.New("API error: " + *txResp.Error)
+	}
+
+	// Transaction amount in MBC
+	amount := float64(txResp.Result.Amount) / 100000000
+
+	// Transaction is valid
+	return true, amount, nil
+}
+
+// ManuallyConfirmMerchCoinPayment manually confirms a MerchCoin payment
 func ManuallyConfirmMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
-	var response model.Response
 
-	if orderID == "" {
-		response.Response = "Order ID is required"
-		at.WriteJSON(w, http.StatusBadRequest, response)
+	// Parse request body to get txid and amount
+	var request model.MerchCoinConfirmRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Invalid request body",
+		})
 		return
 	}
 
-	// Decode request body for amount and txHash
-	var confirmData struct {
-		Amount float64 `json:"amount"`
-		TxHash string  `json:"txHash"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&confirmData); err != nil {
-		response.Response = "Invalid request format"
-		at.WriteJSON(w, http.StatusBadRequest, response)
+	// Validate the request
+	if request.TxID == "" {
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Transaction ID is required",
+		})
 		return
 	}
 
-	// Find the payment in database
-	var payment model.MerchCoinPayment
-	err := config.Mongoconn.Collection(MerchCoinCollection).FindOne(
-		context.Background(),
-		bson.M{"orderid": orderID},
-	).Decode(&payment)
+	if request.Amount <= 0 {
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Amount must be greater than 0",
+		})
+		return
+	}
 
+	// Find the order
+	var order model.MerchCoinOrder
+	err := config.Mongoconn.Collection("merchcoinorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
 	if err != nil {
-		response.Response = "Payment not found"
-		at.WriteJSON(w, http.StatusNotFound, response)
-		return
-	}
-
-	// Check if payment is already processed
-	if payment.Status == "success" {
-		response.Response = "Payment has already been processed"
-		at.WriteJSON(w, http.StatusOK, response)
-		return
-	}
-
-	// Update payment status to success
-	now := time.Now()
-	_, err = config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-		context.Background(),
-		bson.M{"orderid": orderID},
-		bson.M{"$set": bson.M{
-			"status":    "success",
-			"amount":    confirmData.Amount,
-			"txhash":    confirmData.TxHash,
-			"updatedat": now,
-		}},
-	)
-
-	if err != nil {
-		response.Response = "Failed to update payment status"
-		at.WriteJSON(w, http.StatusInternalServerError, response)
-		return
-	}
-
-	response.Response = "Payment confirmed successfully"
-	response.Status = "success"
-	at.WriteJSON(w, http.StatusOK, response)
-}
-
-// GetMerchCoinQueueStatus checks if there is an active payment being processed
-func GetMerchCoinQueueStatus(w http.ResponseWriter, r *http.Request) {
-	var response model.MerchCoinQueueStatusResponse
-
-	// Look for any active payments
-	var activePayment model.MerchCoinPayment
-	err := config.Mongoconn.Collection(MerchCoinCollection).FindOne(
-		context.Background(),
-		bson.M{
-			"status":     "pending",
-			"expirytime": bson.M{"$gt": time.Now()},
-		},
-		options.FindOne().SetSort(bson.M{"createdat": 1}),
-	).Decode(&activePayment)
-
-	if err != nil {
-		// No active payments
-		response.Success = true
-		response.IsProcessing = false
-		response.Message = "No active payments"
-		at.WriteJSON(w, http.StatusOK, response)
-		return
-	}
-
-	// There is an active payment
-	response.Success = true
-	response.IsProcessing = true
-	response.OrderID = activePayment.OrderID
-	response.WalletCode = activePayment.SenderWallet
-	response.ExpiryTime = activePayment.ExpiryTime
-	response.Message = "There is an active payment being processed"
-
-	at.WriteJSON(w, http.StatusOK, response)
-}
-
-// GetMerchCoinTotalPayments returns statistics about successful payments
-func GetMerchCoinTotalPayments(w http.ResponseWriter, r *http.Request) {
-	var response model.MerchCoinPaymentTotalsResponse
-
-	// Aggregate to get total amount and count
-	ctx := context.Background()
-	pipeline := bson.A{
-		bson.M{
-			"$match": bson.M{"status": "success"},
-		},
-		bson.M{
-			"$group": bson.M{
-				"_id":         nil,
-				"totalAmount": bson.M{"$sum": "$amount"},
-				"count":       bson.M{"$sum": 1},
-				"lastUpdated": bson.M{"$max": "$updatedat"},
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Manual Confirmation Failed",
+			"Failed to confirm MerchCoin payment manually.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: "Order not found", Inline: false},
 			},
-		},
-	}
-
-	cursor, err := config.Mongoconn.Collection(MerchCoinCollection).Aggregate(ctx, pipeline)
-	if err != nil {
-		response.Success = false
-		at.WriteJSON(w, http.StatusInternalServerError, response)
-		return
-	}
-	defer cursor.Close(ctx)
-
-	type aggregateResult struct {
-		TotalAmount float64   `bson:"totalAmount"`
-		Count       int       `bson:"count"`
-		LastUpdated time.Time `bson:"lastUpdated"`
-	}
-
-	var results []aggregateResult
-	if err = cursor.All(ctx, &results); err != nil {
-		response.Success = false
-		at.WriteJSON(w, http.StatusInternalServerError, response)
+		)
+		at.WriteJSON(w, http.StatusNotFound, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Order not found",
+		})
 		return
 	}
 
-	// Set default values
-	response.Success = true
-	response.TotalAmount = 0
-	response.Count = 0
-
-	// If we have results, update the response
-	if len(results) > 0 {
-		response.TotalAmount = results[0].TotalAmount
-		response.Count = results[0].Count
-		response.LastUpdated = results[0].LastUpdated
-	}
-
-	at.WriteJSON(w, http.StatusOK, response)
-}
-
-// ConfirmMerchCoinNotification handles incoming payment notifications
-func ConfirmMerchCoinNotification(w http.ResponseWriter, r *http.Request) {
-	var notification model.MerchCoinPaymentNotification
-	var response model.Response
-
-	// Decode notification
-	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
-		response.Response = "Invalid notification format"
-		at.WriteJSON(w, http.StatusBadRequest, response)
-		return
-	}
-
-	// Validate notification
-	if notification.TxHash == "" || notification.SenderWallet == "" || notification.Amount <= 0 {
-		response.Response = "Invalid notification data"
-		at.WriteJSON(w, http.StatusBadRequest, response)
-		return
-	}
-
-	// Find pending payment with matching wallet
-	var pendingPayment model.MerchCoinPayment
-	err := config.Mongoconn.Collection(MerchCoinCollection).FindOne(
+	// Update order status
+	_, err = config.Mongoconn.Collection("merchcoinorders").UpdateOne(
 		context.Background(),
-		bson.M{
-			"status":       "pending",
-			"senderwallet": notification.SenderWallet,
-			"expirytime":   bson.M{"$gt": time.Now()},
-		},
-		options.FindOne().SetSort(bson.M{"createdat": 1}),
-	).Decode(&pendingPayment)
-
-	if err != nil {
-		response.Response = "No matching pending payment found"
-		at.WriteJSON(w, http.StatusNotFound, response)
-		return
-	}
-
-	// Update payment to success
-	now := time.Now()
-	_, err = config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
-		context.Background(),
-		bson.M{"orderid": pendingPayment.OrderID},
+		bson.M{"orderId": orderID},
 		bson.M{"$set": bson.M{
-			"status":    "success",
-			"amount":    notification.Amount,
-			"txhash":    notification.TxHash,
-			"updatedat": now,
+			"status": "success",
+			"txid":   request.TxID,
+			"amount": request.Amount,
 		}},
 	)
-
 	if err != nil {
-		response.Response = "Failed to update payment status"
-		at.WriteJSON(w, http.StatusInternalServerError, response)
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Status Update Failed",
+			"Failed to update MerchCoin order status during manual confirmation.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error updating order status",
+		})
 		return
 	}
 
-	response.Response = "Payment confirmed successfully"
-	response.Status = "success"
-	at.WriteJSON(w, http.StatusOK, response)
+	// Update payment totals
+	updateMerchCoinPaymentTotal(request.Amount)
+
+	// Reset queue
+	_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
+		context.Background(),
+		bson.M{},
+		bson.M{"$set": bson.M{
+			"isProcessing":   false,
+			"currentOrderId": "",
+			"expiryTime":     time.Time{},
+		}},
+	)
+	if err != nil {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Queue Reset Failed",
+			"Failed to reset MerchCoin queue after manual confirmation.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error resetting queue",
+		})
+		return
+	}
+
+	sendMerchCoinDiscordEmbed(
+		"✅ Manual MerchCoin Payment Confirmation",
+		"A MerchCoin payment has been confirmed manually.",
+		5763719, // ColorGreen
+		[]MerchCoinDiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Wonpay Code", Value: order.WonpayCode, Inline: true},
+			{Name: "Transaction ID", Value: request.TxID, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("%f MBC", request.Amount), Inline: true},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+		Success: true,
+		Message: "Payment confirmed",
+	})
 }
 
-// SimulateMerchCoinPayment simulates a payment for testing purposes
+// GetMerchCoinQueueStatus gets the status of the MerchCoin payment queue
+func GetMerchCoinQueueStatus(w http.ResponseWriter, r *http.Request) {
+	var queue model.MerchCoinQueue
+	err := config.Mongoconn.Collection("merchcoinqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
+	if err != nil {
+		// If no queue document exists, initialize it
+		InitializeMerchCoinQueue()
+
+		// Return empty queue status
+		at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+			Success:      true,
+			IsProcessing: false,
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+		Success:      true,
+		IsProcessing: queue.IsProcessing,
+		ExpiryTime:   queue.ExpiryTime,
+	})
+}
+
+// GetMerchCoinTotalPayments gets the total payments for MerchCoin
+func GetMerchCoinTotalPayments(w http.ResponseWriter, r *http.Request) {
+	var total model.MerchCoinPaymentTotal
+	err := config.Mongoconn.Collection("merchcointotals").FindOne(context.Background(), bson.M{}).Decode(&total)
+	if err != nil {
+		// Initialize totals if not found
+		InitializeMerchCoinPaymentTotal()
+
+		// Return empty totals
+		at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentTotal{
+			TotalAmount: 0,
+			Count:       0,
+			LastUpdated: time.Now(),
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, total)
+}
+
+// SimulateMerchCoinPayment simulates a MerchCoin payment for testing
 func SimulateMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
-	var simulateRequest model.MerchCoinSimulatePaymentRequest
-	var response model.Response
-
-	// Decode request
-	if err := json.NewDecoder(r.Body).Decode(&simulateRequest); err != nil {
-		response.Response = "Invalid request format"
-		at.WriteJSON(w, http.StatusBadRequest, response)
+	var request model.MerchCoinSimulateRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Invalid request body",
+		})
 		return
 	}
 
-	// Validate request
-	if simulateRequest.OrderID == "" || simulateRequest.SenderWallet == "" || simulateRequest.Amount <= 0 {
-		response.Response = "Invalid simulation data"
-		at.WriteJSON(w, http.StatusBadRequest, response)
-		return
-	}
-
-	// Find pending payment
-	var pendingPayment model.MerchCoinPayment
-	err := config.Mongoconn.Collection(MerchCoinCollection).FindOne(
+	// Find the latest pending order
+	var order model.MerchCoinOrder
+	err := config.Mongoconn.Collection("merchcoinorders").FindOne(
 		context.Background(),
-		bson.M{
-			"orderid": simulateRequest.OrderID,
-			"status":  "pending",
-		},
-	).Decode(&pendingPayment)
+		bson.M{"status": "pending"},
+		options.FindOne().SetSort(bson.M{"timestamp": -1}),
+	).Decode(&order)
 
 	if err != nil {
-		response.Response = "No matching pending payment found"
-		at.WriteJSON(w, http.StatusNotFound, response)
+		if err == mongo.ErrNoDocuments {
+			at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+				Success: false,
+				Message: "No pending order found to simulate payment",
+			})
+			return
+		}
+
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error finding pending order: " + err.Error(),
+		})
 		return
 	}
 
-	// Generate fake transaction hash
-	b := make([]byte, 16)
-	_, err = rand.Read(b)
-	if err != nil {
-		response.Response = "Failed to generate transaction hash"
-		at.WriteJSON(w, http.StatusInternalServerError, response)
-		return
-	}
-	fakeTxHash := hex.EncodeToString(b)
-
-	// Update payment to success
-	now := time.Now()
-	_, err = config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
+	// Update order status
+	_, err = config.Mongoconn.Collection("merchcoinorders").UpdateOne(
 		context.Background(),
-		bson.M{"orderid": simulateRequest.OrderID},
+		bson.M{"orderId": order.OrderID},
 		bson.M{"$set": bson.M{
-			"status":    "success",
-			"amount":    simulateRequest.Amount,
-			"txhash":    fakeTxHash,
-			"updatedat": now,
+			"status": "success",
+			"txid":   request.TxID,
+			"amount": request.Amount,
 		}},
 	)
-
 	if err != nil {
-		response.Response = "Failed to update payment status"
-		at.WriteJSON(w, http.StatusInternalServerError, response)
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error updating order status: " + err.Error(),
+		})
 		return
 	}
 
-	response.Response = "Payment simulation successful"
-	response.Status = "success"
-	response.Info = fmt.Sprintf("Transaction Hash: %s", fakeTxHash)
-	at.WriteJSON(w, http.StatusOK, response)
+	// Update payment totals
+	updateMerchCoinPaymentTotal(request.Amount)
+
+	// Reset queue
+	_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
+		context.Background(),
+		bson.M{},
+		bson.M{"$set": bson.M{
+			"isProcessing":   false,
+			"currentOrderId": "",
+			"expiryTime":     time.Time{},
+		}},
+	)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Error resetting queue: " + err.Error(),
+		})
+		return
+	}
+
+	sendMerchCoinDiscordEmbed(
+		"🧪 Simulated MerchCoin Payment",
+		"A MerchCoin payment has been simulated for testing.",
+		10181046, // ColorPurple
+		[]MerchCoinDiscordEmbedField{
+			{Name: "Order ID", Value: order.OrderID, Inline: true},
+			{Name: "Wonpay Code", Value: order.WonpayCode, Inline: true},
+			{Name: "Transaction ID", Value: request.TxID, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("%f MBC", request.Amount), Inline: true},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+		Success: true,
+		Message: "Payment simulated successfully",
+		OrderID: order.OrderID,
+	})
 }
 
-// checkMempoolForTransactions checks the mempool for unconfirmed transactions
-func checkMempoolForTransactions(senderWallet string) (bool, string, error) {
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
+// ConfirmMerchCoinNotification processes webhook notifications from payment providers
+func ConfirmMerchCoinNotification(w http.ResponseWriter, r *http.Request) {
+	var request model.MerchCoinNotificationRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.MerchCoinPaymentResponse{
+			Success: false,
+			Message: "Invalid request body",
+		})
+		return
 	}
 
-	// Create API URL to check mempool
-	mempoolURL := fmt.Sprintf("https://api.mbc.wiki/mempool/%s", ReceiverWalletAddress)
+	// Log notification for debugging
+	log.Printf("Received MerchCoin notification: %s", request.NotificationText)
+	sendMerchCoinDiscordEmbed(
+		"📥 MerchCoin Notification Received",
+		"Received a MerchCoin payment notification.",
+		3447003, // ColorBlue
+		[]MerchCoinDiscordEmbedField{
+			{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+		},
+	)
 
-	// Make the request
-	resp, err := client.Get(mempoolURL)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to connect to MicroBitcoin mempool API: %v", err)
-	}
-	defer resp.Body.Close()
+	// This is a placeholder for processing notifications
+	// In a real implementation, you would parse the notification
+	// to extract transaction details
 
-	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		return false, "", fmt.Errorf("mempool API returned error status: %d", resp.StatusCode)
-	}
-
-	// Decode the response
-	var mempoolResponse struct {
-		Error  interface{} `json:"error"`
-		ID     string      `json:"id"`
-		Result struct {
-			Tx      []string `json:"tx"`
-			TxCount int      `json:"txcount"`
-		} `json:"result"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&mempoolResponse); err != nil {
-		return false, "", fmt.Errorf("failed to decode mempool API response: %v", err)
-	}
-
-	// Log the mempool response for debugging
-	fmt.Printf("Mempool response: %+v\n", mempoolResponse)
-
-	// Check if there are transactions in the mempool
-	if mempoolResponse.Result.TxCount == 0 || len(mempoolResponse.Result.Tx) == 0 {
-		// No transactions in mempool
-		return false, "", nil
-	}
-
-	// For each transaction in the mempool, check if it's from our sender
-	for _, txHash := range mempoolResponse.Result.Tx {
-		// Verify if this transaction is from our sender
-		verified, _, err := verifyTransactionDetails(txHash, senderWallet)
-		if err != nil {
-			fmt.Printf("Error verifying transaction %s: %v\n", txHash, err)
-			continue
-		}
-
-		if verified {
-			return true, txHash, nil
-		}
-	}
-
-	// No matching transactions found in mempool
-	return false, "", nil
-}
-
-// checkBlockchainHistory checks the blockchain transaction history
-func checkBlockchainHistory(senderWallet string) (bool, string, error) {
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	// Create API URL to check blockchain history
-	historyURL := fmt.Sprintf("https://api.mbc.wiki/history/%s", ReceiverWalletAddress)
-
-	// Make the request
-	resp, err := client.Get(historyURL)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to connect to MicroBitcoin history API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		return false, "", fmt.Errorf("history API returned error status: %d", resp.StatusCode)
-	}
-
-	// Decode the response
-	var historyResponse struct {
-		Error  interface{} `json:"error"`
-		ID     string      `json:"id"`
-		Result struct {
-			Tx      []string `json:"tx"`
-			TxCount int      `json:"txcount"`
-		} `json:"result"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&historyResponse); err != nil {
-		return false, "", fmt.Errorf("failed to decode history API response: %v", err)
-	}
-
-	// Check if there are transactions in the history
-	if historyResponse.Result.TxCount > 0 && len(historyResponse.Result.Tx) > 0 {
-		// We need to verify each transaction to find one from our sender
-		for _, txHash := range historyResponse.Result.Tx {
-			// Verify if this transaction is from our sender
-			verified, _, err := verifyTransactionDetails(txHash, senderWallet)
-			if err != nil {
-				fmt.Printf("Error verifying transaction %s: %v\n", txHash, err)
-				continue
-			}
-
-			if verified {
-				return true, txHash, nil
-			}
-		}
-	}
-
-	// No matching transactions found in history
-	return false, "", nil
-}
-
-// verifyTransactionDetails verifies if a transaction is from the sender wallet to the receiver wallet
-func verifyTransactionDetails(txHash string, senderWallet string) (bool, float64, error) {
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	// Create API URL to check transaction details
-	txURL := fmt.Sprintf("https://api.mbc.wiki/transaction/%s", txHash)
-
-	// Make the request
-	resp, err := client.Get(txURL)
-	if err != nil {
-		return false, 0, fmt.Errorf("failed to connect to MicroBitcoin transaction API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		return false, 0, fmt.Errorf("transaction API returned error status: %d", resp.StatusCode)
-	}
-
-	// Decode the response
-	var txResponse struct {
-		Error  interface{} `json:"error"`
-		ID     string      `json:"id"`
-		Result struct {
-			Amount        float64 `json:"amount"`
-			TxID          string  `json:"txid"`
-			Confirmations int     `json:"confirmations"`
-			Vin           []struct {
-				ScriptPubKey struct {
-					Address   string   `json:"address"`
-					Addresses []string `json:"addresses"`
-				} `json:"scriptPubKey"`
-				Value float64 `json:"value"`
-			} `json:"vin"`
-			Vout []struct {
-				N            int     `json:"n"`
-				Value        float64 `json:"value"`
-				ScriptPubKey struct {
-					Address   string   `json:"address"`
-					Addresses []string `json:"addresses"`
-					Type      string   `json:"type"`
-				} `json:"scriptPubKey"`
-			} `json:"vout"`
-		} `json:"result"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&txResponse); err != nil {
-		return false, 0, fmt.Errorf("failed to decode transaction API response: %v", err)
-	}
-
-	// Make sure transaction is valid
-	if txResponse.Error != nil {
-		return false, 0, fmt.Errorf("transaction API returned error: %v", txResponse.Error)
-	}
-
-	// Check if this transaction is from our sender wallet
-	isSenderFound := false
-	for _, input := range txResponse.Result.Vin {
-		if input.ScriptPubKey.Address == senderWallet {
-			isSenderFound = true
-			break
-		}
-
-		// Check addresses array too
-		for _, addr := range input.ScriptPubKey.Addresses {
-			if addr == senderWallet {
-				isSenderFound = true
-				break
-			}
-		}
-
-		if isSenderFound {
-			break
-		}
-	}
-
-	// If sender isn't found, this isn't our transaction
-	if !isSenderFound {
-		return false, 0, nil
-	}
-
-	// Check if the receiver wallet is in the outputs
-	for _, output := range txResponse.Result.Vout {
-		if output.ScriptPubKey.Address == ReceiverWalletAddress {
-			// Found output to our receiver wallet
-			return true, output.Value, nil
-		}
-
-		// Check addresses array too
-		for _, addr := range output.ScriptPubKey.Addresses {
-			if addr == ReceiverWalletAddress {
-				return true, output.Value, nil
-			}
-		}
-	}
-
-	// Didn't find output to our receiver wallet
-	return false, 0, nil
+	at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
+		Success: true,
+		Message: "Notification received",
+	})
 }
