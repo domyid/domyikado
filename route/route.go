@@ -122,7 +122,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetTotalPaymentsHandler(w, r)
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
-		// MerchCoin Payment Routes
+	// MerchCoin Payment Routes
 	case method == "POST" && path == "/api/merchcoin/createOrder":
 		controller.CreateMerchCoinOrder(w, r)
 	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
@@ -137,28 +137,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ConfirmMerchCoinNotification(w, r)
 	case method == "POST" && path == "/api/merchcoin/simulate":
 		controller.SimulateMerchCoinPayment(w, r)
-
-	// MicroBitcoin API Endpoints
-	case method == "GET" && path == "/api/microbitcoin/info":
-		controller.GetBlockchainInfo(w, r)
-	case method == "GET" && path == "/api/microbitcoin/blocks":
-		controller.GetLatestBlocks(w, r)
-	case method == "GET" && at.URLParam(path, "/api/microbitcoin/block/height/:height"):
-		controller.GetBlockByHeight(w, r)
-	case method == "GET" && path == "/api/microbitcoin/block/hash":
-		controller.GetBlockByHash(w, r)
-	case method == "GET" && at.URLParam(path, "/api/microbitcoin/transaction/:txid"):
-		controller.GetTransactionByID(w, r)
-	case method == "GET" && path == "/api/microbitcoin/transactions":
-		controller.GetBlockTransactions(w, r)
-	case method == "GET" && path == "/api/microbitcoin/search":
-		controller.SearchTransactions(w, r)
-	case method == "GET" && path == "/api/microbitcoin/stats":
-		controller.GetMicroBitcoinStats(w, r)
-	case method == "GET" && path == "/api/microbitcoin/syncstatus":
-		controller.GetSyncStatus(w, r)
-	case method == "POST" && path == "/api/microbitcoin/sync":
-		controller.SyncMicroBitcoinData(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)
