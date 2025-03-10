@@ -51,6 +51,7 @@ type Userdomyikado struct {
 	SponsorName          string             `json:"sponsorname,omitempty" bson:"sponsorname,omitempty"`
 	SponsorPhoneNumber   string             `json:"sponsorphonenumber,omitempty" bson:"sponsorphonenumber,omitempty"`
 	StravaProfilePicture string             `json:"stravaprofilepicture,omitempty" bson:"stravaprofilepicture,omitempty"`
+	NPM				  	 int                `json:"npm,omitempty" bson:"npm,omitempty"`
 }
 
 type Task struct {

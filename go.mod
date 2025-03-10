@@ -8,6 +8,7 @@ require (
 	github.com/go-playground/webhooks v5.17.0+incompatible
 	github.com/go-playground/webhooks/v6 v6.4.0
 	github.com/google/go-github/v59 v59.0.0
+	github.com/google/uuid v1.6.0
 	github.com/raykov/gofpdf v1.16.7
 	github.com/whatsauth/itmodel v0.0.8
 	go.mongodb.org/mongo-driver v1.16.1
@@ -30,7 +31,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
 	github.com/json-iterator/go v1.1.10 // indirect
