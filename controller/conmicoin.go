@@ -28,7 +28,7 @@ const (
 	MicroBitcoinAPIURL = "https://microbitcoinorg.github.io/api"
 
 	// MerchCoinExpiryMinutes is how long a payment is valid before expiring
-	MerchCoinExpiryMinutes = 10
+	MerchCoinExpiryMinutes = 5
 
 	// MerchCoinCollection is the MongoDB collection name
 	MerchCoinCollection = "merchcoin"
@@ -83,7 +83,6 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 		},
 	).Decode(&activeOrder)
 
-	// If there's an active order, return queue status
 	if err == nil {
 		response.Success = false
 		response.Message = "There is already an active payment process. Please wait."
@@ -125,7 +124,7 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate QR code data and URL
-	qrImageURL := "wonpay.png" // Default static QR image
+	qrImageURL := "static/wonpay.png" // Default static QR image
 
 	// Prepare successful response
 	response.Success = true
@@ -201,7 +200,7 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 	found, amount, txHash, err := checkMicroBitcoinTransactions(payment.SenderWallet)
 
 	// Calculate remaining time regardless of API results
-	remainingSeconds := int(payment.ExpiryTime.Sub(time.Now()).Seconds())
+	remainingSeconds := int(time.Until(payment.ExpiryTime).Seconds())
 	if remainingSeconds < 0 {
 		remainingSeconds = 0
 	}
@@ -253,7 +252,7 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 			)
 
 			// This is just a placeholder - you would need to determine the phone number
-			phonenumber := "62895601060000" // Example default number
+			phonenumber := "6285716349516" // Example default number
 
 			// Send WhatsApp notification
 			notif := &whatsauth.TextMessage{
@@ -269,18 +268,45 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If there was an error checking transactions, log it but still return pending
+	// If there was an error checking transactions, log it but continue checking
 	if err != nil {
 		fmt.Printf("Error checking MicroBitcoin transactions: %v\n", err)
 	}
 
-	// No transaction found or error occurred, return pending status
+	// If payment is still valid (not expired), return pending status
+	if remainingSeconds > 0 {
+		// Payment is still pending and within expiry time
+		response.Success = true
+		response.Status = "pending"
+		response.Message = "Payment is pending. Waiting for transaction confirmation."
+		response.OrderID = payment.OrderID
+		response.WalletCode = payment.SenderWallet
+		response.RemainingTime = remainingSeconds
+		at.WriteJSON(w, http.StatusOK, response)
+		return
+	}
+
+	// If payment is expired, update its status and return failed
+	now := time.Now()
+	_, err = config.Mongoconn.Collection(MerchCoinCollection).UpdateOne(
+		context.Background(),
+		bson.M{"orderid": orderID},
+		bson.M{"$set": bson.M{
+			"status":    "expired",
+			"updatedat": now,
+		}},
+	)
+
+	if err != nil {
+		fmt.Printf("Error updating expired payment: %v\n", err)
+	}
+
 	response.Success = true
-	response.Status = "pending"
-	response.Message = "Payment is pending"
+	response.Status = "failed"
+	response.Message = "Payment has expired"
 	response.OrderID = payment.OrderID
 	response.WalletCode = payment.SenderWallet
-	response.RemainingTime = remainingSeconds
+	response.RemainingTime = 0
 
 	at.WriteJSON(w, http.StatusOK, response)
 }
@@ -357,7 +383,7 @@ func ManuallyConfirmMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 
 		// This is just a placeholder - you would need to determine the phone number
 		// to send to based on your application logic
-		phonenumber := "62895601060000" // Example default number
+		phonenumber := "6285716349516" // Example default number
 
 		// Send WhatsApp notification
 		notif := &whatsauth.TextMessage{
@@ -616,46 +642,182 @@ func SimulateMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 
 // checkMicroBitcoinTransactions checks the MicroBitcoin blockchain for transactions to our wallet
 func checkMicroBitcoinTransactions(senderWallet string) (bool, float64, string, error) {
-	// Create API URL to check address transactions
-	apiURL := fmt.Sprintf("%s/address/%s", MicroBitcoinAPIURL, ReceiverWalletAddress)
-
 	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	// Make the request
-	resp, err := client.Get(apiURL)
+	// Step 1: Check mempool first for pending transactions
+	mempoolURL := fmt.Sprintf("https://api.mbc.wiki/mempool/%s", ReceiverWalletAddress)
+
+	mempoolResp, err := client.Get(mempoolURL)
 	if err != nil {
-		return false, 0, "", fmt.Errorf("failed to connect to MicroBitcoin API: %v", err)
+		return false, 0, "", fmt.Errorf("failed to connect to MicroBitcoin mempool API: %v", err)
 	}
-	defer resp.Body.Close()
+	defer mempoolResp.Body.Close()
 
 	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		return false, 0, "", fmt.Errorf("API returned error status: %d", resp.StatusCode)
+	if mempoolResp.StatusCode != http.StatusOK {
+		return false, 0, "", fmt.Errorf("mempool API returned error status: %d", mempoolResp.StatusCode)
 	}
 
-	// Decode the response
-	var apiResponse model.MerchCoinTxAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return false, 0, "", fmt.Errorf("failed to decode API response: %v", err)
+	// Decode the mempool response
+	var mempoolResponse struct {
+		Error  interface{} `json:"error"`
+		ID     string      `json:"id"`
+		Result struct {
+			Tx      []string `json:"tx"`
+			TxCount int      `json:"txcount"`
+		} `json:"result"`
 	}
 
-	// Check if the API response status is success
-	if apiResponse.Status != "success" {
-		return false, 0, "", fmt.Errorf("API returned error: %s", apiResponse.Message)
+	if err := json.NewDecoder(mempoolResp.Body).Decode(&mempoolResponse); err != nil {
+		return false, 0, "", fmt.Errorf("failed to decode mempool API response: %v", err)
 	}
 
-	// Look for transactions from the sender wallet
-	for _, tx := range apiResponse.Txs {
-		// Only consider transactions from the specified sender
-		if tx.SenderAddr == senderWallet {
-			// We found a transaction from the sender to our wallet
-			return true, tx.Amount, tx.TxID, nil
+	// Check for transactions in mempool
+	for _, txID := range mempoolResponse.Result.Tx {
+		// For each transaction in mempool, check if it's from our sender
+		found, amount, err := checkTransaction(client, txID, senderWallet)
+		if err != nil {
+			fmt.Printf("Error checking mempool transaction %s: %v\n", txID, err)
+			continue
+		}
+
+		if found {
+			return true, amount, txID, nil
+		}
+	}
+
+	// Step 2: Check transaction history if nothing in mempool
+	historyURL := fmt.Sprintf("https://api.mbc.wiki/history/%s", ReceiverWalletAddress)
+
+	historyResp, err := client.Get(historyURL)
+	if err != nil {
+		return false, 0, "", fmt.Errorf("failed to connect to MicroBitcoin history API: %v", err)
+	}
+	defer historyResp.Body.Close()
+
+	// Check response status
+	if historyResp.StatusCode != http.StatusOK {
+		return false, 0, "", fmt.Errorf("history API returned error status: %d", historyResp.StatusCode)
+	}
+
+	// Decode the history response
+	var historyResponse struct {
+		Error  interface{} `json:"error"`
+		ID     string      `json:"id"`
+		Result struct {
+			Tx      []string `json:"tx"`
+			TxCount int      `json:"txcount"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(historyResp.Body).Decode(&historyResponse); err != nil {
+		return false, 0, "", fmt.Errorf("failed to decode history API response: %v", err)
+	}
+
+	// Check for transactions in history
+	for _, txID := range historyResponse.Result.Tx {
+		// For each transaction in history, check if it's from our sender
+		found, amount, err := checkTransaction(client, txID, senderWallet)
+		if err != nil {
+			fmt.Printf("Error checking history transaction %s: %v\n", txID, err)
+			continue
+		}
+
+		if found {
+			return true, amount, txID, nil
 		}
 	}
 
 	// No matching transaction found
 	return false, 0, "", nil
+}
+
+// checkTransaction checks a specific transaction to see if it's from the sender wallet
+func checkTransaction(client *http.Client, txID string, senderWallet string) (bool, float64, error) {
+	// Step 3: Check transaction details
+	txURL := fmt.Sprintf("https://api.mbc.wiki/transaction/%s", txID)
+
+	txResp, err := client.Get(txURL)
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to connect to MicroBitcoin transaction API: %v", err)
+	}
+	defer txResp.Body.Close()
+
+	// Check response status
+	if txResp.StatusCode != http.StatusOK {
+		return false, 0, fmt.Errorf("transaction API returned error status: %d", txResp.StatusCode)
+	}
+
+	// Decode the transaction response
+	var txResponse struct {
+		Error  interface{} `json:"error"`
+		ID     string      `json:"id"`
+		Result struct {
+			Amount        float64 `json:"amount"`
+			Txid          string  `json:"txid"`
+			Confirmations int     `json:"confirmations"`
+			Blockhash     string  `json:"blockhash"`
+			Vin           []struct {
+				ScriptPubKey struct {
+					Address   string   `json:"address"`
+					Addresses []string `json:"addresses"`
+				} `json:"scriptPubKey"`
+				Value float64 `json:"value"`
+			} `json:"vin"`
+			Vout []struct {
+				ScriptPubKey struct {
+					Address   string   `json:"address"`
+					Addresses []string `json:"addresses"`
+				} `json:"scriptPubKey"`
+				Value float64 `json:"value"`
+				N     int     `json:"n"`
+			} `json:"vout"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(txResp.Body).Decode(&txResponse); err != nil {
+		return false, 0, fmt.Errorf("failed to decode transaction API response: %v", err)
+	}
+
+	// Check if this transaction is from our sender wallet
+	for _, input := range txResponse.Result.Vin {
+		// Check if the input address matches our sender wallet
+		if input.ScriptPubKey.Address == senderWallet {
+			// Found a transaction from our sender
+			// Now verify that the recipient is our receiving wallet
+			for _, output := range txResponse.Result.Vout {
+				// Find the output that's sent to our receiving wallet
+				if output.ScriptPubKey.Address == ReceiverWalletAddress {
+					return true, output.Value, nil
+				}
+			}
+		}
+
+		// Also check the addresses array
+		for _, addr := range input.ScriptPubKey.Addresses {
+			if addr == senderWallet {
+				// Found a transaction from our sender
+				// Now verify that the recipient is our receiving wallet
+				for _, output := range txResponse.Result.Vout {
+					// Find the output that's sent to our receiving wallet
+					if output.ScriptPubKey.Address == ReceiverWalletAddress {
+						return true, output.Value, nil
+					}
+
+					// Also check the addresses array
+					for _, outAddr := range output.ScriptPubKey.Addresses {
+						if outAddr == ReceiverWalletAddress {
+							return true, output.Value, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// This transaction is not from our sender wallet to our receiver wallet
+	return false, 0, nil
 }
