@@ -9,8 +9,19 @@ import (
 )
 
 func URL(w http.ResponseWriter, r *http.Request) {
-	if config.SetAccessControlHeaders(w, r) {
-		return // If it's a preflight request, return early.
+	if r.Method == http.MethodOptions {
+		if path := r.URL.Path; path == "/api/tracker" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "POST")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Max-Age", "3600")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		// Untuk route lainnya, atur CORS sesuai origin yang diizinkan
+		if config.SetAccessControlHeaders(w, r) {
+			return // If it's a preflight request, return early.
+		}
 	}
 	config.SetEnv()
 
@@ -139,8 +150,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.SimulateMerchCoinPayment(w, r)
 	// Google Auth
 	// Tracker
-	case method == "POST" && path == "/api/tracker":
-		controller.SimpanInformasiUser(w, r)
+	// case method == "POST" && path == "/api/tracker":
+	// 	controller.SimpanInformasiUser(w, r)
 	default:
 		controller.NotFound(w, r)
 	}

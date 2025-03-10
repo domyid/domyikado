@@ -29,7 +29,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		"hostname":      userinfo.Hostname,
 		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
 	}
-	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "tracker", filter)
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
 	if err == nil && exist.IPv4 != "" {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
 			Response: "Hari ini sudah absen",
@@ -37,7 +37,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "tracker", userinfo)
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackerip", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: "Gagal Insert Database: " + err.Error(),
