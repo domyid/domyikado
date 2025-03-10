@@ -119,7 +119,7 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate QR code data and URL
-	qrImageURL := "static/wonpay.png" // Default static QR image
+	qrImageURL := "wonpay.png" // Default static QR image
 
 	// Prepare successful response
 	response.Success = true
