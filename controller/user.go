@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.mongodb.org/mongo-driver/mongo"
 	"net/http"
 	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/model"
@@ -179,9 +180,10 @@ func PostDataUser(respw http.ResponseWriter, req *http.Request) {
 	docuser.GitHostUsername = usr.GitHostUsername
 	docuser.GitlabUsername = usr.GitlabUsername
 	docuser.GithubUsername = usr.GithubUsername
-	docuser.SponsorName = usr.SponsorName         
-	docuser.SponsorPhoneNumber = usr.SponsorPhoneNumber 
+	docuser.SponsorName = usr.SponsorName
+	docuser.SponsorPhoneNumber = usr.SponsorPhoneNumber
 	docuser.NPM = usr.NPM
+	docuser.StravaProfilePicture = usr.StravaProfilePicture
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id}, docuser)
 	if err != nil {
 		var respn model.Response
