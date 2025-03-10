@@ -8,13 +8,25 @@ import (
 
 // MerchCoinOrder struct to store payment data
 type MerchCoinOrder struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	OrderID    string             `json:"orderId" bson:"orderId"`
-	WonpayCode string             `json:"wonpayCode" bson:"wonpayCode"`
-	Timestamp  time.Time          `json:"timestamp" bson:"timestamp"`
-	Status     string             `json:"status" bson:"status"`
-	TxID       string             `json:"txid,omitempty" bson:"txid,omitempty"`
-	Amount     float64            `json:"amount,omitempty" bson:"amount,omitempty"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	OrderID       string             `json:"orderId" bson:"orderId"`
+	WonpayCode    string             `json:"wonpayCode" bson:"wonpayCode"`
+	Timestamp     time.Time          `json:"timestamp" bson:"timestamp"`
+	Status        string             `json:"status" bson:"status"`
+	TxID          string             `json:"txid,omitempty" bson:"txid,omitempty"`
+	Amount        float64            `json:"amount,omitempty" bson:"amount,omitempty"`
+	PendingAmount float64            `json:"pendingAmount,omitempty" bson:"pendingAmount,omitempty"`
+
+	// Step tracking fields
+	Step1Complete     bool      `json:"step1Complete,omitempty" bson:"step1Complete,omitempty"`
+	Step1CompleteTime time.Time `json:"step1CompleteTime,omitempty" bson:"step1CompleteTime,omitempty"`
+	DelayStep2Until   time.Time `json:"delayStep2Until,omitempty" bson:"delayStep2Until,omitempty"`
+
+	Step2Complete     bool      `json:"step2Complete,omitempty" bson:"step2Complete,omitempty"`
+	Step2CompleteTime time.Time `json:"step2CompleteTime,omitempty" bson:"step2CompleteTime,omitempty"`
+	DelayStep3Until   time.Time `json:"delayStep3Until,omitempty" bson:"delayStep3Until,omitempty"`
+
+	Step3Complete bool `json:"step3Complete,omitempty" bson:"step3Complete,omitempty"`
 }
 
 // MerchCoinQueue struct to manage payment processing
@@ -60,11 +72,18 @@ type MerchCoinPaymentResponse struct {
 	WalletAddress string    `json:"walletAddress,omitempty"`
 
 	// Transaction verification steps
-	Step1Complete bool    `json:"step1Complete,omitempty"`
-	Step2Complete bool    `json:"step2Complete,omitempty"`
-	Step3Complete bool    `json:"step3Complete,omitempty"`
-	TxID          string  `json:"txid,omitempty"`
-	Amount        float64 `json:"amount,omitempty"`
+	Step1Complete     bool      `json:"step1Complete,omitempty"`
+	Step1CompleteTime time.Time `json:"step1CompleteTime,omitempty"`
+	DelayStep2Until   time.Time `json:"delayStep2Until,omitempty"`
+
+	Step2Complete     bool      `json:"step2Complete,omitempty"`
+	Step2CompleteTime time.Time `json:"step2CompleteTime,omitempty"`
+	DelayStep3Until   time.Time `json:"delayStep3Until,omitempty"`
+
+	Step3Complete bool `json:"step3Complete,omitempty"`
+
+	TxID   string  `json:"txid,omitempty"`
+	Amount float64 `json:"amount,omitempty"`
 }
 
 // MerchCoinPaymentTotal struct to track total payments

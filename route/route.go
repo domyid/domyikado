@@ -132,7 +132,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetTotalPaymentsHandler(w, r)
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
-		// MerchCoin Payment Routess
+		// z
+	// MerchCoin Payment Routes
 	case method == "POST" && path == "/api/merchcoin/createOrder":
 		controller.CreateMerchCoinOrder(w, r)
 	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
