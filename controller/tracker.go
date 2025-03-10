@@ -14,9 +14,17 @@ import (
 
 func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	var userinfo model.UserInfo
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	todayPrimitive := primitive.NewDateTimeFromTime(today)
-	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	zonalokal, err := time.LoadLocation("Asia/Jakarta")
+	waktusekarang := time.Now().In(zonalokal)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Error loading location: " + err.Error(),
+		})
+		return
+	}
+	jam00 := waktusekarang.Truncate(24 * time.Hour)
+	jam24 := jam00.Add(24*time.Hour - time.Second)
+	err = json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "Error parsing application/json: " + err.Error(),
@@ -25,7 +33,8 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := primitive.M{
 		"ipv4":          userinfo.IPv4,
-		"tanggal_ambil": todayPrimitive,
+		"hostname":      userinfo.Hostname,
+		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "tracker", filter)
 	if err == nil && exist.IPv4 != "" {
@@ -34,7 +43,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(time.Now())
+	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "tracker", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
