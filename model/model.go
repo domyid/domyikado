@@ -39,3 +39,9 @@ type Config struct {
 	DomyikadoSecret        string `json:"domyikadosecret,omitempty" bson:"domyikadosecret,omitempty"`
 	ApproveBimbinganURL    string `json:"approvebimbinganurl,omitempty" bson:"approvebimbinganurl,omitempty"`
 }
+
+type SoalIQ struct {
+	Question  string `json:"question"`
+	Image     string `json:"image"`
+	AnswerKey string `json:"answer_key"`
+}
