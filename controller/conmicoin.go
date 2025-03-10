@@ -716,15 +716,30 @@ func checkMempoolForTransactions(senderWallet string) (bool, string, error) {
 		return false, "", fmt.Errorf("failed to decode mempool API response: %v", err)
 	}
 
+	// Log the mempool response for debugging
+	fmt.Printf("Mempool response: %+v\n", mempoolResponse)
+
 	// Check if there are transactions in the mempool
-	if mempoolResponse.Result.TxCount > 0 {
-		// Return the first transaction hash
-		if len(mempoolResponse.Result.Tx) > 0 {
-			return true, mempoolResponse.Result.Tx[0], nil
+	if mempoolResponse.Result.TxCount == 0 || len(mempoolResponse.Result.Tx) == 0 {
+		// No transactions in mempool
+		return false, "", nil
+	}
+
+	// For each transaction in the mempool, check if it's from our sender
+	for _, txHash := range mempoolResponse.Result.Tx {
+		// Verify if this transaction is from our sender
+		verified, _, err := verifyTransactionDetails(txHash, senderWallet)
+		if err != nil {
+			fmt.Printf("Error verifying transaction %s: %v\n", txHash, err)
+			continue
+		}
+
+		if verified {
+			return true, txHash, nil
 		}
 	}
 
-	// No transactions found in mempool
+	// No matching transactions found in mempool
 	return false, "", nil
 }
 
