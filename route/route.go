@@ -155,5 +155,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.SimpanInformasiUser(w, r)
 	default:
 		controller.NotFound(w, r)
+		// IQ
+	case method == "GET" && path == "/data/iq/questions":
+		controller.GetIqQuestions(w, r)
 	}
 }
