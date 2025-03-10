@@ -456,6 +456,7 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 				Status:        "pending",
 				Message:       "Checking mempool failed: " + err.Error(),
 				Step1Complete: false,
+				Step3Complete: false,
 			})
 			return
 		}
@@ -467,42 +468,14 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 				Status:        "pending",
 				Message:       "No transaction in mempool.",
 				Step1Complete: false,
+				Step3Complete: false,
 			})
 			return
 		}
 
-		// If we found a transaction in mempool, proceed to step 2
+		// If we found a transaction in mempool, proceed directly to step 3
 		if txid != "" {
-			// Step 2: Check transaction history to see if txid exists
-			txHistory, err := checkMerchCoinTxHistory(txid)
-			if err != nil {
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:       true,
-					Status:        "pending",
-					Message:       "Transaction found in mempool, but error checking history: " + err.Error(),
-					Step1Complete: true,
-					Step2Complete: false,
-					TxID:          txid,
-					Amount:        amount,
-				})
-				return
-			}
-
-			if !txHistory {
-				// Transaction not yet in history
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:       true,
-					Status:        "pending",
-					Message:       "Transaction found in mempool, but not yet in history.",
-					Step1Complete: true,
-					Step2Complete: false,
-					TxID:          txid,
-					Amount:        amount,
-				})
-				return
-			}
-
-			// Step 3: Verify transaction details
+			// Step 3: Verify transaction details (skipping step 2)
 			txDetails, actualAmount, err := checkMerchCoinTxDetails(txid)
 			if err != nil {
 				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
@@ -510,7 +483,6 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 					Status:        "pending",
 					Message:       "Transaction found, but error checking details: " + err.Error(),
 					Step1Complete: true,
-					Step2Complete: true,
 					Step3Complete: false,
 					TxID:          txid,
 					Amount:        amount,
@@ -524,7 +496,6 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 					Status:        "pending",
 					Message:       "Transaction found, but details verification failed.",
 					Step1Complete: true,
-					Step2Complete: true,
 					Step3Complete: false,
 					TxID:          txid,
 					Amount:        amount,
@@ -550,7 +521,6 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 					Status:        "pending",
 					Message:       "Transaction verified but error updating order status: " + err.Error(),
 					Step1Complete: true,
-					Step2Complete: true,
 					Step3Complete: true,
 					TxID:          txid,
 					Amount:        actualAmount,
@@ -593,7 +563,6 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 				Status:        "success",
 				Message:       "Payment confirmed successfully!",
 				Step1Complete: true,
-				Step2Complete: true,
 				Step3Complete: true,
 				TxID:          txid,
 				Amount:        actualAmount,

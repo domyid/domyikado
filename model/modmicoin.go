@@ -61,7 +61,6 @@ type MerchCoinPaymentResponse struct {
 
 	// Transaction verification steps
 	Step1Complete bool    `json:"step1Complete,omitempty"`
-	Step2Complete bool    `json:"step2Complete,omitempty"`
 	Step3Complete bool    `json:"step3Complete,omitempty"`
 	TxID          string  `json:"txid,omitempty"`
 	Amount        float64 `json:"amount,omitempty"`
