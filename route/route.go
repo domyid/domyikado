@@ -138,6 +138,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/merchcoin/simulate":
 		controller.SimulateMerchCoinPayment(w, r)
 	// Google Auth
+	// Tracker
+	case method == "POST" && path == "/api/tracker":
+		controller.SimpanInformasiUser(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
