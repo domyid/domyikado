@@ -43,7 +43,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
+	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang.UTC())
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "tracker", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
