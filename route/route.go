@@ -123,20 +123,20 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
 	// MerchCoin Payment Routes
-	// case method == "POST" && path == "/api/merchcoin/createOrder":
-	// 	controller.CreateMerchCoinOrder(w, r)
-	// case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
-	// 	controller.CheckMerchCoinPayment(w, r)
-	// case method == "POST" && at.URLParam(path, "/api/merchcoin/confirmPayment/:orderId"):
-	// 	controller.ManuallyConfirmMerchCoinPayment(w, r)
-	// case method == "GET" && path == "/api/merchcoin/queueStatus":
-	// 	controller.GetMerchCoinQueueStatus(w, r)
-	// case method == "GET" && path == "/api/merchcoin/totalPayments":
-	// 	controller.GetMerchCoinTotalPayments(w, r)
-	// case method == "POST" && path == "/api/merchcoin/notification":
-	// 	controller.ConfirmMerchCoinNotification(w, r)
-	// case method == "POST" && path == "/api/merchcoin/simulate":
-	// 	controller.SimulateMerchCoinPayment(w, r)
+	case method == "POST" && path == "/api/merchcoin/createOrder":
+		controller.CreateMerchCoinOrder(w, r)
+	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
+		controller.CheckMerchCoinPayment(w, r)
+	case method == "POST" && at.URLParam(path, "/api/merchcoin/confirmPayment/:orderId"):
+		controller.ManuallyConfirmMerchCoinPayment(w, r)
+	case method == "GET" && path == "/api/merchcoin/queueStatus":
+		controller.GetMerchCoinQueueStatus(w, r)
+	case method == "GET" && path == "/api/merchcoin/totalPayments":
+		controller.GetMerchCoinTotalPayments(w, r)
+	case method == "POST" && path == "/api/merchcoin/notification":
+		controller.ConfirmMerchCoinNotification(w, r)
+	case method == "POST" && path == "/api/merchcoin/simulate":
+		controller.SimulateMerchCoinPayment(w, r)
 	// Google Auth
 	default:
 		controller.NotFound(w, r)
