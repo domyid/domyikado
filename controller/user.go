@@ -181,7 +181,7 @@ func PostDataUser(respw http.ResponseWriter, req *http.Request) {
 	docuser.GithubUsername = usr.GithubUsername
 	docuser.SponsorName = usr.SponsorName         
 	docuser.SponsorPhoneNumber = usr.SponsorPhoneNumber 
-	docuser.NPM = usr.NPM
+	docuser.Npm = usr.Npm
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id}, docuser)
 	if err != nil {
 		var respn model.Response
