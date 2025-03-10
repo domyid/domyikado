@@ -48,8 +48,8 @@ type Userdomyikado struct {
 	Chapter              string             `json:"chapter,omitempty" bson:"chapter,omitempty"`
 	LinkedDevice         string             `json:"linkeddevice,omitempty" bson:"linkeddevice,omitempty"`
 	JumlahAntrian        int                `json:"jumlahantrian,omitempty" bson:"jumlahantrian,omitempty"`
-	ParentName           string             `json:"parentname,omitempty" bson:"parentname,omitempty"`
-	ParentPhoneNumber    string             `json:"parentphonenumber,omitempty" bson:"parentphonenumber,omitempty"`
+	SponsorName          string             `json:"sponsorname,omitempty" bson:"sponsorname,omitempty"`
+	SponsorPhoneNumber   string             `json:"sponsorphonenumber,omitempty" bson:"sponsorphonenumber,omitempty"`
 	StravaProfilePicture string             `json:"stravaprofilepicture,omitempty" bson:"stravaprofilepicture,omitempty"`
 }
 
