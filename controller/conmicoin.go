@@ -21,7 +21,7 @@ import (
 
 const (
 	// Discord webhook URL for logging
-	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
+	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/1348599740664647772/svXeCm0CPQ1uVK-R7TkYLtVX2DRpmlhW7tfiBEqY9J4Mc0IpLIpCdKFm-1rv7kx0zIyc"
 	MerchCoinWalletAddress     = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
 )
 
@@ -498,7 +498,7 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
 					Success:       true,
 					Status:        "pending",
-					Message:       "Transaction found in mempool, but not yet in transaction history.",
+					Message:       "Transaction found in mempool, checking transaction history... (This may take a few moments)",
 					Step1Complete: true,
 					Step2Complete: false,
 					Step3Complete: false,
@@ -683,6 +683,8 @@ func checkMerchCoinTxHistory(txid string) (bool, error) {
 		}
 	}
 
+	// Transaction not found in history - but we don't consider this an error
+	// The caller should keep trying until it's found or timeout occurs
 	return false, nil
 }
 
