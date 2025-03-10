@@ -14,17 +14,10 @@ import (
 
 func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	var userinfo model.UserInfo
-	zonalokal, err := time.LoadLocation("Asia/Jakarta")
-	waktusekarang := time.Now().In(zonalokal)
-	if err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Response: "Error loading location: " + err.Error(),
-		})
-		return
-	}
+	waktusekarang := time.Now()
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
-	err = json.NewDecoder(r.Body).Decode(&userinfo)
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "Error parsing application/json: " + err.Error(),
