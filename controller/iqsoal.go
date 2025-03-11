@@ -30,11 +30,11 @@ func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
 	// Filter untuk mendapatkan soal IQ berdasarkan ID
 	filter := bson.M{
 		"id":         id,
-		"deleted_at": bson.M{"$exists": false}, // Pastikan soal belum dihapus
+		"deleted_at": bson.M{"$exists": false},
 	}
 
 	var iqQuestion SoalIQ
-	err := config.Mongoconn.Collection("questioniq").FindOne(context.Background(), filter).Decode(&iqQuestion)
+	err := config.Mongoconn.Collection("iqquestion").FindOne(context.Background(), filter).Decode(&iqQuestion)
 	if err != nil {
 		log.Printf("Error querying IQ question with ID %s: %v", id, err)
 		at.WriteJSON(w, http.StatusNotFound, map[string]string{
