@@ -149,9 +149,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ConfirmMerchCoinNotification(w, r)
 	case method == "POST" && path == "/api/merchcoin/simulate":
 		controller.SimulateMerchCoinPayment(w, r)
-		// IQ
+	// IQ
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)
+	case method == "GET" && path == "/api/iqscoring":
+		controller.GetIqScoring(w, r) // Mengambil referensi skor IQ
+	case method == "POST" && path == "/api/iq/score":
+		controller.PostIqScore(w, r) // Menyimpan hasil tes IQ ke database
 	// Google Auth
 	// Tracker
 	case method == "POST" && path == "/api/tracker":
