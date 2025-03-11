@@ -155,6 +155,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/api/iqscoring":
 		controller.GetIqScoring(w, r) // Mengambil referensi skor IQ
 	case method == "POST" && path == "/api/iq/score":
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostIqScore(w, r) // Menyimpan hasil tes IQ ke database
 	// Google Auth
 	// Tracker
