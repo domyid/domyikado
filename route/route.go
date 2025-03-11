@@ -2,6 +2,7 @@ package route
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/controller"
@@ -149,8 +150,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/merchcoin/simulate":
 		controller.SimulateMerchCoinPayment(w, r)
 	// IQ
-	case method == "GET" && path == "/data/iq/question":
-		controller.GetRandomIqQuestion(w, r)
+	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
+		controller.GetOneIqQuestion(w, r)
 	// Google Auth
 	// Tracker
 	case method == "POST" && path == "/api/tracker":

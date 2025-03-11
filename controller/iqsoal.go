@@ -3,14 +3,12 @@ package controller
 import (
 	"context"
 	"log"
-	"math/rand"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Struct SoalIQ sesuai dengan koleksi questioniq
@@ -24,45 +22,24 @@ type SoalIQ struct {
 	DeletedAt string `json:"deleted_at"`
 }
 
-// GetRandomIqQuestion retrieves a single random IQ question from the MongoDB collection
-func GetRandomIqQuestion(w http.ResponseWriter, r *http.Request) {
-	// Filter untuk mendapatkan soal IQ yang belum dihapus
+// GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
+func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
+	// Mendapatkan ID dari URL
+	pathSegments := strings.Split(r.URL.Path, "/")
+	id := pathSegments[len(pathSegments)-1]
+
+	// Filter untuk mendapatkan soal IQ berdasarkan ID
 	filter := bson.M{
+		"id":         id,
 		"deleted_at": bson.M{"$exists": false}, // Pastikan soal belum dihapus
 	}
 
-	// Query MongoDB untuk mendapatkan total jumlah soal yang memenuhi filter
-	count, err := config.Mongoconn.Collection("questioniq").CountDocuments(context.Background(), filter)
-	if err != nil {
-		log.Printf("Error counting IQ questions: %v", err)
-		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error counting IQ questions",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	// Jika tidak ada soal, kembalikan respons 404
-	if count == 0 {
-		at.WriteJSON(w, http.StatusNotFound, map[string]string{
-			"message": "Tidak ada soal IQ yang tersedia.",
-		})
-		return
-	}
-
-	// Generate index acak
-	rand.Seed(time.Now().UnixNano())
-	randomIndex := rand.Intn(int(count))
-
-	// Query MongoDB untuk mendapatkan satu soal secara acak
-	findOptions := options.FindOne().SetSkip(int64(randomIndex))
 	var iqQuestion SoalIQ
-	err = config.Mongoconn.Collection("questioniq").FindOne(context.Background(), filter, findOptions).Decode(&iqQuestion)
-
+	err := config.Mongoconn.Collection("questioniq").FindOne(context.Background(), filter).Decode(&iqQuestion)
 	if err != nil {
-		log.Printf("Error querying random IQ question: %v", err)
-		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error querying random IQ question",
+		log.Printf("Error querying IQ question with ID %s: %v", id, err)
+		at.WriteJSON(w, http.StatusNotFound, map[string]string{
+			"message": "Soal IQ tidak ditemukan.",
 			"error":   err.Error(),
 		})
 		return
