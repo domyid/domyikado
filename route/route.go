@@ -1,7 +1,6 @@
 package route
 
 import (
-	"log"
 	"net/http"
 	"strings"
 
@@ -151,15 +150,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/merchcoin/simulate":
 		controller.SimulateMerchCoinPayment(w, r)
 		// IQ
-		segments := strings.Split(path, "/")
-		log.Printf("URL Segments: %+v", segments)
-		if method == "GET" && len(segments) > 3 && segments[1] == "api" && segments[2] == "iq" && segments[3] == "question" {
-			id := segments[4] // Ambil ID dari segmen terakhir
-
-			// Sekarang panggil controller dengan ID
-			controller.GetOneIqQuestion(w, r, id) // Pastikan Anda mengirim ID ke controller
-			return
-		}
+	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
+		controller.GetOneIqQuestion(w, r)
 	// Google Auth
 	// Tracker
 	case method == "POST" && path == "/api/tracker":
