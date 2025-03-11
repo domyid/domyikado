@@ -33,6 +33,7 @@ func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
 		"id":         id,
 		"deleted_at": bson.M{"$exists": false}, // Pastikan soal belum dihapus
 	}
+	log.Printf("ID yang diterima: %s", id)
 
 	var iqQuestion SoalIQ
 	err := config.Mongoconn.Collection("questioniq").FindOne(context.Background(), filter).Decode(&iqQuestion)
