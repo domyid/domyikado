@@ -2,6 +2,7 @@ package route
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/controller"
@@ -153,9 +154,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/tracker":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
-		// IQ
-	case method == "GET" && path == "/data/iq/questions":
-		controller.GetIqQuestions(w, r)
+	// IQ
+	case method == "GET" && strings.HasPrefix(path, "/data/iq/questions/"):
+		controller.GetOneIqQuestion(w, r)
+
 	default:
 		controller.NotFound(w, r)
 	}
