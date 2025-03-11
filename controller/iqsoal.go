@@ -16,13 +16,13 @@ import (
 
 // Struct SoalIQ sesuai dengan koleksi iqquestion di db MongoDB
 type SoalIQ struct {
-	ID        string  `json:"id" 					bson:"id"`
-	Question  string  `json:"question" 				bson:"question"`
-	Image     string  `json:"image" 				bson:"image"`
-	AnswerKey string  `json:"answer_key" 			bson:"answer_key"`
-	CreatedAt string  `json:"created_at" 			bson:"created_at"`
-	UpdatedAt *string `json:"updated_at,omitempty" 	bson:"updated_at,omitempty"`
-	DeletedAt *string `json:"deleted_at,omitempty" 	bson:"deleted_at,omitempty"`
+	ID        string  `json:"id" bson:"id"`
+	Question  string  `json:"question" bson:"question"`
+	Image     string  `json:"image" bson:"image"`
+	AnswerKey *string `json:"answer_key,omitempty" bson:"answer_key,omitempty"` // Pakai pointer agar bisa nil
+	CreatedAt string  `json:"created_at" bson:"created_at"`
+	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	DeletedAt *string `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
 }
 
 // Struct untuk menyimpan skor referensi dari iqscoring
