@@ -3,12 +3,12 @@ package controller
 import (
 	"context"
 	"log"
+	"math/rand"
 	"net/http"
-	"strings"
+	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
-	"github.com/gocroot/helper/atdb"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -24,68 +24,45 @@ type SoalIQ struct {
 	DeletedAt string `json:"deleted_at"`
 }
 
-// GetIqQuestions retrieves all IQ questions from the MongoDB collection
-func GetIqQuestions(w http.ResponseWriter, r *http.Request) {
+// GetRandomIqQuestion retrieves a single random IQ question from the MongoDB collection
+func GetRandomIqQuestion(w http.ResponseWriter, r *http.Request) {
 	// Filter untuk mendapatkan soal IQ yang belum dihapus
 	filter := bson.M{
 		"deleted_at": bson.M{"$exists": false}, // Pastikan soal belum dihapus
 	}
 
-	// Query MongoDB
-	var iqQuestions []SoalIQ
-	cursor, err := config.Mongoconn.Collection("questioniq").Find(context.Background(), filter, options.Find())
+	// Query MongoDB untuk mendapatkan total jumlah soal yang memenuhi filter
+	count, err := config.Mongoconn.Collection("questioniq").CountDocuments(context.Background(), filter)
 	if err != nil {
-		log.Printf("Error querying IQ questions: %v", err)
+		log.Printf("Error counting IQ questions: %v", err)
 		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error retrieving IQ questions",
+			"message": "Error counting IQ questions",
 			"error":   err.Error(),
 		})
 		return
 	}
-	defer cursor.Close(context.Background())
 
-	//Iterasi cursor
-	for cursor.Next(context.Background()) {
-		var iqQuestion SoalIQ
-		err := cursor.Decode(&iqQuestion)
-		if err != nil {
-			log.Printf("Error decoding IQ questions: %v", err)
-			at.WriteJSON(w, http.StatusInternalServerError, map[string]string{
-				"message": "Error decoding IQ questions",
-				"error":   err.Error(),
-			})
-			return
-		}
-		iqQuestions = append(iqQuestions, iqQuestion)
-	}
-	if len(iqQuestions) == 0 {
+	// Jika tidak ada soal, kembalikan respons 404
+	if count == 0 {
 		at.WriteJSON(w, http.StatusNotFound, map[string]string{
 			"message": "Tidak ada soal IQ yang tersedia.",
 		})
 		return
 	}
 
-	at.WriteJSON(w, http.StatusOK, iqQuestions)
-}
+	// Generate index acak
+	rand.Seed(time.Now().UnixNano())
+	randomIndex := rand.Intn(int(count))
 
-// GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
-func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
-	// Mendapatkan ID dari URL
-	pathSegments := strings.Split(r.URL.Path, "/")
-	id := pathSegments[len(pathSegments)-1]
+	// Query MongoDB untuk mendapatkan satu soal secara acak
+	findOptions := options.FindOne().SetSkip(int64(randomIndex))
+	var iqQuestion SoalIQ
+	err = config.Mongoconn.Collection("questioniq").FindOne(context.Background(), filter, findOptions).Decode(&iqQuestion)
 
-	// Filter untuk mendapatkan soal IQ berdasarkan ID
-	filter := bson.M{
-		"id":         id,
-		"deleted_at": bson.M{"$exists": false}, // Pastikan soal belum dihapus
-	}
-
-	// GetOneDoc dari helper atdb
-	iqQuestion, err := atdb.GetOneDoc[SoalIQ](config.Mongoconn, "questioniq", filter)
 	if err != nil {
-		log.Printf("Error querying IQ question with ID %s: %v", id, err)
-		at.WriteJSON(w, http.StatusNotFound, map[string]string{
-			"message": "Soal IQ tidak ditemukan.",
+		log.Printf("Error querying random IQ question: %v", err)
+		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{
+			"message": "Error querying random IQ question",
 			"error":   err.Error(),
 		})
 		return
