@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
@@ -23,17 +22,12 @@ type SoalIQ struct {
 }
 
 // GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
-func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
-	// Mendapatkan ID dari URL
-	pathSegments := strings.Split(r.URL.Path, "/")
-	id := pathSegments[len(pathSegments)-1]
-
+func GetOneIqQuestion(w http.ResponseWriter, r *http.Request, id string) {
 	// Filter untuk mendapatkan soal IQ berdasarkan ID
 	filter := bson.M{
 		"id":         id,
 		"deleted_at": bson.M{"$exists": false}, // Pastikan soal belum dihapus
 	}
-	log.Printf("ID yang diterima: %s", id)
 
 	var iqQuestion SoalIQ
 	err := config.Mongoconn.Collection("questioniq").FindOne(context.Background(), filter).Decode(&iqQuestion)
