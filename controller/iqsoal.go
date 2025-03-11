@@ -96,10 +96,13 @@ func GetIqScoring(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, results)
 }
 
-// POST hasil tes ke iqscore berdasarkan referensi dari iqscoring
 func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Metode tidak diizinkan", http.StatusMethodNotAllowed)
+		// Mengembalikan JSON error, bukan teks biasa
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Metode tidak diizinkan",
+		})
 		return
 	}
 
@@ -107,9 +110,11 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	var userScore struct {
 		Score string `json:"score"`
 	}
-	err := json.NewDecoder(r.Body).Decode(&userScore)
-	if err != nil {
-		http.Error(w, "Gagal membaca data", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&userScore); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Gagal membaca data: " + err.Error(),
+		})
 		return
 	}
 
@@ -117,10 +122,13 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	collectionScoring := config.Mongoconn.Collection("iqscoring")
 	var matchedScoring IqScoring
 
-	err = collectionScoring.FindOne(context.Background(), bson.M{"score": userScore.Score}).Decode(&matchedScoring)
+	err := collectionScoring.FindOne(context.Background(), bson.M{"score": userScore.Score}).Decode(&matchedScoring)
 	if err != nil {
 		log.Println("Skor tidak ditemukan dalam referensi:", err)
-		http.Error(w, "Skor tidak valid", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Skor tidak valid",
+		})
 		return
 	}
 
@@ -135,14 +143,19 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	insertResult, err := collectionScore.InsertOne(context.Background(), newIqScore)
 	if err != nil {
 		log.Println("Gagal menyimpan hasil tes:", err)
-		http.Error(w, "Gagal menyimpan data", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Gagal menyimpan data",
+		})
 		return
 	}
 
-	// Kirim respons sukses
+	// Kirim respons sukses (JSON)
 	response := map[string]interface{}{
 		"message": "Hasil tes berhasil disimpan",
 		"id":      insertResult.InsertedID,
+		"score":   userScore.Score,
+		"iq":      matchedScoring.IQ,
 	}
 	at.WriteJSON(w, http.StatusOK, response)
 }
