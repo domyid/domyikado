@@ -27,9 +27,11 @@ type SoalIQ struct {
 
 // Struct untuk menyimpan skor referensi dari iqscoring
 type IqScoring struct {
-	ID    primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
-	Score string             `json:"score" bson:"score"`
-	IQ    string             `json:"iq" bson:"iq"`
+	ID        string  `json:"id" bson:"id"`
+	Score     string  `json:"score" bson:"score"`
+	IQ        string  `json:"iq" bson:"iq"`
+	CreatedAt string  `json:"created_at" bson:"created_at"`
+	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
 
 // Struct untuk menyimpan hasil tes pengguna ke iqscore
