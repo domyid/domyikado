@@ -21,7 +21,7 @@ import (
 
 const (
 	// Discord webhook URL for logging
-	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/1348599740664647772/svXeCm0CPQ1uVK-R7TkYLtVX2DRpmlhW7tfiBEqY9J4Mc0IpLIpCdKFm-1rv7kx0zIyc"
+	MerchCoinDiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
 	MerchCoinWalletAddress     = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
 )
 
@@ -304,7 +304,7 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(10 * 60 * time.Second) // 10 minutes expiry
+	expiryTime := time.Now().Add(300 * time.Second) // 5 minutes expiry
 	_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -347,7 +347,7 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(10 * 60 * time.Second) // 10 minutes
+		time.Sleep(300 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.MerchCoinQueue
@@ -456,7 +456,6 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 				Status:        "pending",
 				Message:       "Checking mempool failed: " + err.Error(),
 				Step1Complete: false,
-				Step2Complete: false,
 				Step3Complete: false,
 			})
 			return
@@ -469,298 +468,62 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 				Status:        "pending",
 				Message:       "No transaction in mempool.",
 				Step1Complete: false,
-				Step2Complete: false,
 				Step3Complete: false,
 			})
 			return
 		}
 
-		// If we found a transaction in mempool, save it and return a response indicating
-		// we need to wait 3 minutes before proceeding to step 2
+		// If we found a transaction in mempool, proceed directly to step 3
 		if txid != "" {
-			if !order.Step1Complete {
-				// Only set these values if Step 1 is not already complete
-				step1CompleteTime := time.Now()
-				delayStep2Until := step1CompleteTime.Add(3 * time.Minute)
-
-				log.Printf("Setting Step 1 complete. Current time: %v, Delay until: %v",
-					step1CompleteTime.Format(time.RFC3339), delayStep2Until.Format(time.RFC3339))
-
-				// Update order with step 1 completion info
-				updateResult, err := config.Mongoconn.Collection("merchcoinorders").UpdateOne(
-					context.Background(),
-					bson.M{"orderId": orderID},
-					bson.M{"$set": bson.M{
-						"step1Complete":     true,
-						"txid":              txid,
-						"pendingAmount":     amount,
-						"step1CompleteTime": step1CompleteTime,
-						"delayStep2Until":   delayStep2Until,
-					}},
-				)
-				if err != nil {
-					log.Printf("Error updating order with step 1 completion: %v", err)
-				} else {
-					log.Printf("Updated step 1 completion: %v document(s) modified", updateResult.ModifiedCount)
-				}
-
-				// Verify the update by retrieving the document again
-				var updatedOrder model.MerchCoinOrder
-				err = config.Mongoconn.Collection("merchcoinorders").FindOne(
-					context.Background(),
-					bson.M{"orderId": orderID},
-				).Decode(&updatedOrder)
-
-				if err != nil {
-					log.Printf("Error retrieving updated order: %v", err)
-				} else {
-					log.Printf("Verified Step1Complete: %v, DelayStep2Until: %v",
-						updatedOrder.Step1Complete, updatedOrder.DelayStep2Until.Format(time.RFC3339))
-				}
-
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction found in mempool. Waiting 3 minutes before checking transaction history...",
-					Step1Complete:     true,
-					Step2Complete:     false,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: step1CompleteTime,
-					DelayStep2Until:   delayStep2Until,
-				})
-				return
-			}
-
-			// Check if we've already passed step 1
-		} else if order.Step1Complete && order.TxID != "" {
-			// Get the transaction ID from the order
-			txid := order.TxID
-			amount := order.PendingAmount
-
-			// Check if we should start Step 2 or are still in delay period
-			now := time.Now()
-			if now.Before(order.DelayStep2Until) {
-				// Still waiting for the 3-minute delay after Step 1
-				remainingTime := order.DelayStep2Until.Sub(now).Seconds()
-				log.Printf("Still waiting for Step 2 delay. Remaining time: %.0f seconds", remainingTime)
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           fmt.Sprintf("Transaction found in mempool. Waiting %.0f seconds before checking transaction history...", remainingTime),
-					Step1Complete:     true,
-					Step2Complete:     false,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-				})
-				return
-			}
-
-			// It's time to check Step 2 - check if transaction ID exists in history
-			txHistory, err := checkMerchCoinTxHistory(txid)
-			if err != nil {
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction found in mempool, but error checking history: " + err.Error(),
-					Step1Complete:     true,
-					Step2Complete:     false,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-				})
-				return
-			}
-
-			if !txHistory {
-				// Transaction not yet in history
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction found in mempool, checking transaction history... (This may take a few moments)",
-					Step1Complete:     true,
-					Step2Complete:     false,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-				})
-				return
-			}
-
-			// Step 2 completed - update order and set 30-second delay for Step 3
-			if !order.Step2Complete {
-				// Only set these values if Step 2 is not already complete
-				step2CompleteTime := time.Now()
-				delayStep3Until := step2CompleteTime.Add(30 * time.Second)
-
-				log.Printf("Setting Step 2 complete. Current time: %v, Delay until: %v",
-					step2CompleteTime.Format(time.RFC3339), delayStep3Until.Format(time.RFC3339))
-
-				// Update order status with Step 2 complete
-				updateResult, err := config.Mongoconn.Collection("merchcoinorders").UpdateOne(
-					context.Background(),
-					bson.M{"orderId": orderID},
-					bson.M{"$set": bson.M{
-						"step2Complete":     true,
-						"step2CompleteTime": step2CompleteTime,
-						"delayStep3Until":   delayStep3Until,
-					}},
-				)
-				if err != nil {
-					log.Printf("Error updating order with step 2 completion: %v", err)
-				} else {
-					log.Printf("Updated step 2 completion: %v document(s) modified", updateResult.ModifiedCount)
-				}
-
-				// Verify the update by retrieving the document again
-				var updatedOrder model.MerchCoinOrder
-				err = config.Mongoconn.Collection("merchcoinorders").FindOne(
-					context.Background(),
-					bson.M{"orderId": orderID},
-				).Decode(&updatedOrder)
-
-				if err != nil {
-					log.Printf("Error retrieving updated order: %v", err)
-				} else {
-					log.Printf("Verified Step2Complete: %v, DelayStep3Until: %v",
-						updatedOrder.Step2Complete, updatedOrder.DelayStep3Until.Format(time.RFC3339))
-				}
-
-				// Return response indicating Step 2 is complete and waiting for Step 3
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction found in history. Waiting 30 seconds before checking transaction details...",
-					Step1Complete:     true,
-					Step2Complete:     true,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-					Step2CompleteTime: step2CompleteTime,
-					DelayStep3Until:   delayStep3Until,
-				})
-				return
-			}
-
-			// If we've already completed Step 2 before, just return the current state
-			at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-				Success:           true,
-				Status:            "pending",
-				Message:           "Transaction found in history. Waiting before checking transaction details...",
-				Step1Complete:     true,
-				Step2Complete:     true,
-				Step3Complete:     false,
-				TxID:              txid,
-				Amount:            amount,
-				Step1CompleteTime: order.Step1CompleteTime,
-				DelayStep2Until:   order.DelayStep2Until,
-				Step2CompleteTime: order.Step2CompleteTime,
-				DelayStep3Until:   order.DelayStep3Until,
-			})
-			return
-		} else if order.Step1Complete && order.Step2Complete && !order.Step3Complete {
-			// We've completed Step 2, now check if we should start Step 3 or are still in delay period
-			now := time.Now()
-			txid := order.TxID
-			amount := order.PendingAmount
-
-			if now.Before(order.DelayStep3Until) {
-				// Still waiting for the 30-second delay after Step 2
-				remainingTime := order.DelayStep3Until.Sub(now).Seconds()
-				log.Printf("Still waiting for Step 3 delay. Remaining time: %.0f seconds", remainingTime)
-				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           fmt.Sprintf("Transaction found in history. Waiting %.0f seconds before checking transaction details...", remainingTime),
-					Step1Complete:     true,
-					Step2Complete:     true,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-					Step2CompleteTime: order.Step2CompleteTime,
-					DelayStep3Until:   order.DelayStep3Until,
-				})
-				return
-			} else {
-				log.Printf("Delay period for Step 3 has passed. Current time: %v, DelayStep3Until: %v",
-					now.Format(time.RFC3339), order.DelayStep3Until.Format(time.RFC3339))
-			}
-
-			// Time to process Step 3 - verify transaction details
+			// Step 3: Verify transaction details (skipping step 2)
 			txDetails, actualAmount, err := checkMerchCoinTxDetails(txid)
 			if err != nil {
 				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction found in history, but error checking details: " + err.Error(),
-					Step1Complete:     true,
-					Step2Complete:     true,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-					Step2CompleteTime: order.Step2CompleteTime,
-					DelayStep3Until:   order.DelayStep3Until,
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction found, but error checking details: " + err.Error(),
+					Step1Complete: true,
+					Step3Complete: false,
+					TxID:          txid,
+					Amount:        amount,
 				})
 				return
 			}
 
 			if !txDetails {
 				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction found in history, but details verification failed.",
-					Step1Complete:     true,
-					Step2Complete:     true,
-					Step3Complete:     false,
-					TxID:              txid,
-					Amount:            amount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-					Step2CompleteTime: order.Step2CompleteTime,
-					DelayStep3Until:   order.DelayStep3Until,
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction found, but details verification failed.",
+					Step1Complete: true,
+					Step3Complete: false,
+					TxID:          txid,
+					Amount:        amount,
 				})
 				return
 			}
+
 			// All steps complete, mark payment as successful
 			// Update order status to success
 			_, err = config.Mongoconn.Collection("merchcoinorders").UpdateOne(
 				context.Background(),
 				bson.M{"orderId": orderID},
 				bson.M{"$set": bson.M{
-					"status":        "success",
-					"step3Complete": true,
-					"amount":        actualAmount,
+					"status": "success",
+					"txid":   txid,
+					"amount": actualAmount,
 				}},
 			)
 			if err != nil {
 				log.Printf("Error updating MerchCoin order status: %v", err)
 				at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-					Success:           true,
-					Status:            "pending",
-					Message:           "Transaction verified but error updating order status: " + err.Error(),
-					Step1Complete:     true,
-					Step2Complete:     true,
-					Step3Complete:     true,
-					TxID:              txid,
-					Amount:            actualAmount,
-					Step1CompleteTime: order.Step1CompleteTime,
-					DelayStep2Until:   order.DelayStep2Until,
-					Step2CompleteTime: order.Step2CompleteTime,
-					DelayStep3Until:   order.DelayStep3Until,
+					Success:       true,
+					Status:        "pending",
+					Message:       "Transaction verified but error updating order status: " + err.Error(),
+					Step1Complete: true,
+					Step3Complete: true,
+					TxID:          txid,
+					Amount:        actualAmount,
 				})
 				return
 			}
@@ -796,18 +559,13 @@ func CheckMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 
 			// Return success response
 			at.WriteJSON(w, http.StatusOK, model.MerchCoinPaymentResponse{
-				Success:           true,
-				Status:            "success",
-				Message:           "Payment confirmed successfully!",
-				Step1Complete:     true,
-				Step2Complete:     true,
-				Step3Complete:     true,
-				TxID:              txid,
-				Amount:            actualAmount,
-				Step1CompleteTime: order.Step1CompleteTime,
-				DelayStep2Until:   order.DelayStep2Until,
-				Step2CompleteTime: order.Step2CompleteTime,
-				DelayStep3Until:   order.DelayStep3Until,
+				Success:       true,
+				Status:        "success",
+				Message:       "Payment confirmed successfully!",
+				Step1Complete: true,
+				Step3Complete: true,
+				TxID:          txid,
+				Amount:        actualAmount,
 			})
 			return
 		}
@@ -888,8 +646,6 @@ func checkMerchCoinTxHistory(txid string) (bool, error) {
 		}
 	}
 
-	// Transaction not found in history - but we don't consider this an error
-	// The caller should keep trying until it's found or timeout occurs
 	return false, nil
 }
 
@@ -980,12 +736,9 @@ func ManuallyConfirmMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 		context.Background(),
 		bson.M{"orderId": orderID},
 		bson.M{"$set": bson.M{
-			"status":        "success",
-			"txid":          request.TxID,
-			"amount":        request.Amount,
-			"step1Complete": true,
-			"step2Complete": true,
-			"step3Complete": true,
+			"status": "success",
+			"txid":   request.TxID,
+			"amount": request.Amount,
 		}},
 	)
 	if err != nil {
@@ -1135,12 +888,9 @@ func SimulateMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 		context.Background(),
 		bson.M{"orderId": order.OrderID},
 		bson.M{"$set": bson.M{
-			"status":        "success",
-			"txid":          request.TxID,
-			"amount":        request.Amount,
-			"step1Complete": true,
-			"step2Complete": true,
-			"step3Complete": true,
+			"status": "success",
+			"txid":   request.TxID,
+			"amount": request.Amount,
 		}},
 	)
 	if err != nil {
