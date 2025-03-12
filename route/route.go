@@ -173,6 +173,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	//strava coba
 	case method == "GET" && path == "/api/strava/activities":
 		controller.GetStravaActivities(w, r)
+	case method == "GET" && path == "/refresh/reportmingguan":
+		controller.GetNewCode(w, r)
 	default:
 		controller.NotFound(w, r)
 	}

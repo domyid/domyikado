@@ -90,6 +90,54 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 
 }
 
+func RekapMingguIni(db *mongo.Database) (err error) {
+	filter := bson.M{"_id": WeeklyFilter()}
+	wagroupidlist, err := atdb.GetAllDistinctDoc(db, filter, "project.wagroupid", "pushrepo")
+	if err != nil {
+		return errors.New("Gagal Query Distinct project.wagroupid: " + err.Error())
+	}
+
+	var lastErr error // Variabel untuk menyimpan kesalahan terakhir
+
+	for _, gid := range wagroupidlist { // Iterasi di setiap wa group
+		// Type assertion to convert any to string
+		groupID, ok := gid.(string)
+		if !ok {
+			lastErr = errors.New("wagroupid is not a string")
+			continue
+		}
+		var msg, perwakilanphone string
+		msg, perwakilanphone, err = GenerateRekapMessageMingguIniPerWAGroupID(db, groupID)
+		if err != nil {
+			lastErr = errors.New("Gagal Membuat Rekapitulasi perhitungan per wa group id: " + err.Error())
+			continue
+		}
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+		//protokol baru untuk wa group id mengandung hyphen tidak bisa maka jangan kirim report ke group tapi owner
+		if strings.Contains(groupID, "-") {
+			dt.To = perwakilanphone
+			dt.IsGroup = false
+		}
+		//kirim wa ke api
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
+}
+
 func RekapPagiHari(db *mongo.Database) (err error) {
 	filter := bson.M{"_id": YesterdayFilter()}
 	wagroupidlist, err := atdb.GetAllDistinctDoc(db, filter, "project.wagroupid", "pushrepo")
@@ -137,3 +185,4 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 
 	return nil
 }
+
