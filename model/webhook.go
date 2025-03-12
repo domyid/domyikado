@@ -52,7 +52,7 @@ type Userdomyikado struct {
 	SponsorPhoneNumber   string             `json:"sponsorphonenumber,omitempty" bson:"sponsorphonenumber,omitempty"`
 	StravaProfilePicture string             `json:"stravaprofilepicture,omitempty" bson:"stravaprofilepicture,omitempty"`
 	NPM                  string             `json:"npm,omitempty" bson:"npm,omitempty"`
-	Wonpaywallet         string             `json:"Wonpaywallet,omitempty" bson:"Wonpaywallet,omitempty"`
+	Wonpaywallet         string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
 }
 
 type Task struct {
