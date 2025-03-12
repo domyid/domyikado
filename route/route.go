@@ -155,11 +155,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/api/iqscoring":
 		controller.GetIqScoring(w, r) // Mengambil referensi skor IQ
 	case method == "POST" && path == "/api/iq/score":
-		w.Header().Set("Access-Control-Allow-Origin", "http://127.0.0.1:5501")
-		w.Header().Set("Access-Control-Allow-Methods", "POST")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Max-Age", "3600")
-		w.WriteHeader(http.StatusNoContent)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostIqScore(w, r) // Menyimpan hasil tes IQ ke database
 	// Pomodoro
 	case method == "GET" && path == ("/api/pomokit/report"):

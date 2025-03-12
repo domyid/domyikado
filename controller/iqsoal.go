@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -117,9 +116,9 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Gagal membaca data"})
 		return
 	}
-	if _, err := strconv.Atoi(userScore.Score); err != nil {
+	if strings.TrimSpace(userScore.Score) == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Format Skor Tidak Valid"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Score kosong"})
 		return
 	}
 
