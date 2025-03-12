@@ -158,11 +158,11 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostIqScore(w, r) // Menyimpan hasil tes IQ ke database
 	// Pomodoro
-	case method == "GET" && path == ("/api/pomodoro/cycles"):
+	case method == "GET" && path == ("/api/pomokit/report"):
 		controller.GetAllReportCycle(w, r)
-	case method == "GET" && path == "/api/pomodoro/cycles":
+	case method == "GET" && path == "/api/pomokit/report/id":
 		controller.GetReportCycleById(w, r)
-	case method == "POST" && path == "/api/pomodoro/cycles":
+	case method == "POST" && path == "/api/pomokit/postreport":
 		controller.PostReport(w, r)
 	// Google Auth
 	// Tracker
