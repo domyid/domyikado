@@ -97,8 +97,8 @@ func GetIqScoring(w http.ResponseWriter, r *http.Request) {
 }
 
 func PostIqScore(w http.ResponseWriter, r *http.Request) {
+	// Pastikan metode HTTP adalah POST
 	if r.Method != http.MethodPost {
-		// Mengembalikan JSON error, bukan teks biasa
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": "Metode tidak diizinkan",
@@ -106,11 +106,9 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Terima data skor dari frontend
-	var userScore struct {
-		Score string `json:"score"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&userScore); err != nil {
+	// Terima data jawaban dari frontend dalam bentuk array string
+	var userAnswers []string
+	if err := json.NewDecoder(r.Body).Decode(&userAnswers); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": "Gagal membaca data: " + err.Error(),
@@ -118,11 +116,23 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pastikan array tidak kosong
+	if len(userAnswers) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Daftar jawaban kosong",
+		})
+		return
+	}
+
+	// Ambil 'score' dari elemen pertama array (misalnya userAnswers[0])
+	scoreRef := userAnswers[0]
+
 	// Ambil referensi skor dari iqscoring
 	collectionScoring := config.Mongoconn.Collection("iqscoring")
 	var matchedScoring IqScoring
 
-	err := collectionScoring.FindOne(context.Background(), bson.M{"score": userScore.Score}).Decode(&matchedScoring)
+	err := collectionScoring.FindOne(context.Background(), bson.M{"score": scoreRef}).Decode(&matchedScoring)
 	if err != nil {
 		log.Println("Skor tidak ditemukan dalam referensi:", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -135,8 +145,8 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	// Simpan hasil tes ke iqscore
 	collectionScore := config.Mongoconn.Collection("iqscore")
 	newIqScore := IqScore{
-		Score:     userScore.Score,
-		IQ:        matchedScoring.IQ,
+		Score:     scoreRef,          // Gunakan scoreRef sebagai 'score'
+		IQ:        matchedScoring.IQ, // Ambil IQ dari referensi
 		CreatedAt: time.Now(),
 	}
 
@@ -152,10 +162,12 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 
 	// Kirim respons sukses (JSON)
 	response := map[string]interface{}{
-		"message": "Hasil tes berhasil disimpan",
-		"id":      insertResult.InsertedID,
-		"score":   userScore.Score,
-		"iq":      matchedScoring.IQ,
+		"message":           "Hasil tes berhasil disimpan",
+		"id":                insertResult.InsertedID,
+		"score":             scoreRef,
+		"iq":                matchedScoring.IQ,
+		"all_input_answers": userAnswers, // (opsional) menyimpan semua jawaban
 	}
+	// Gunakan helper at.WriteJSON agar response JSON terformat dengan baik
 	at.WriteJSON(w, http.StatusOK, response)
 }
