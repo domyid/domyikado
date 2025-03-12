@@ -10,7 +10,7 @@ import (
 
 func GetStravaActivities(respw http.ResponseWriter, req *http.Request) {
 	api := "https://asia-southeast1-awangga.cloudfunctions.net/wamyid/strava/activities"
-	scode, doc, err := atapi.Get[model.Response](api)
+	scode, doc, err := atapi.Get[[]model.Response](api)
 	if err != nil {
 		at.WriteJSON(respw, scode, model.Response{Response: err.Error()})
 		return
