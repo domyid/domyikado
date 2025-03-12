@@ -169,6 +169,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/tracker":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
+
+	//strava coba
+	case method == "GET" && path == "/api/strava/activities":
+		controller.GetStravaActivities(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
