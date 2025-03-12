@@ -13,13 +13,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func GetCycle(respw http.ResponseWriter, req *http.Request) {
+func GetAllReportCycle(respw http.ResponseWriter, req *http.Request) {
 	docuser, err := watoken.ParseToken(respw, req)
 	if err != nil {
 		return
 	}
 	
-	existingCycles, err := atdb.GetAllDoc[[]model.PomodoroReport](config.Mongoconn, "cycles", primitive.M{"owner._id": docuser.ID})
+	existingCycles, err := atdb.GetAllDoc[[]model.PomodoroReport](config.Mongoconn, "pomokitreport", primitive.M{"owner._id": docuser.ID})
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Data cycle tidak di temukan"
@@ -39,7 +39,48 @@ func GetCycle(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, existingCycles)
 }
 
-func PostCycle(respw http.ResponseWriter, req *http.Request) {
+func GetReportCycleById(respw http.ResponseWriter, req *http.Request) {
+    // Otentikasi pengguna
+    docuser, err := watoken.ParseToken(respw, req)
+    if err != nil {
+        return
+    }
+    
+    // Mendapatkan ID dari parameter URL
+    cycleId := req.URL.Query().Get("id")
+    if cycleId == "" {
+        var respn model.Response
+        respn.Status = "Error : ID tidak diberikan"
+        respn.Response = "Parameter ID diperlukan"
+        at.WriteJSON(respw, http.StatusBadRequest, respn)
+        return
+    }
+    
+    // Konversi string ID ke ObjectID
+    objectID, err := primitive.ObjectIDFromHex(cycleId)
+    if err != nil {
+        var respn model.Response
+        respn.Status = "Error : Format ID tidak valid"
+        respn.Response = err.Error()
+        at.WriteJSON(respw, http.StatusBadRequest, respn)
+        return
+    }
+    
+    // Mendapatkan dokumen spesifik berdasarkan ID dan verifikasi pemilik
+    cycle, err := atdb.GetOneDoc[model.PomodoroReport](config.Mongoconn, "pomokitreport", 
+        primitive.M{"_id": objectID, "owner._id": docuser.ID})
+    if err != nil {
+        var respn model.Response
+        respn.Status = "Error : Data cycle tidak ditemukan"
+        respn.Response = err.Error()
+        at.WriteJSON(respw, http.StatusNotFound, respn)
+        return
+    }
+    
+    at.WriteJSON(respw, http.StatusOK, cycle)
+}
+
+func PostReport(respw http.ResponseWriter, req *http.Request) {
 	payload, err := watoken.ParseToken(respw, req)
 	if err != nil {
 		var respn model.Response
@@ -88,7 +129,7 @@ func PostCycle(respw http.ResponseWriter, req *http.Request) {
 	cycle.CreatedAt = obtainablereport.CreatedAt
 
 	
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "pomokit", cycle)
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "pomokitreport", cycle)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Data cycle tidak di temukan"
