@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -154,6 +155,7 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 		"iq":      matchedScoring.IQ,
 	}
 	// Gunakan helper at.WriteJSON agar response JSON terformat dengan baik
+	fmt.Println("Response ke frontend:", response) // Debugging
 	at.WriteJSON(w, http.StatusOK, response)
 }
 
