@@ -118,7 +118,8 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := strconv.Atoi(userScore.Score); err != nil {
-		http.Error(w, "Format skor tidak valid", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Format Skor Tidak Valid"})
 		return
 	}
 
