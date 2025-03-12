@@ -125,7 +125,8 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 
 	// Cari referensi IQ di iqscoring
 	var matchedScoring IqScoring
-	err := config.Mongoconn.Collection("iqscoring").FindOne(context.TODO(), bson.M{"score": userScore.Score}).Decode(&matchedScoring)
+	filter := bson.M{"score": userScore.Score}
+	err := config.Mongoconn.Collection("iqscoring").FindOne(context.TODO(), filter).Decode(&matchedScoring)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Skor tidak valid"})
