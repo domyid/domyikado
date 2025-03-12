@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,7 +37,9 @@ type IqScoring struct {
 
 // Struct untuk menyimpan hasil tes pengguna ke iqscore
 type IqScore struct {
-	ID        string     `json:"id,omitempty" bson:"id,omitempty"`
+	ID string `json:"id,omitempty" bson:"id,omitempty"`
+	// Name        string     `json:"name,omitempty" bson:"name,omitempty"`
+	// PhoneNumber string     `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
 	Score     string     `json:"score" bson:"score"`
 	IQ        string     `json:"iq" bson:"iq"`
 	CreatedAt time.Time  `json:"created_at" bson:"created_at"`
@@ -114,9 +117,8 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Gagal membaca data"})
 		return
 	}
-	if strings.TrimSpace(userScore.Score) == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Score kosong"})
+	if _, err := strconv.Atoi(userScore.Score); err != nil {
+		http.Error(w, "Format skor tidak valid", http.StatusBadRequest)
 		return
 	}
 
@@ -154,3 +156,31 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	// Gunakan helper at.WriteJSON agar response JSON terformat dengan baik
 	at.WriteJSON(w, http.StatusOK, response)
 }
+
+// func PostIQScore(w http.ResponseWriter, r *http.Request) {
+// 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+// 	if err != nil {
+// 		var respn model.Response
+// 		respn.Status = "Error : Token Tidak Valid"
+// 		respn.Info = at.GetSecretFromHeader(r)
+// 		respn.Location = "Decode Token Error"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(w, http.StatusForbidden, respn)
+// 		return
+// 	}
+// 	var usr model.Userdomyikado
+// 	err = json.NewDecoder(r.Body).Decode(&usr)
+// 	if err != nil {
+// 		var respn model.Response
+// 		respn.Status = "Error : Body tidak valid"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(w, http.StatusBadRequest, respn)
+// 		return
+// 	}
+// 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+// 	if err != nil {
+// 		usr.PhoneNumber = payload.Id
+// 		usr.Name = payload.Alias
+
+// 	}
+// }
