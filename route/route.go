@@ -153,10 +153,11 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)
 	case method == "GET" && path == "/api/iqscoring":
-		controller.GetIqScoring(w, r) // Mengambil referensi skor IQ
+		controller.GetIqScoring(w, r)
+	case method == "POST" && path == "/api/iq/answer":
+		controller.PostAnswer(w, r)
 	case method == "POST" && path == "/api/iq/score":
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		controller.PostIqScore(w, r) // Menyimpan hasil tes IQ ke database
+		controller.PostIqScore(w, r)
 	// Pomodoro
 	case method == "GET" && path == ("/api/pomokit/report"):
 		controller.GetAllReportCycle(w, r)

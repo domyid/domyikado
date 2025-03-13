@@ -46,6 +46,10 @@ type IqScore struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
 
+type UserAnswer struct {
+	Answers []string `json:"answers"` // Contoh: ["4", "2", "3", "TIDAK"]
+}
+
 // GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
 func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
 	// Mendapatkan ID dari URL
@@ -99,6 +103,53 @@ func GetIqScoring(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, results)
 }
 
+// Fungsi untuk mengambil jawaban dari database dan mengonversinya
+func PostAnswer(w http.ResponseWriter, r *http.Request) {
+	var userAnswer UserAnswer
+	err := json.NewDecoder(r.Body).Decode(&userAnswer)
+	if err != nil {
+		http.Error(w, `{"error": "Gagal membaca data"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Ambil semua jawaban benar dari MongoDB
+	collection := config.Mongoconn.Collection("iqquestion")
+	cursor, err := collection.Find(context.TODO(), bson.M{})
+	if err != nil {
+		http.Error(w, `{"error": "Gagal mengambil data dari database"}`, http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	var correctAnswers []SoalIQ
+	if err = cursor.All(context.TODO(), &correctAnswers); err != nil {
+		http.Error(w, `{"error": "Gagal membaca jawaban dari database"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Konversi jawaban pengguna
+	convertedAnswers := make([]string, len(userAnswer.Answers))
+	for i, answer := range userAnswer.Answers {
+		if i < len(correctAnswers) {
+			if correctAnswers[i].AnswerKey != nil {
+				convertedAnswers[i] = *correctAnswers[i].AnswerKey // Dereference pointer
+			} else {
+				convertedAnswers[i] = answer // Jika nil, gunakan jawaban asli
+			}
+		} else {
+			convertedAnswers[i] = answer
+		}
+	}
+
+	// Kirim hasil kembali ke frontend
+	response := map[string]interface{}{
+		"message": "Jawaban berhasil dikonversi",
+		"answers": convertedAnswers,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // PostIqScore menghitung finalScore berdasarkan kecocokan jawaban dengan answer_key, lalu ambil IQ dari iqscoring
 func PostIqScore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -135,7 +186,7 @@ func PostIqScore(w http.ResponseWriter, r *http.Request) {
 
 	// Simpan ke iqscore
 	newIqScore := IqScore{
-		ID:        primitive.NewObjectID().Hex(), // Buat string unik
+		ID:        primitive.NewObjectID().Hex(),
 		Score:     userScore.Score,
 		IQ:        matchedScoring.IQ,
 		CreatedAt: time.Now(),
