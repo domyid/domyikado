@@ -155,8 +155,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/api/iqscoring":
 		controller.GetIqScoring(w, r)
 	case method == "POST" && path == "/api/iq/answer":
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostAnswer(w, r)
 	case method == "POST" && path == "/api/iq/score":
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostIqScore(w, r)
 	// Pomodoro
 	case method == "GET" && path == ("/api/pomokit/report"):
