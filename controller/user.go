@@ -263,9 +263,19 @@ func PostDataUserFromWA(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusOK, resp)
 		return
 	}
-	docuser.Name = usr.Name
-	docuser.Email = usr.Email
-	docuser.StravaProfilePicture = usr.StravaProfilePicture
+	// docuser.Name = usr.Name
+	// docuser.Email = usr.Email
+	// docuser.StravaProfilePicture = usr.StravaProfilePicture
+	if usr.Email != "" {
+		docuser.Email = usr.Email
+	}
+	if usr.Name != "" {
+		docuser.Name = usr.Name
+	}
+	if usr.StravaProfilePicture != "" {
+		docuser.StravaProfilePicture = usr.StravaProfilePicture
+	}
+
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": usr.PhoneNumber}, docuser)
 	if err != nil {
 		resp.Response = "Gagal replaceonedoc"
