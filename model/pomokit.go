@@ -22,6 +22,6 @@ type PomodoroReport struct {
 
 type PomokitResponse struct {
     Success bool              `json:"success"`
-    Data    []PomodoroReport `json:"data"`
+    Data    []PomodoroReport  `json:"data"`
     Message string            `json:"message,omitempty"`
 }

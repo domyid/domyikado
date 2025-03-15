@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 )
 
 func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
-    // Validasi token
+    // [1] Validasi Token
     payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
     if err != nil {
         at.WriteJSON(respw, http.StatusForbidden, model.Response{
@@ -28,7 +29,7 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // Ambil konfigurasi dari database
+    // [2] Ambil Config dari Database
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -43,13 +44,21 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // HTTP Client dengan timeout
-    client := &http.Client{
-        Timeout: 10 * time.Second,
+    // [3] HTTP Request dengan Token
+    client := &http.Client{Timeout: 15 * time.Second}
+    req, err = http.NewRequest("GET", conf.PomokitUrl, nil)
+    if err != nil {
+        at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+            Status:   "Error: API Request Failed",
+            Location: "API Preparation",
+            Response: err.Error(),
+        })
+        return
     }
-    
-    // Request ke API Pomokit
-    resp, err := client.Get(conf.PomokitUrl)
+    req.Header.Add("login", at.GetLoginFromHeader(req)) // Sesuaikan dengan header auth yang diperlukan
+
+    // [4] Eksekusi Request
+    resp, err := client.Do(req)
     if err != nil {
         at.WriteJSON(respw, http.StatusBadGateway, model.Response{
             Status:   "Error: API Connection Failed",
@@ -60,37 +69,39 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
     }
     defer resp.Body.Close()
 
-    // Cek status response
+    // [5] Handle Status Code
     if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
         at.WriteJSON(respw, http.StatusBadGateway, model.Response{
             Status:   fmt.Sprintf("Error: API Returned Status %d", resp.StatusCode),
             Location: "Pomokit API",
-            Response: "Invalid response from Pomokit service",
+            Response: string(body),
         })
         return
     }
 
-    // Decode response
-    var apiResponse model.PomokitResponse
+    // [6] Decode Response Langsung ke Slice
+    var apiResponse []model.PomodoroReport
     if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+        body, _ := io.ReadAll(resp.Body)
         at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
             Status:   "Error: Invalid API Response",
             Location: "Response Decoding",
-            Response: err.Error(),
+            Response: fmt.Sprintf("Error: %v, Raw Response: %s", err, string(body)),
         })
         return
     }
 
-    // Cari user berdasarkan nomor telepon
+    // [7] Cari User
     var foundReport *model.PomodoroReport
-    for _, report := range apiResponse.Data {
+    for _, report := range apiResponse {
         if report.PhoneNumber == payload.Id {
             foundReport = &report
             break
         }
     }
 
-    // Jika tidak ditemukan
+    // [8] Handle User Tidak Ditemukan
     if foundReport == nil {
         at.WriteJSON(respw, http.StatusNotFound, model.PomodoroReport{
             PhoneNumber: payload.Id,
@@ -99,11 +110,8 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // Update nama dari payload jika diperlukan
-    if foundReport.Name != payload.Alias {
-        foundReport.Name = payload.Alias
-    }
-
+    // [9] Update Data
+    foundReport.Name = payload.Alias
     at.WriteJSON(respw, http.StatusOK, foundReport)
 }
 
@@ -180,3 +188,4 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
 
     at.WriteJSON(respw, http.StatusOK, apiResponse.Data)
 }
+
