@@ -39,13 +39,13 @@ type IqScoring struct {
 
 // Struct untuk menyimpan hasil tes pengguna ke iqscore
 type IqScore struct {
-	ID          string     `json:"id,omitempty" bson:"id,omitempty"`
-	Name        string     `json:"name,omitempty" bson:"name,omitempty"`
-	PhoneNumber string     `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
-	Score       string     `json:"score" bson:"score"`
-	IQ          string     `json:"iq" bson:"iq"`
-	CreatedAt   time.Time  `json:"created_at" bson:"created_at"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	ID          primitive.ObjectID `json:"id,omitempty" bson:"id,omitempty"`
+	Name        string             `json:"name,omitempty" bson:"name,omitempty"`
+	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
+	Score       string             `json:"score" bson:"score"`
+	IQ          string             `json:"iq" bson:"iq"`
+	CreatedAt   time.Time          `json:"created_at" bson:"created_at"`
+	UpdatedAt   *time.Time         `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
 
 type UserAnswer struct {
@@ -172,6 +172,7 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 
 	// Kirim hasil dalam format JSON
 	response := map[string]interface{}{
+		"id":        iqScore.ID.Hex(),
 		"name":      iqScore.Name,
 		"score":     iqScore.Score,
 		"iq":        iqScore.IQ,
@@ -241,7 +242,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	// 7️⃣ **Simpan Hasil ke MongoDB*
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	newIqScore := IqScore{
-		ID:        primitive.NewObjectID().Hex(),
+		ID:        primitive.NewObjectID(),
 		Name:      userAnswer.Name,
 		Score:     fmt.Sprintf("%d", correctCount),
 		IQ:        iqScoring.IQ,
