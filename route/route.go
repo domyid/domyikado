@@ -167,10 +167,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostAnswer(w, r)
 	// Pomodoro
-	case method == "GET" && path == ("/api/pomokit/report"):
-		controller.GetPomokitDataUser(w, r)
-	case method == "GET" && path == "/api/pomokit/allreport":
-		controller.GetPomokitAllDataUser(w, r)
+	// case method == "GET" && path == ("/api/pomokit/report"):
+	// 	controller.GetPomokitDataUser(w, r)
+	// case method == "GET" && path == "/api/pomokit/allreport":
+	// 	controller.GetPomokitAllDataUser(w, r)
 	// Google Auth
 	// Tracker
 	case method == "POST" && path == "/api/tracker":
@@ -190,12 +190,12 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	// case method == "GET" && path == "/refresh/report/pomokit/harian":
 	// 	controller.GetPomokitDailyReport(w, r)
-	case method == "GET" && path == "/refresh/report/pomokit/mingguan":
-		controller.GetPomokitWeeklySummary(w, r)
-	case method == "GET" && path == "/data/pomokit/report":
-		controller.GetPomokitReport(w, r)
-	case method == "GET" && path == "/data/pomokit/batch":
-		controller.BatchPomokitProcess(w, r)
+	// case method == "GET" && path == "/refresh/report/pomokit/mingguan":
+	// 	controller.GetPomokitWeeklySummary(w, r)
+	// case method == "GET" && path == "/data/pomokit/report":
+	// 	controller.GetPomokitReport(w, r)
+	// case method == "GET" && path == "/data/pomokit/batch":
+	// 	controller.BatchPomokitProcess(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
