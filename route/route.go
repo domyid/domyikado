@@ -169,6 +169,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetIQScoreUser(w, r)
 	case method == "GET" && path == "/api/iq/user":
 		controller.GetIqScoreByLoginHeader(w, r)
+	case method == "GET" && path == "/api/iq/new":
+		controller.GetUserAndIqScore(w, r)
 	case method == "POST" && path == "/api/iq/answer":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostAnswer(w, r)
