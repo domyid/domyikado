@@ -19,7 +19,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // GetPomokitDataHarian mengambil data Pomokit untuk periode tertentu
@@ -532,7 +531,8 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
         location = time.Local
     }
     
-    userActivityCounts := make(map[string]float64)
+    // Count every individual activity
+    userActivityCounts := make(map[string]int)
     userInfo := make(map[string]struct {
         Name     string
         GroupID  string
@@ -541,6 +541,9 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
     dateSet := make(map[string]bool)
     earliestDate := time.Now()
     latestDate := time.Time{}
+    
+    // Kumpulkan semua tanggal aktivitas
+    activityDates := make(map[string]map[string]bool) // phoneNumber -> dateStr -> bool
     
     for _, report := range allPomokitData {
         phoneNumber := report.PhoneNumber
@@ -558,10 +561,18 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
             GroupID:  groupID,
         }
         
+        // Count each activity individually
         userActivityCounts[phoneNumber]++
         
+        // Proses informasi tanggal
         activityTime := report.CreatedAt.In(location)
         dateStr := activityTime.Format("2006-01-02")
+        
+        // Tambahkan ke activityDates
+        if _, exists := activityDates[phoneNumber]; !exists {
+            activityDates[phoneNumber] = make(map[string]bool)
+        }
+        activityDates[phoneNumber][dateStr] = true
         
         if activityTime.Before(earliestDate) {
             earliestDate = activityTime
@@ -573,68 +584,37 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
         dateSet[dateStr] = true
     }
     
+    // Convert date set to slice for iteration
     var allDates []string
     for dateStr := range dateSet {
         allDates = append(allDates, dateStr)
     }
     
+    // Sort dates from oldest to newest
     sort.Strings(allDates)
     
+    // Calculate penalties for days without activity
     userPoints := make(map[string]float64)
-    daysWithoutActivity := make(map[string]int)
     
     for phoneNumber := range userInfo {
-        userPoints[phoneNumber] = userActivityCounts[phoneNumber]
-        daysWithoutActivity[phoneNumber] = 0
+        // Start with the activity count
+        userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber])
         
+        // For each date in the dataset
         for _, dateStr := range allDates {
             date, _ := time.Parse("2006-01-02", dateStr)
             isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
             isHoliday := HariLibur(date)
             
+            // Skip weekends and holidays for penalty calculation
             if isWeekend || isHoliday {
                 continue
             }
             
-            userHasActivityOnDate := false
-            for _, report := range allPomokitData {
-                if report.PhoneNumber == phoneNumber {
-                    reportDate := report.CreatedAt.In(location).Format("2006-01-02")
-                    if reportDate == dateStr {
-                        userHasActivityOnDate = true
-                        break
-                    }
-                }
-            }
-            
-            if !userHasActivityOnDate {
+            // Periksa apakah pengguna memiliki aktivitas pada tanggal ini
+            if activityDates[phoneNumber] == nil || !activityDates[phoneNumber][dateStr] {
                 userPoints[phoneNumber] -= 1
-                daysWithoutActivity[phoneNumber]++
             }
-        }
-    }
-    
-    for phoneNumber, points := range userPoints {
-        info := userInfo[phoneNumber]
-        
-        pomokitPoin := PomokitPoin{
-            ID:          primitive.NewObjectID(),
-            UserID:      primitive.NewObjectID(),
-            Name:        info.Name,
-            PhoneNumber: phoneNumber,
-            GroupID:     info.GroupID,
-            PoinPomokit: points,
-            CreatedAt:   time.Now(),
-        }
-        
-        // Use upsert to avoid duplicates
-        filter := bson.M{"phonenumber": phoneNumber}
-        update := bson.M{"$set": pomokitPoin}
-        opts := options.Update().SetUpsert(true)
-        
-        _, err := db.Collection("pomokitpoin").UpdateOne(context.Background(), filter, update, opts)
-        if err != nil {
-            fmt.Printf("ERROR: Failed to update pomokitpoin for %s: %v\n", phoneNumber, err)
         }
     }
     
@@ -644,7 +624,7 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
         Name         string
         PhoneNumber  string
         Points       float64
-        ActivityCount float64
+        ActivityCount int
     }
     
     var userPointsList []UserPoint
@@ -668,12 +648,13 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
             displayName = "Pengguna " + up.PhoneNumber
         }
         
+        // Format baru: menampilkan total poin dalam kurung, bukan jumlah aktivitas
         if up.Points >= 0 {
-            msg += fmt.Sprintf("✅ %s (%s): +%.0f poin (%d aktivitas)\n", 
-                displayName, up.PhoneNumber, up.Points, int(up.ActivityCount))
+            msg += fmt.Sprintf("✅ %s (%s): +%.0f poin (total: %.0f)\n", 
+                displayName, up.PhoneNumber, up.Points, up.Points)
         } else {
-            msg += fmt.Sprintf("⛔ %s (%s): %.0f poin (%d aktivitas)\n", 
-                displayName, up.PhoneNumber, up.Points, int(up.ActivityCount))
+            msg += fmt.Sprintf("⛔ %s (%s): %.0f poin (total: %.0f)\n", 
+                displayName, up.PhoneNumber, up.Points, up.Points)
         }
     }
     
