@@ -275,7 +275,7 @@ func RekapPomokitHarian(db *mongo.Database) (err error) {
 
 func RekapTotalPomokitPoin(db *mongo.Database) (err error) {
     // Generate rekap
-    msg, err := GenerateTotalPomokitReport(db)
+    msg, err := GenerateTotalPomokitReportNoPenalty(db)
     if err != nil {
         return err
     }
