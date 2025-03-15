@@ -230,22 +230,25 @@ func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode token menggunakan watoken.Decode()
+	// Decode token untuk mendapatkan `phonenumber`
 	publicKey := "your-public-key-here" // Ganti dengan public key yang valid
-	payload, err := watoken.Decode(publicKey, loginToken)
+	decodedPayload, err := watoken.Decode(publicKey, loginToken)
 	if err != nil {
-		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
+		http.Error(w, `{"error": "Token tidak valid atau tidak dapat didecode"}`, http.StatusUnauthorized)
 		return
 	}
 
-	// Ambil phonenumber dari token
-	phoneNumber := payload.Id
+	// Ambil `phonenumber` dari payload
+	phoneNumber := decodedPayload.Id
 	if phoneNumber == "" {
 		http.Error(w, `{"error": "Nomor telepon tidak ditemukan dalam token"}`, http.StatusUnauthorized)
 		return
 	}
 
-	// Koneksi ke MongoDB untuk mendapatkan data user berdasarkan phonenumber
+	// Debugging
+	fmt.Println("✅ Phonenumber dari Token:", phoneNumber)
+
+	// Cari data user di koleksi `user` berdasarkan `phonenumber`
 	userCollection := config.Mongoconn.Collection("user")
 	var user model.Userdomyikado
 	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
@@ -254,7 +257,7 @@ func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Koneksi ke MongoDB untuk mendapatkan skor IQ berdasarkan name di `iqscore`
+	// Cari skor IQ berdasarkan `name` di koleksi `iqscore`
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	var iqScore IqScore
 	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": user.Name}).Decode(&iqScore)
@@ -262,26 +265,24 @@ func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
 	var userScore, userIQ string
 
 	if err == nil {
-		// Jika data `iqscore` ditemukan
+		// Jika `iqscore` ditemukan
 		userScore = iqScore.Score
 		userIQ = iqScore.IQ
 	} else {
-		// Jika `iqscore` tidak ditemukan, periksa `score` di `iqscoring`
+		// Jika tidak ditemukan, cek `iqscoring`
 		iqScoringCollection := config.Mongoconn.Collection("iqscoring")
 		var iqScoring IqScoring
 		err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": userScore}).Decode(&iqScoring)
 
 		if err == nil {
-			// Jika ditemukan, gunakan `iq` dari iqscoring
 			userIQ = iqScoring.IQ
 		} else {
-			// Jika `score` juga tidak ditemukan, gunakan nilai default
 			userScore = "Belum ada skor"
 			userIQ = "Belum ada data"
 		}
 	}
 
-	// Gabungkan data user dan skor IQ dalam satu response
+	// Gabungkan data user dan skor IQ dalam satu response JSON
 	response := UserWithIqScore{
 		ID:          user.ID,
 		Name:        user.Name,
