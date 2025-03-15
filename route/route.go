@@ -139,11 +139,17 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
 		// z
+		// Add these routes to your route.go file, in the appropriate switch case section
+
 	// MerchCoin Payment Routes
 	case method == "POST" && path == "/api/merchcoin/createOrder":
 		controller.CreateMerchCoinOrder(w, r)
 	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
 		controller.CheckMerchCoinPayment(w, r)
+	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkStep2/:orderId"):
+		controller.CheckStep2Handler(w, r)
+	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkStep3/:orderId"):
+		controller.CheckStep3Handler(w, r)
 	case method == "POST" && at.URLParam(path, "/api/merchcoin/confirmPayment/:orderId"):
 		controller.ManuallyConfirmMerchCoinPayment(w, r)
 	case method == "GET" && path == "/api/merchcoin/queueStatus":
@@ -197,7 +203,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetPomokitRekapHarian(w, r)
 	case method == "GET" && path == "/report/pomokit/all":
 		controller.GetTotalPomokitPoin(w, r)
-
 
 	default:
 		controller.NotFound(w, r)
