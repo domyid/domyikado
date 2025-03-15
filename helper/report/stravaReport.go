@@ -107,7 +107,7 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, 
 
 		// Simpan hasil yang cocok
 		users = append(users, StravaInfo{
-			Name:        doc.Name,
+			Name:        activity.Name,
 			PhoneNumber: doc.PhoneNumber,
 			Count:       1, // Awalnya 1, nanti ditambahkan jika ada duplikasi
 		})
