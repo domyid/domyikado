@@ -168,11 +168,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostAnswer(w, r)
 	// Pomodoro
 	case method == "GET" && path == ("/api/pomokit/report"):
-		controller.GetAllReportCycle(w, r)
-	case method == "GET" && path == "/api/pomokit/report/id":
-		controller.GetReportCycleById(w, r)
-	case method == "POST" && path == "/api/pomokit/postreport":
-		controller.PostReport(w, r)
+		controller.GetPomokitDataUser(w, r)
+	case method == "GET" && path == "/api/pomokit/allreport":
+		controller.GetPomokitAllDataUser(w, r)
 	// Google Auth
 	// Tracker
 	case method == "POST" && path == "/api/tracker":
