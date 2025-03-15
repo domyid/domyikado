@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Struct SoalIQ sesuai dengan koleksi iqquestion di db MongoDB
@@ -239,24 +238,10 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 7️⃣ **Cek ID Terbesar yang Sudah Ada**
+	// 7️⃣ **Simpan Hasil ke MongoDB*
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
-	var lastRecord IqScore
-	opts := options.FindOne().SetSort(bson.M{"id": -1}) // Cari ID terbesar
-	err = iqScoreCollection.FindOne(context.TODO(), bson.M{}, opts).Decode(&lastRecord)
-
-	newID := "1" // Default jika belum ada data
-	if err == nil && lastRecord.ID != "" {
-		// Konversi ID terakhir ke angka dan tambah 1
-		lastID, convErr := strconv.Atoi(lastRecord.ID)
-		if convErr == nil {
-			newID = fmt.Sprintf("%d", lastID+1)
-		}
-	}
-
-	// 8️⃣ **Simpan Hasil ke MongoDB**
 	newIqScore := IqScore{
-		ID:        newID,
+		ID:        primitive.NewObjectID().Hex(),
 		Name:      userAnswer.Name,
 		Score:     fmt.Sprintf("%d", correctCount),
 		IQ:        iqScoring.IQ,
@@ -269,9 +254,8 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 9️⃣ **Kirim Respon JSON**
+	// 8️⃣ **Kirim Respon JSON**
 	response := map[string]interface{}{
-		"id":      newIqScore.ID,
 		"name":    userAnswer.Name,
 		"score":   newIqScore.Score,
 		"iq":      newIqScore.IQ,
