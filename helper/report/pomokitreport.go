@@ -17,6 +17,7 @@ import (
 	// "github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -124,11 +125,40 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
     
     isLibur := HariLibur(GetDateSekarang())
     
-    pomokitCounts := CountPomokitActivity(pomokitData)
+    // Filter data yang memiliki WAGroupID
+    var filteredPomokitData []model.PomodoroReport
+    for _, report := range pomokitData {
+        if report.PhoneNumber != "" && report.WaGroupID != "" {
+            filteredPomokitData = append(filteredPomokitData, report)
+        } else {
+            fmt.Printf("DEBUG: Melewati data Pomokit tanpa PhoneNumber atau WAGroupID: %s / %s\n",
+                report.PhoneNumber, report.WaGroupID)
+        }
+    }
     
-    allUsers, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{})
-    if err != nil {
-        return "", fmt.Errorf("gagal mengambil data pengguna: %v", err)
+    if len(filteredPomokitData) == 0 {
+        return "*Rekap Aktivitas Pomodoro Hari Ini:*\n\nTidak ada aktivitas Pomodoro dengan WAGroupID valid yang tercatat hari ini.", nil
+    }
+    
+    pomokitCounts := CountPomokitActivity(filteredPomokitData)
+    
+    // Dapatkan semua nomor telepon unik dari data Pomokit
+    allPhoneNumbers := make(map[string]struct{
+        Name    string
+        GroupID string
+    })
+    
+    for _, report := range filteredPomokitData {
+        // Simpan semua pengguna dengan WAGroupID valid
+        if report.PhoneNumber != "" && report.WaGroupID != "" {
+            allPhoneNumbers[report.PhoneNumber] = struct{
+                Name    string
+                GroupID string
+            }{
+                Name:    report.Name,
+                GroupID: report.WaGroupID,
+            }
+        }
     }
     
     userActivityStatus := make(map[string]struct{
@@ -140,22 +170,18 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
         GroupID    string
     })
     
-    phoneToGroupID := make(map[string]string)
-    
-    for _, report := range pomokitData {
-        if report.PhoneNumber != "" {
-            phoneToGroupID[report.PhoneNumber] = report.WaGroupID
-            fmt.Printf("DEBUG: Mapped phone %s to groupID '%s'\n", 
-                report.PhoneNumber, report.WaGroupID)
-        }
-    }
-    
+    // Proses pengguna dengan aktivitas
     for phoneNumber, info := range pomokitCounts {
-        groupID := phoneToGroupID[phoneNumber]
+        userData, exists := allPhoneNumbers[phoneNumber]
+        if !exists || userData.GroupID == "" {
+            continue // Skip jika tidak ada atau tidak ada WAGroupID
+        }
         
+        groupID := userData.GroupID
         poin := info.Count
-        totalPoin, err := AddPomokitPoints(db, phoneNumber, poin, pomokitData, groupID)
+        totalPoin, err := AddPomokitPoints(db, phoneNumber, poin, filteredPomokitData, groupID)
         if err != nil {
+            fmt.Printf("ERROR: Gagal menambah poin untuk %s: %v\n", phoneNumber, err)
             continue
         }
         
@@ -176,58 +202,64 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
         }
     }
     
+    // Proses pengguna tanpa aktivitas (jika bukan hari libur)
     if !isLibur {
-        for _, user := range allUsers {
-            if user.PhoneNumber != "" {
-                if _, exists := userActivityStatus[user.PhoneNumber]; !exists {
-                    groupID := ""
-                    projectFilter := bson.M{"members.phonenumber": user.PhoneNumber}
-                    projects, _ := atdb.GetAllDoc[[]model.Project](db, "project", projectFilter)
-                    if len(projects) > 0 {
-                        groupID = projects[0].WAGroupID
-                    }
-                    
-                    totalPoin, err := DeductPomokitPoints(db, user.PhoneNumber, 1, groupID)
-                    if err != nil {
-                        continue
-                    }
-                    
-                    userActivityStatus[user.PhoneNumber] = struct{
-                        Name       string
-                        Phone      string
-                        PointChange float64
-                        TotalPoint float64
-                        IsActive   bool
-                        GroupID    string
-                    }{
-                        Name:       user.Name,
-                        Phone:      user.PhoneNumber,
-                        PointChange: -1,
-                        TotalPoint: totalPoin,
-                        IsActive:   false,
-                        GroupID:    groupID,
-                    }
+        for phoneNumber, userData := range allPhoneNumbers {
+            if _, exists := userActivityStatus[phoneNumber]; !exists && userData.GroupID != "" {
+                groupID := userData.GroupID
+                name := userData.Name
+                if name == "" {
+                    name = "Pengguna " + phoneNumber
+                }
+                
+                totalPoin, err := DeductPomokitPoints(db, phoneNumber, 1, groupID)
+                if err != nil {
+                    fmt.Printf("ERROR: Gagal mengurangi poin untuk %s: %v\n", phoneNumber, err)
+                    continue
+                }
+                
+                userActivityStatus[phoneNumber] = struct{
+                    Name       string
+                    Phone      string
+                    PointChange float64
+                    TotalPoint float64
+                    IsActive   bool
+                    GroupID    string
+                }{
+                    Name:       name,
+                    Phone:      phoneNumber,
+                    PointChange: -1,
+                    TotalPoint: totalPoin,
+                    IsActive:   false,
+                    GroupID:    groupID,
                 }
             }
         }
     }
     
+    // Format untuk output
     for _, status := range userActivityStatus {
+        displayName := status.Name
+        if displayName == "" {
+            displayName = "Pengguna " + status.Phone
+        }
+        
         if status.IsActive {
             msg += fmt.Sprintf("✅ %s (%s): +%.0f = %.0f poin\n", 
-                status.Name, 
+                displayName, 
                 status.Phone, 
                 status.PointChange, 
                 status.TotalPoint)
         } else {
             msg += fmt.Sprintf("⛔ %s (%s): %.0f = %.0f poin\n", 
-                status.Name, 
+                displayName, 
                 status.Phone, 
                 status.PointChange, 
                 status.TotalPoint)
         }
     }
     
+    // Tambahkan catatan jika bukan hari libur
     if !isLibur {
         msg += "\n*Catatan: Pengguna tanpa aktivitas Pomodoro hari ini akan dikurangi 1 poin*"
     } else {
@@ -461,49 +493,52 @@ func TotalPomokitPoint(db *mongo.Database) (map[string]float64, error) {
 }
 
 func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
-    // 1. Ambil semua data Pomokit dari API
     allPomokitData, err := GetAllPomokitData(db)
     if err != nil {
         return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
     }
     
-    // 2. Dapatkan semua pengguna
-    allUsers, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{})
-    if err != nil {
-        return "", fmt.Errorf("gagal mengambil data pengguna: %v", err)
+    if len(allPomokitData) == 0 {
+        return "Tidak ada data Pomokit yang tersedia", nil
     }
-    
-    // Buat map untuk menyimpan info pengguna berdasarkan nomor telepon
-    userMap := make(map[string]model.Userdomyikado)
-    for _, user := range allUsers {
-        if user.PhoneNumber != "" {
-            userMap[user.PhoneNumber] = user
-        }
-    }
-    
-    // 3. Kelompokkan aktivitas berdasarkan user dan tanggal
-    // Format: userActivities[phoneNumber][tanggal] = jumlah aktivitas
-    userActivities := make(map[string]map[string]int)
     
     // Timezone Jakarta untuk konsistensi
     location, _ := time.LoadLocation("Asia/Jakarta")
+    if location == nil {
+        location = time.Local
+    }
     
-    // 4. Ambil semua tanggal yang ada dalam data
+    userActivities := make(map[string]map[string]int)
+    userInfo := make(map[string]struct {
+        Name     string
+        GroupID  string
+    })
+    
     dateSet := make(map[string]bool)
     earliestDate := time.Now()
     latestDate := time.Time{}
     
     for _, report := range allPomokitData {
         phoneNumber := report.PhoneNumber
-        if phoneNumber == "" {
+        groupID := report.WaGroupID
+        
+        if phoneNumber == "" || groupID == "" {
+            fmt.Printf("DEBUG: Melewati record dengan nomor telepon atau WAGroupID kosong: %s / %s\n", 
+                phoneNumber, groupID)
             continue
         }
         
-        // Pastikan timestamp dalam timezone yang konsisten
+        userInfo[phoneNumber] = struct {
+            Name     string
+            GroupID  string
+        }{
+            Name:     report.Name,
+            GroupID:  groupID,
+        }
+        
         activityTime := report.CreatedAt.In(location)
         dateStr := activityTime.Format("2006-01-02")
         
-        // Update earliest dan latest date
         if activityTime.Before(earliestDate) {
             earliestDate = activityTime
         }
@@ -513,14 +548,14 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
         
         dateSet[dateStr] = true
         
-        // Inisialisasi map tanggal untuk user jika belum ada
         if _, exists := userActivities[phoneNumber]; !exists {
             userActivities[phoneNumber] = make(map[string]int)
         }
         
-        // Increment jumlah aktivitas untuk tanggal ini
         userActivities[phoneNumber][dateStr]++
     }
+    
+    fmt.Printf("DEBUG: Ditemukan %d pengguna unik dengan aktivitas Pomokit dan WAGroupID valid\n", len(userInfo))
     
     // Konversi set tanggal ke slice untuk iteration
     var allDates []string
@@ -534,10 +569,9 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
     fmt.Printf("DEBUG: Rentang data dari %s sampai %s, total %d hari unik\n", 
         earliestDate.Format("2006-01-02"), latestDate.Format("2006-01-02"), len(allDates))
     
-    // 5. Hitung poin untuk setiap pengguna di setiap tanggal
     userPoints := make(map[string]float64)
     
-    for phoneNumber, user := range userMap {
+    for phoneNumber := range userInfo {
         userPoints[phoneNumber] = 0 // Inisialisasi poin user
         
         // Untuk setiap tanggal yang ada di dataset
@@ -551,25 +585,20 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
                 continue
             }
             
-            // Cek apakah user memiliki aktivitas pada tanggal ini
             if activityCount, hasActivity := userActivities[phoneNumber][dateStr]; hasActivity {
-                // Tambah poin sesuai jumlah aktivitas
                 userPoints[phoneNumber] += float64(activityCount)
-                fmt.Printf("DEBUG: User %s (%s) +%d poin pada %s\n", 
-                    user.Name, phoneNumber, activityCount, dateStr)
+                fmt.Printf("DEBUG: User %s +%d poin pada %s\n", 
+                    phoneNumber, activityCount, dateStr)
             } else {
-                // Kurangi 1 poin jika tidak ada aktivitas pada hari kerja
                 userPoints[phoneNumber] -= 1
-                fmt.Printf("DEBUG: User %s (%s) -1 poin pada %s (tidak ada aktivitas)\n", 
-                    user.Name, phoneNumber, dateStr)
+                fmt.Printf("DEBUG: User %s -1 poin pada %s (tidak ada aktivitas)\n", 
+                    phoneNumber, dateStr)
             }
         }
     }
     
-    // 6. Buat laporan
     msg := "*Total Akumulasi Poin Pomokit Semua Waktu*\n\n"
     
-    // Buat list untuk sorting
     type UserPoint struct {
         Name        string
         PhoneNumber string
@@ -578,28 +607,30 @@ func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
     
     var userPointsList []UserPoint
     for phoneNumber, points := range userPoints {
-        if user, exists := userMap[phoneNumber]; exists {
-            userPointsList = append(userPointsList, UserPoint{
-                Name:        user.Name,
-                PhoneNumber: phoneNumber,
-                Points:      points,
-            })
-        }
+        info := userInfo[phoneNumber]
+        userPointsList = append(userPointsList, UserPoint{
+            Name:        info.Name,
+            PhoneNumber: phoneNumber,
+            Points:      points,
+        })
     }
     
-    // Sort berdasarkan poin (dari tertinggi ke terendah)
     sort.Slice(userPointsList, func(i, j int) bool {
         return userPointsList[i].Points > userPointsList[j].Points
     })
     
-    // Cetak hasil sorting
     for _, up := range userPointsList {
+        displayName := up.Name
+        if displayName == "" {
+            displayName = "Pengguna " + up.PhoneNumber
+        }
+        
         if up.Points >= 0 {
             msg += fmt.Sprintf("✅ %s (%s): +%.0f poin\n", 
-                up.Name, up.PhoneNumber, up.Points)
+                displayName, up.PhoneNumber, up.Points)
         } else {
             msg += fmt.Sprintf("⛔ %s (%s): %.0f poin\n", 
-                up.Name, up.PhoneNumber, up.Points)
+                displayName, up.PhoneNumber, up.Points)
         }
     }
     
@@ -644,6 +675,11 @@ func CountPomokitActivity(reports []model.PomodoroReport) map[string]PomokitInfo
 }
 
 func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, pomokitData []model.PomodoroReport, groupID string) (totalPoin float64, err error) {
+    // Jika tidak ada GroupID, kembalikan error
+    if groupID == "" {
+        return 0, fmt.Errorf("WAGroupID tidak boleh kosong")
+    }
+    
     currentTime := time.Now()
     today := currentTime.Truncate(24 * time.Hour)
     tomorrow := today.Add(24 * time.Hour)
@@ -655,23 +691,21 @@ func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, po
             "$gte": today,
             "$lt": tomorrow,
         },
-    }
-    
-    if groupID != "" {
-        filter["groupid"] = groupID
-    } else {
-        filter["$or"] = []bson.M{
-            {"groupid": ""},
-            {"groupid": bson.M{"$exists": false}},
-        }
+        "groupid": groupID,
     }
     
     var existingPoints []PomokitPoin
     existingPoints, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", filter)
     
     var latestActivityTime time.Time
+    var userName string = ""
+    
+    // Ambil informasi pengguna dari data Pomokit
     for _, report := range pomokitData {
-        if report.PhoneNumber == phoneNumber {
+        if report.PhoneNumber == phoneNumber && report.WaGroupID == groupID {
+            if userName == "" && report.Name != "" {
+                userName = report.Name
+            }
             if report.CreatedAt.After(latestActivityTime) {
                 latestActivityTime = report.CreatedAt
             }
@@ -687,38 +721,39 @@ func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, po
         }
         
         if latestActivityTime.After(mostRecentRecord.CreatedAt) {
-            fmt.Printf("INFO: Found newer activity data for user %s (groupID: %s), updating points\n", 
+            fmt.Printf("INFO: Ditemukan data aktivitas baru untuk pengguna %s (groupID: %s), memperbarui poin\n", 
                 phoneNumber, groupID)
             
             deleteFilter := filter
             _, err = db.Collection("pomokitpoin").DeleteMany(context.Background(), deleteFilter)
             if err != nil {
-                return 0, fmt.Errorf("failed to delete old records: %v", err)
+                return 0, fmt.Errorf("gagal menghapus catatan lama: %v", err)
             }
             
         } else {
-            fmt.Printf("INFO: No newer activity data for user %s (groupID: %s), keeping existing record\n", 
+            fmt.Printf("INFO: Tidak ada data aktivitas baru untuk pengguna %s (groupID: %s), mempertahankan catatan yang ada\n", 
                 phoneNumber, groupID)
             return GetTotalPomokitPoints(db, phoneNumber)
         }
     } else {
-        fmt.Printf("INFO: Adding new points for user %s (groupID: %s)\n", phoneNumber, groupID)
+        fmt.Printf("INFO: Menambahkan poin baru untuk pengguna %s (groupID: %s)\n", phoneNumber, groupID)
     }
 
-    // Ambil data user
-    usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
-    if err != nil {
-        return 0, err
+    // Gunakan ObjectID baru untuk data pomokit
+    userID := primitive.NewObjectID()
+    
+    // Jika nama tidak tersedia, gunakan fallback
+    if userName == "" {
+        userName = "Pengguna " + phoneNumber
     }
     
     pomokitPoin := PomokitPoin{
-        UserID:      usr.ID,
-        Name:        usr.Name,
-        PhoneNumber: usr.PhoneNumber,
-        Email:       usr.Email,
-        GroupID:     groupID, // Use the groupID as provided (could be empty)
-        PoinPomokit: points,  // Use new field name
-        CreatedAt:   currentTime, // Use current time
+        UserID:      userID,
+        Name:        userName,
+        PhoneNumber: phoneNumber,
+        GroupID:     groupID, 
+        PoinPomokit: points,
+        CreatedAt:   currentTime,
     }
     
     _, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
@@ -731,16 +766,15 @@ func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, po
         return 0, err
     }
     
-    usr.Poin = totalPoin
-    _, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
-    if err != nil {
-        return totalPoin, nil // Tetap kembalikan total poin meskipun ada error saat update user
-    }
-    
     return totalPoin, nil
 }
 
 func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64, groupID string) (totalPoin float64, err error) {
+    // Jika tidak ada GroupID, kembalikan error
+    if groupID == "" {
+        return 0, fmt.Errorf("WAGroupID tidak boleh kosong")
+    }
+    
     currentTime := time.Now()
     today := currentTime.Truncate(24 * time.Hour)
     tomorrow := today.Add(24 * time.Hour)
@@ -752,48 +786,43 @@ func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64,
             "$gte": today,
             "$lt": tomorrow,
         },
-    }
-    
-    if groupID != "" {
-        filter["groupid"] = groupID
-    } else {
-        filter["$or"] = []bson.M{
-            {"groupid": ""},
-            {"groupid": bson.M{"$exists": false}},
-        }
+        "groupid": groupID,
     }
     
     var existingDeductions []PomokitPoin
     existingDeductions, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", filter)
     
     if err == nil && len(existingDeductions) > 0 {
-        
-        fmt.Printf("INFO: Found existing deduction for user %s (groupID: %s), updating\n", 
+        fmt.Printf("INFO: Ditemukan pengurangan yang ada untuk pengguna %s (groupID: %s), memperbarui\n", 
             phoneNumber, groupID)
         
         deleteFilter := filter
         _, err = db.Collection("pomokitpoin").DeleteMany(context.Background(), deleteFilter)
         if err != nil {
-            return 0, fmt.Errorf("failed to delete old deduction records: %v", err)
+            return 0, fmt.Errorf("gagal menghapus catatan pengurangan lama: %v", err)
         }
-        
     } else {
-        fmt.Printf("INFO: Adding new deduction for user %s (groupID: %s)\n", phoneNumber, groupID)
+        fmt.Printf("INFO: Menambahkan pengurangan baru untuk pengguna %s (groupID: %s)\n", phoneNumber, groupID)
     }
 
-    usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
-    if err != nil {
-        return 0, err
+    // Cari pengguna di pomokitpoin untuk mendapatkan nama
+    var userName string = "Pengguna " + phoneNumber
+    
+    // Coba ambil nama pengguna dari catatan pomokitpoin yang ada
+    existingUser, err := atdb.GetOneDoc[PomokitPoin](db, "pomokitpoin", bson.M{"phonenumber": phoneNumber})
+    if err == nil && existingUser.Name != "" {
+        userName = existingUser.Name
     }
     
+    userID := primitive.NewObjectID()
+    
     pomokitPoin := PomokitPoin{
-        UserID:      usr.ID,
-        Name:        usr.Name,
-        PhoneNumber: usr.PhoneNumber,
-        Email:       usr.Email,
-        GroupID:     groupID, // Use groupID as provided (could be empty)
-        PoinPomokit: -points, // Use new field name with negative value for deduction
-        CreatedAt:   currentTime, // Use current time
+        UserID:      userID,
+        Name:        userName,
+        PhoneNumber: phoneNumber,
+        GroupID:     groupID,
+        PoinPomokit: -points, // Nilai negatif untuk pengurangan
+        CreatedAt:   currentTime,
     }
     
     _, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
@@ -804,12 +833,6 @@ func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64,
     totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
     if err != nil {
         return 0, err
-    }
-    
-    usr.Poin = totalPoin
-    _, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
-    if err != nil {
-        return totalPoin, nil // Tetap kembalikan total poin meskipun ada error saat update user
     }
     
     return totalPoin, nil
