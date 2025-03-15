@@ -17,7 +17,12 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	var method, path string = r.Method, r.URL.Path
 
+	origin := r.Header.Get("Origin")
 	if method == http.MethodOptions && path == "/api/tracker" {
+		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -175,6 +180,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Google Auth
 	// Tracker
 	case method == "POST" && path == "/api/tracker":
+		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
 
