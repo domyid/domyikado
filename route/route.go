@@ -187,15 +187,16 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
 
+	case method == "GET" && path == "/api/pomokit/rekap/harian":
+		controller.GetPomokitRekapHarian(w, r)
+	case method == "GET" && path == "/api/pomokit/rekap/harian/test":
+		controller.TestPomokitRekapHarian(w, r)
+	// case method == "GET" && path == "/api/pomokit/rekap/mingguan":
+	// 	controller.GetPomokitRekapMingguan(w, r)
+	case method == "GET" && path == "/refresh/report/pomokit":
+		controller.GetPomokitRekapHarian(w, r)
 
-	// case method == "GET" && path == "/refresh/report/pomokit/harian":
-	// 	controller.GetPomokitDailyReport(w, r)
-	// case method == "GET" && path == "/refresh/report/pomokit/mingguan":
-	// 	controller.GetPomokitWeeklySummary(w, r)
-	// case method == "GET" && path == "/data/pomokit/report":
-	// 	controller.GetPomokitReport(w, r)
-	// case method == "GET" && path == "/data/pomokit/batch":
-	// 	controller.BatchPomokitProcess(w, r)
+		
 	default:
 		controller.NotFound(w, r)
 	}
