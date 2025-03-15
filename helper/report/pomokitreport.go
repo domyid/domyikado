@@ -70,15 +70,20 @@ func GetPomokitDataHarian(db *mongo.Database, filter bson.M) ([]model.PomodoroRe
 	// Decode response
 	var pomodoroReports []model.PomodoroReport
 	if err := json.NewDecoder(resp.Body).Decode(&pomodoroReports); err != nil {
-		return nil, errors.New("Invalid API Response: " + err.Error())
+		// Coba alternatif format response
+		var apiResponse model.PomokitResponse
+		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+			return nil, errors.New("Invalid API Response: " + err.Error())
+		}
+		pomodoroReports = apiResponse.Data
 	}
 
-	// Filter berdasarkan tanggal dari ObjectID
+	// Filter berdasarkan tanggal dari CreateAt
 	var filteredReports []model.PomodoroReport
+	today := time.Now().Truncate(24 * time.Hour)
 	for _, report := range pomodoroReports {
-		// Asumsikan CreatedAt sudah diset di model
-		if report.CreatedAt.After(time.Now().AddDate(0, 0, -1)) && 
-		   report.CreatedAt.Before(time.Now()) {
+		if report.CreatedAt.After(today) && 
+		   report.CreatedAt.Before(today.Add(24 * time.Hour)) {
 			filteredReports = append(filteredReports, report)
 		}
 	}
@@ -146,12 +151,23 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
 		PointChange float64
 		TotalPoint float64
 		IsActive   bool
+		GroupID    string
 	})
 	
 	// Isi map untuk pengguna yang aktif
 	for phoneNumber, info := range pomokitCounts {
+		// Dapatkan GroupID dari data Pomokit
+		groupID := ""
+		for _, report := range pomokitData {
+			if report.PhoneNumber == phoneNumber {
+				groupID = report.WaGroupID
+				break
+			}
+		}
+		
 		// Tambahkan poin untuk setiap sesi
-		user, err := TambahPoinPomokitByPhoneNumber(db, phoneNumber, info.Count)
+		poin := info.Count
+		totalPoin, err := AddPomokitPoints(db, phoneNumber, poin, pomokitData, groupID)
 		if err != nil {
 			continue
 		}
@@ -162,12 +178,14 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
 			PointChange float64
 			TotalPoint float64
 			IsActive   bool
+			GroupID    string
 		}{
 			Name:       info.Name,
 			Phone:      phoneNumber,
-			PointChange: info.Count,
-			TotalPoint: user.Poin,
+			PointChange: poin,
+			TotalPoint: totalPoin,
 			IsActive:   true,
+			GroupID:    groupID,
 		}
 	}
 	
@@ -177,9 +195,19 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
 			if user.PhoneNumber != "" {
 				// Cek apakah user tidak ada di daftar aktif
 				if _, exists := userActivityStatus[user.PhoneNumber]; !exists {
+					// Cari GroupID dari proyek yang terkait dengan pengguna
+					groupID := ""
+					projectFilter := bson.M{"members.phonenumber": user.PhoneNumber}
+					projects, _ := atdb.GetAllDoc[[]model.Project](db, "project", projectFilter)
+					if len(projects) > 0 {
+						groupID = projects[0].WAGroupID
+					}
+					
 					// Kurangi poin
-					KurangPoinUserbyPhoneNumber(db, user.PhoneNumber, 1)
-					updatedUser, _ := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": user.PhoneNumber})
+					totalPoin, err := DeductPomokitPoints(db, user.PhoneNumber, 1, groupID)
+					if err != nil {
+						continue
+					}
 					
 					// Tambahkan ke status
 					userActivityStatus[user.PhoneNumber] = struct{
@@ -188,24 +216,15 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
 						PointChange float64
 						TotalPoint float64
 						IsActive   bool
+						GroupID    string
 					}{
 						Name:       user.Name,
 						Phone:      user.PhoneNumber,
 						PointChange: -1,
-						TotalPoint: updatedUser.Poin,
+						TotalPoint: totalPoin,
 						IsActive:   false,
+						GroupID:    groupID,
 					}
-					
-					// Log pengurangan poin
-					logpoin := LogPoin{
-						UserID:      user.ID,
-						Name:        user.Name,
-						PhoneNumber: user.PhoneNumber,
-						Email:       user.Email,
-						Poin:        -1,
-						Activity:    "No Pomodoro Session",
-					}
-					atdb.InsertOneDoc(db, "logpoin", logpoin)
 				}
 			}
 		}
@@ -236,6 +255,261 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
 	}
 
 	return msg, nil
+}
+
+func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, pomokitData []model.PomodoroReport, groupID string) (totalPoin float64, err error) {
+	// Ambil data user
+	usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
+	if err != nil {
+		return 0, err
+	}
+	
+	// Buat entry untuk pomokitpoin
+	pomokitPoin := PomokitPoin{
+		UserID:      usr.ID,
+		Name:        usr.Name,
+		PhoneNumber: usr.PhoneNumber,
+		Email:       usr.Email,
+		GroupID:     groupID, // Gunakan groupID apa adanya (bisa kosong)
+		Poin:        points,
+		Activity:    "Pomodoro Session",
+	}
+	
+	// Simpan ke collection pomokitpoin
+	_, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Ambil total poin dari collection pomokitpoin
+	totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Update poin user di collection user juga
+	usr.Poin = totalPoin
+	_, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
+	if err != nil {
+		return totalPoin, nil // Tetap kembalikan total poin meskipun ada error saat update user
+	}
+	
+	return totalPoin, nil
+}
+
+// Helper function untuk mengurangi poin Pomokit
+func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64, groupID string) (totalPoin float64, err error) {
+	// Ambil data user
+	usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
+	if err != nil {
+		return 0, err
+	}
+	
+	// Buat entry untuk pomokitpoin dengan poin negatif
+	pomokitPoin := PomokitPoin{
+		UserID:      usr.ID,
+		Name:        usr.Name,
+		PhoneNumber: usr.PhoneNumber,
+		Email:       usr.Email,
+		GroupID:     groupID, // Gunakan groupID apa adanya (bisa kosong)
+		Poin:        -points, // Nilai negatif untuk pengurangan
+		Activity:    "No Pomodoro Session",
+	}
+	
+	// Simpan ke collection pomokitpoin
+	_, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Ambil total poin dari collection pomokitpoin
+	totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Update poin user di collection user juga
+	usr.Poin = totalPoin
+	_, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
+	if err != nil {
+		return totalPoin, nil // Tetap kembalikan total poin meskipun ada error saat update user
+	}
+	
+	return totalPoin, nil
+}
+
+func GeneratePomokitRekapHarianByGroupID(db *mongo.Database, groupID string) (msg string, err error) {
+	// Ambil data Pomokit hari ini
+	pomokitData, err := GetPomokitDataHarian(db, TodayFilter())
+	if err != nil {
+		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+	}
+	
+	// Filter data berdasarkan WAGroupID jika groupID tidak kosong
+	var filteredPomokitData []model.PomodoroReport
+	if groupID != "" {
+		// Filter data untuk grup tertentu
+		for _, report := range pomokitData {
+			// Hanya ambil data dengan groupID yang sama
+			if report.WaGroupID == groupID {
+				filteredPomokitData = append(filteredPomokitData, report)
+			}
+		}
+	} else {
+		// Jika groupID kosong, gunakan semua data
+		filteredPomokitData = pomokitData
+	}
+	
+	// Jika tidak ada data untuk grup ini
+	if len(filteredPomokitData) == 0 && groupID != "" {
+		// Ambil data grup untuk mendapatkan nama grup
+		var projectName string = "Grup Ini"
+		project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
+		if err == nil {
+			projectName = project.Name
+		}
+		
+		return fmt.Sprintf("*Rekap Aktivitas Pomodoro Hari Ini untuk %s:*\n\nTidak ada aktivitas Pomodoro yang tercatat hari ini untuk grup ini.", projectName), nil
+	} else if len(filteredPomokitData) == 0 {
+		return "*Rekap Aktivitas Pomodoro Hari Ini:*\n\nTidak ada aktivitas Pomodoro yang tercatat hari ini.", nil
+	}
+	
+	// Buat pesan rekap
+	if groupID != "" {
+		msg = fmt.Sprintf("*Rekap Aktivitas Pomodoro Hari Ini untuk GroupID %s:*\n\n", groupID)
+	} else {
+		msg = "*Rekap Aktivitas Pomodoro Hari Ini:*\n\n"
+	}
+	
+	// Cek apakah hari libur
+	isLibur := HariLibur(GetDateSekarang())
+	
+	// Hitung aktivitas per pengguna
+	pomokitCounts := CountPomokitActivity(filteredPomokitData)
+	
+	// Ambil anggota grup jika GroupID tidak kosong
+	var groupMembers []model.Userdomyikado
+	if groupID != "" {
+		project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
+		if err == nil {
+			// Ambil semua member dari project
+			for _, member := range project.Members {
+				user, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": member.PhoneNumber})
+				if err == nil {
+					groupMembers = append(groupMembers, user)
+				}
+			}
+		}
+	} else {
+		// Jika groupID kosong, ambil semua pengguna
+		allUsers, _ := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{})
+		groupMembers = allUsers
+	}
+	
+	// Buat map untuk status aktivitas
+	userActivityStatus := make(map[string]struct{
+		Name       string
+		Phone      string
+		PointChange float64
+		TotalPoint float64
+		IsActive   bool
+	})
+	
+	// Isi map untuk pengguna yang aktif
+	for phoneNumber, info := range pomokitCounts {
+		// Tambahkan poin untuk setiap sesi
+		poin := info.Count
+		totalPoin, err := AddPomokitPoints(db, phoneNumber, poin, filteredPomokitData, groupID)
+		if err != nil {
+			continue
+		}
+		
+		userActivityStatus[phoneNumber] = struct{
+			Name       string
+			Phone      string
+			PointChange float64
+			TotalPoint float64
+			IsActive   bool
+		}{
+			Name:       info.Name,
+			Phone:      phoneNumber,
+			PointChange: poin,
+			TotalPoint: totalPoin,
+			IsActive:   true,
+		}
+	}
+	
+	// Jika bukan hari libur, kurangi poin untuk anggota grup yang tidak aktif
+	if !isLibur && len(groupMembers) > 0 {
+		for _, user := range groupMembers {
+			// Cek apakah user tidak ada di daftar aktif
+			if _, exists := userActivityStatus[user.PhoneNumber]; !exists && user.PhoneNumber != "" {
+				// Kurangi poin
+				totalPoin, err := DeductPomokitPoints(db, user.PhoneNumber, 1, groupID)
+				if err != nil {
+					continue
+				}
+				
+				// Tambahkan ke status
+				userActivityStatus[user.PhoneNumber] = struct{
+					Name       string
+					Phone      string
+					PointChange float64
+					TotalPoint float64
+					IsActive   bool
+				}{
+					Name:       user.Name,
+					Phone:      user.PhoneNumber,
+					PointChange: -1,
+					TotalPoint: totalPoin,
+					IsActive:   false,
+				}
+			}
+		}
+	}
+	
+	// Format untuk output
+	for _, status := range userActivityStatus {
+		if status.IsActive {
+			msg += fmt.Sprintf("✅ %s (%s): +%.0f = %.0f poin\n", 
+				status.Name, 
+				status.Phone, 
+				status.PointChange, 
+				status.TotalPoint)
+		} else {
+			msg += fmt.Sprintf("⛔ %s (%s): %.0f = %.0f poin\n", 
+				status.Name, 
+				status.Phone, 
+				status.PointChange, 
+				status.TotalPoint)
+		}
+	}
+	
+	// Tambahkan catatan jika bukan hari libur
+	if !isLibur {
+		msg += "\n*Catatan: Pengguna tanpa aktivitas Pomodoro hari ini akan dikurangi 1 poin*"
+	} else {
+		msg += "\n*Catatan: Hari ini adalah hari libur, tidak ada pengurangan poin*"
+	}
+
+	return msg, nil
+}
+
+func GetTotalPomokitPoints(db *mongo.Database, phoneNumber string) (totalPoin float64, err error) {
+	// Ambil semua record pomokitpoin untuk nomor telepon tertentu
+	var pomokitPoints []PomokitPoin
+	pomokitPoints, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", bson.M{"phonenumber": phoneNumber})
+	if err != nil {
+		return 0, err
+	}
+	
+	// Hitung total poin
+	totalPoin = 0
+	for _, record := range pomokitPoints {
+		totalPoin += record.Poin
+	}
+	
+	return totalPoin, nil
 }
 
 // Helper function untuk cek hyphen dalam string
