@@ -19,32 +19,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func CountPomokitActivity(reports []model.PomodoroReport) map[string]PomokitInfo {
-	pomokitCount := make(map[string]PomokitInfo)
-
-	for _, report := range reports {
-		phoneNumber := report.PhoneNumber
-		if phoneNumber != "" {
-			if info, exists := pomokitCount[phoneNumber]; exists {
-				// Update data yang sudah ada
-				info.Count++
-				pomokitCount[phoneNumber] = info
-			} else {
-				pomokitCount[phoneNumber] = PomokitInfo{
-					Count:       1,
-					Name:        report.Name,
-					PhoneNumber: report.PhoneNumber,
-				}
-			}
-		}
-	}
-
-	return pomokitCount
-}
-
 // GetPomokitDataHarian mengambil data Pomokit untuk periode tertentu
 func GetPomokitDataHarian(db *mongo.Database, filter bson.M) ([]model.PomodoroReport, error) {
-    // Ambil konfigurasi
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -56,7 +32,6 @@ func GetPomokitDataHarian(db *mongo.Database, filter bson.M) ([]model.PomodoroRe
 
     fmt.Printf("DEBUG: Fetching Pomokit data from %s\n", conf.PomokitUrl)
 
-    // HTTP Client request ke API Pomokit
     client := &http.Client{Timeout: 15 * time.Second}
     resp, err := client.Get(conf.PomokitUrl)
     if err != nil {
@@ -64,17 +39,21 @@ func GetPomokitDataHarian(db *mongo.Database, filter bson.M) ([]model.PomodoroRe
     }
     defer resp.Body.Close()
 
-    // Handle non-200 status
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("API Returned Status %d", resp.StatusCode)
     }
 
-    // Decode response
+    responseBody, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, errors.New("Error reading response: " + err.Error())
+    }
+    
+    resp.Body.Close()
+    resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
+
     var pomodoroReports []model.PomodoroReport
     if err := json.NewDecoder(resp.Body).Decode(&pomodoroReports); err != nil {
-        responseBody, _ := io.ReadAll(resp.Body)
         resp.Body.Close()
-        
         resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
         
         var apiResponse model.PomokitResponse
@@ -83,22 +62,54 @@ func GetPomokitDataHarian(db *mongo.Database, filter bson.M) ([]model.PomodoroRe
             return nil, errors.New("Invalid API Response: " + err.Error())
         }
         pomodoroReports = apiResponse.Data
+        fmt.Printf("DEBUG: Decoded as PomokitResponse struct with %d reports\n", len(pomodoroReports))
+    } else {
+        fmt.Printf("DEBUG: Decoded as direct array with %d reports\n", len(pomodoroReports))
+    }
+
+    if len(pomodoroReports) == 0 {
+        fmt.Printf("WARNING: No reports found in API response\n")
+        return nil, nil
     }
 
     fmt.Printf("DEBUG: Retrieved %d Pomokit reports from API\n", len(pomodoroReports))
 
+    location, err := time.LoadLocation("Asia/Jakarta")
+    if err != nil {
+        location = time.Local // Fallback to local timezone
+    }
+    
+    now := time.Now().In(location)
+    today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+    tomorrow := today.Add(24 * time.Hour)
+    
+    fmt.Printf("DEBUG: Filtering for activities between %v and %v\n", today, tomorrow)
+
     var filteredReports []model.PomodoroReport
-    today := time.Now().Truncate(24 * time.Hour)
     for _, report := range pomodoroReports {
-        if report.CreatedAt.After(today) && 
-           report.CreatedAt.Before(today.Add(24 * time.Hour)) {
+        reportTime := report.CreatedAt.In(location)
+        
+        if reportTime.Equal(today) || (reportTime.After(today) && reportTime.Before(tomorrow)) {
             filteredReports = append(filteredReports, report)
-            fmt.Printf("DEBUG: Including report for user %s (groupID: '%s')\n", 
-                report.PhoneNumber, report.WaGroupID)
+            fmt.Printf("DEBUG: Including report for user %s (groupID: '%s', time: %v)\n", 
+                report.PhoneNumber, report.WaGroupID, reportTime)
+        } else {
+            fmt.Printf("DEBUG: Excluding report for user %s (time: %v outside of %v - %v)\n", 
+                report.PhoneNumber, reportTime, today, tomorrow)
         }
     }
 
     fmt.Printf("DEBUG: After date filtering, %d reports remain\n", len(filteredReports))
+    
+    phoneNumberCounts := make(map[string]int)
+    for _, report := range filteredReports {
+        phoneNumberCounts[report.PhoneNumber]++
+    }
+    
+    for phone, count := range phoneNumberCounts {
+        fmt.Printf("DEBUG: User %s has %d activities today\n", phone, count)
+    }
+    
     return filteredReports, nil
 }
 
@@ -360,6 +371,36 @@ func GeneratePomokitRekapHarianByGroupID(db *mongo.Database, groupID string) (ms
     }
 
     return msg, nil
+}
+
+func CountPomokitActivity(reports []model.PomodoroReport) map[string]PomokitInfo {
+    pomokitCount := make(map[string]PomokitInfo)
+
+    for _, report := range reports {
+        phoneNumber := report.PhoneNumber
+        if phoneNumber != "" {
+            if info, exists := pomokitCount[phoneNumber]; exists {
+                // Update data yang sudah ada dengan increment yang benar
+                info.Count++
+                pomokitCount[phoneNumber] = info
+                fmt.Printf("DEBUG: Incrementing count for %s to %f\n", phoneNumber, info.Count)
+            } else {
+                pomokitCount[phoneNumber] = PomokitInfo{
+                    Count:       1,
+                    Name:        report.Name,
+                    PhoneNumber: report.PhoneNumber,
+                }
+                fmt.Printf("DEBUG: New user %s with count 1\n", phoneNumber)
+            }
+        }
+    }
+
+    // Final debug to verify all counts
+    for phone, info := range pomokitCount {
+        fmt.Printf("DEBUG: Final count for %s: %f activities\n", phone, info.Count)
+    }
+
+    return pomokitCount
 }
 
 func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, pomokitData []model.PomodoroReport, groupID string) (totalPoin float64, err error) {
