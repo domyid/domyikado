@@ -37,6 +37,18 @@ type IqScoring struct {
 	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
 
+// Struct untuk menyimpan data gabungan User + Score IQ
+type UserWithIqScore struct {
+	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	Name        string             `json:"name,omitempty"`
+	PhoneNumber string             `json:"phonenumber,omitempty"`
+	Email       string             `json:"email,omitempty"`
+	Poin        float64            `json:"poin,omitempty"`
+	Score       string             `json:"score,omitempty"`
+	IQ          string             `json:"iq,omitempty"`
+	CreatedAt   string             `json:"created_at,omitempty"`
+}
+
 // Struct untuk menyimpan hasil tes pengguna ke iqscore
 type IqScore struct {
 	ID          primitive.ObjectID `json:"id,omitempty" bson:"id,omitempty"`
@@ -210,6 +222,81 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
+	// Ambil token dari header "login"
+	loginToken := r.Header.Get("login")
+	if loginToken == "" {
+		http.Error(w, `{"error": "Login header tidak ditemukan"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Decode token menggunakan watoken.Decode()
+	publicKey := "your-public-key-here" // Ganti dengan public key yang valid
+	payload, err := watoken.Decode(publicKey, loginToken)
+	if err != nil {
+		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Ambil phonenumber dari token
+	phoneNumber := payload.Id
+	if phoneNumber == "" {
+		http.Error(w, `{"error": "Nomor telepon tidak ditemukan dalam token"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Koneksi ke MongoDB untuk mendapatkan data user berdasarkan phonenumber
+	userCollection := config.Mongoconn.Collection("user")
+	var user model.Userdomyikado
+	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
+	if err != nil {
+		http.Error(w, `{"error": "User tidak ditemukan"}`, http.StatusNotFound)
+		return
+	}
+
+	// Koneksi ke MongoDB untuk mendapatkan skor IQ berdasarkan name di `iqscore`
+	iqScoreCollection := config.Mongoconn.Collection("iqscore")
+	var iqScore IqScore
+	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": user.Name}).Decode(&iqScore)
+
+	var userScore, userIQ string
+
+	if err == nil {
+		// Jika data `iqscore` ditemukan
+		userScore = iqScore.Score
+		userIQ = iqScore.IQ
+	} else {
+		// Jika `iqscore` tidak ditemukan, periksa `score` di `iqscoring`
+		iqScoringCollection := config.Mongoconn.Collection("iqscoring")
+		var iqScoring IqScoring
+		err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": userScore}).Decode(&iqScoring)
+
+		if err == nil {
+			// Jika ditemukan, gunakan `iq` dari iqscoring
+			userIQ = iqScoring.IQ
+		} else {
+			// Jika `score` juga tidak ditemukan, gunakan nilai default
+			userScore = "Belum ada skor"
+			userIQ = "Belum ada data"
+		}
+	}
+
+	// Gabungkan data user dan skor IQ dalam satu response
+	response := UserWithIqScore{
+		ID:          user.ID,
+		Name:        user.Name,
+		PhoneNumber: user.PhoneNumber,
+		Email:       user.Email,
+		Poin:        user.Poin,
+		Score:       userScore,
+		IQ:          userIQ,
+		CreatedAt:   iqScore.CreatedAt.String(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	// Cek Token Login di Header
 	loginHeader := r.Header.Get("login")
@@ -282,12 +369,15 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 8️⃣ **Kirim Respon JSON**
+	// 8️⃣ **Respon JSON yang akan dikirimkan ke frontend**
 	response := map[string]interface{}{
-		"name":    userAnswer.Name,
-		"score":   newIqScore.Score,
-		"iq":      newIqScore.IQ,
-		"message": "Jawaban berhasil disimpan",
+		"status":   "success",
+		"message":  "Jawaban berhasil disimpan!",
+		"name":     userAnswer.Name,
+		"score":    newIqScore.Score,
+		"iq":       newIqScore.IQ,
+		"correct":  correctCount,
+		"datetime": newIqScore.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
