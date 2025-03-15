@@ -25,12 +25,12 @@ func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg st
 		return "", "", fmt.Errorf("gagal mengambil data Strava: %v", err)
 	}
 
-	var result string
+	msg = "*Laporan Aktivitas Strava Minggu ini :*\n"
 	for _, info := range phoneNumberCount {
-		result += info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " poin\n"
+		msg += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas\n"
 	}
 
-	return result, "", nil
+	return msg, "", nil
 }
 
 func getDataStravaMasukPerMinggu(db *mongo.Database) (map[string]StravaInfo, error) {
@@ -70,7 +70,7 @@ func getStravaActivities() ([]model.StravaActivity, error) {
 	var filteredActivities []model.StravaActivity
 	for _, activity := range doc {
 		activityTime := activity.CreatedAt
-		if activity.Status == "Valid" && activityTime.After(monday) && activityTime.Before(sunday) {
+		if activity.Status == "Valid" && !activityTime.Before(monday) && activityTime.Before(sunday) {
 			filteredActivities = append(filteredActivities, activity)
 		}
 	}
