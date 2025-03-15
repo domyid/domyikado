@@ -223,3 +223,68 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 
 	return nil
 }
+
+// // RekapPomokitHarian menjalankan proses pembuatan dan pengiriman laporan Pomokit harian
+// func RekapPomokitHarian(db *mongo.Database) error {
+// 	manualGroupID := "120363298977628161" // Ganti dengan WAGroupID sesuai kebutuhan
+
+// 	reports, err := GetPomokitReportYesterday(db)
+// 	if err != nil {
+// 		return errors.New("Gagal mengambil data Pomokit: " + err.Error())
+// 	}
+
+// 	activeUsers := CalculatePomokitPoints(reports)
+// 	if len(activeUsers) == 0 && !HariLibur(GetDateKemarin()) {
+
+// 	}
+
+// 	if err := UpdatePomokitUserPoints(db, activeUsers); err != nil {
+// 		return errors.New("Gagal memperbarui poin Pomokit: " + err.Error())
+// 	}
+
+// 	if err := DeductPointsForInactiveUsers(db, activeUsers); err != nil {
+// 		return errors.New("Gagal mengurangi poin pengguna tidak aktif: " + err.Error())
+// 	}
+
+// 	msg := GeneratePomokitReportMessage(db, activeUsers)
+
+// 	dt := &whatsauth.TextMessage{
+// 		To:       manualGroupID,
+// 		IsGroup:  true,
+// 		Messages: msg,
+// 	}
+
+// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 	if err != nil {
+// 		return errors.New("Gagal mengirim laporan Pomokit: " + err.Error())
+// 	}
+
+// 	return nil
+// }
+
+// RekapPomokitMingguan menjalankan proses pembuatan dan pengiriman laporan Pomokit mingguan
+func RekapPomokitMingguan(db *mongo.Database) error {
+	manualGroupID := "120363393689851748" // Ganti dengan WAGroupID sesuai kebutuhan
+
+	reports, err := GetPomokitReportWeekly(db)
+	if err != nil {
+		return errors.New("Gagal mengambil data Pomokit mingguan: " + err.Error())
+	}
+
+	weeklySummaries := CalculateWeeklyPomokitSummary(reports)
+
+	msg := GenerateWeeklyReportMessage(weeklySummaries)
+
+	dt := &whatsauth.TextMessage{
+		To:       manualGroupID,
+		IsGroup:  true,
+		Messages: msg,
+	}
+
+	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		return errors.New("Gagal mengirim laporan mingguan Pomokit: " + err.Error())
+	}
+
+	return nil
+}

@@ -1,6 +1,8 @@
 package report
 
 import (
+	"time"
+
 	"github.com/gocroot/helper/gcallapi"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -93,4 +95,20 @@ type PresensiDomyikado struct {
 	KetJam      string             `json:"ketjam,omitempty" bson:"ketjam,omitempty"`
 	LamaDetik   float64            `json:"lamadetik,omitempty" bson:"lamadetik,omitempty"`
 	Lokasi      string             `json:"lokasi,omitempty" bson:"lokasi,omitempty"`
+}
+
+type PomokitPoin struct {
+	ID          primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
+	Name        string             `json:"name,omitempty" bson:"name,omitempty"`
+	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
+	Poin        float64            `json:"poin,omitempty" bson:"poin,omitempty"`
+	LastUpdated time.Time          `json:"lastupdated,omitempty" bson:"lastupdated,omitempty"`
+}
+
+type PomokitUserSummary struct {
+	PhoneNumber string
+	Name        string
+	Sessions    int
+	Poin        float64
+	LastActive  time.Time
 }

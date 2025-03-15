@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/model"
 
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -171,4 +173,162 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
     }
 
     at.WriteJSON(respw, http.StatusOK, pomodoroReports)
+}
+
+// func GetPomokitDailyReport(respw http.ResponseWriter, req *http.Request) {
+// 	var resp model.Response
+	
+// 	// Jalankan proses report dalam goroutine sehingga HTTP handler bisa return lebih cepat
+// 	go func() {
+// 		err := report.RekapPomokitHarian(config.Mongoconn)
+// 		if err != nil {
+// 			// Log error tapi tidak perlu merespon ke HTTP request karena sudah return
+// 			// Gunakan logging system yang Anda pakai
+// 			// misalnya: log.Printf("Error executing RekapPomokitHarian: %v\n", err)
+// 		}
+// 	}()
+	
+// 	// Return success response segera, tanpa menunggu proses report selesai
+// 	resp.Info = "Laporan Pomokit Harian sedang diproses di background"
+// 	resp.Response = "Process started"
+// 	at.WriteJSON(respw, http.StatusOK, resp)
+// }
+
+// GetPomokitWeeklySummary generates and sends a weekly summary of Pomokit activity
+// This endpoint should be called by a cron job once a week
+func GetPomokitWeeklySummary(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	
+	// Jalankan proses report dalam goroutine
+	go func() {
+		err := report.RekapPomokitMingguan(config.Mongoconn)
+		if err != nil {
+			// Log error
+		}
+	}()
+	
+	// Return success response segera
+	resp.Info = "Laporan Mingguan Pomokit sedang diproses di background"
+	resp.Response = "Process started"
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+// GetPomokitReport returns the current Pomokit point standings
+// This is a synchronous endpoint for manual checking
+func GetPomokitReport(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	var wg sync.WaitGroup
+	var reports []model.PomodoroReport
+	var activeUsers map[string]report.PomokitUserSummary
+	var message string
+	var err1, err2 error
+	
+	// Gunakan WaitGroup untuk menunggu hasil perhitungan tapi tetap memanfaatkan concurrency
+	wg.Add(2)
+	
+	// Goroutine untuk mengambil report
+	go func() {
+		defer wg.Done()
+		reports, err1 = report.GetPomokitReportYesterday(config.Mongoconn)
+	}()
+	
+	// Goroutine untuk mengambil data user
+	go func() {
+		defer wg.Done()
+		// Tunggu sampai reports tersedia sebelum menghitung activeUsers
+		// Ini diperlukan karena activeUsers bergantung pada reports
+		for {
+			if reports != nil || err1 != nil {
+				break
+			}
+		}
+		
+		if err1 == nil {
+			activeUsers = report.CalculatePomokitPoints(reports)
+			message = report.GeneratePomokitReportMessage(config.Mongoconn, activeUsers)
+		}
+	}()
+	
+	// Tunggu kedua goroutine selesai
+	wg.Wait()
+	
+	// Handle errors
+	if err1 != nil {
+		resp.Info = "Gagal Mengambil Data Laporan Pomokit"
+		resp.Response = err1.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+	
+	if err2 != nil {
+		resp.Info = "Gagal Memproses Data Laporan Pomokit"
+		resp.Response = err2.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+	
+	// Return preview laporan
+	resp.Info = "Preview Laporan Pomokit"
+	resp.Response = message
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+// BatchPomokitProcess menjalankan batch processing untuk sejumlah pengguna
+// Fungsi ini bisa dipanggil untuk memproses data dalam batch bila jumlah pengguna banyak
+func BatchPomokitProcess(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	
+	// Jalankan proses batch dalam goroutine
+	go func() {
+		// Dapatkan semua pengguna yang perlu diproses
+		pomokitUsers, err := report.GetAllPomokitUsers(config.Mongoconn)
+		if err != nil {
+			return
+		}
+		
+		// Buat worker pool dengan 5 worker
+		workerCount := 5
+		jobs := make(chan report.PomokitPoin, len(pomokitUsers))
+		results := make(chan error, len(pomokitUsers))
+		
+		// Jalankan workers
+		var wg sync.WaitGroup
+		wg.Add(workerCount)
+		for w := 1; w <= workerCount; w++ {
+			go func(workerID int) {
+				defer wg.Done()
+				for user := range jobs {
+					// Proses data user
+					err := report.ProcessSingleUser(config.Mongoconn, user)
+					results <- err
+				}
+			}(w)
+		}
+		
+		// Kirim jobs ke channel
+		for _, user := range pomokitUsers {
+			jobs <- user
+		}
+		close(jobs)
+		
+		// Tunggu semua worker selesai
+		wg.Wait()
+		close(results)
+		
+		// Proses hasil
+		var errorCount int
+		for err := range results {
+			if err != nil {
+				errorCount++
+			}
+		}
+		
+		// Log hasil batch processing
+		// log.Printf("Batch processing completed. Processed %d users with %d errors", len(pomokitUsers), errorCount)
+	}()
+	
+	// Return response segera
+	resp.Info = "Batch processing Pomokit dimulai"
+	resp.Response = "Process started in background"
+	at.WriteJSON(respw, http.StatusOK, resp)
 }
