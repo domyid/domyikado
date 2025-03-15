@@ -89,7 +89,6 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
 }
 
 func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
-    // Validasi token
     _, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
     if err != nil {
         at.WriteJSON(respw, http.StatusForbidden, model.Response{
@@ -100,7 +99,6 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // Ambil konfigurasi
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -115,7 +113,6 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // HTTP Client
     client := &http.Client{Timeout: 15 * time.Second}
     resp, err := client.Get(conf.PomokitUrl)
     if err != nil {
@@ -128,29 +125,43 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
     }
     defer resp.Body.Close()
 
-    // Handle non-200 status
     if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
         at.WriteJSON(respw, http.StatusBadGateway, model.Response{
             Status:   fmt.Sprintf("Error: API Returned Status %d", resp.StatusCode),
             Location: "Pomokit API",
-            Response: "Invalid response from Pomokit service",
+            Response: string(body),
         })
         return
     }
 
-    // Decode response
-    var apiResponse model.PomokitResponse
-    if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
         at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
-            Status:   "Error: Invalid API Response",
-            Location: "Response Decoding",
+            Status:   "Error: Failed to Read Response",
+            Location: "Response Reading",
             Response: err.Error(),
         })
         return
     }
 
-    // Validasi data kosong
-    if len(apiResponse.Data) == 0 {
+    var pomodoroReports []model.PomodoroReport
+    err = json.Unmarshal(body, &pomodoroReports)
+    
+    if err != nil {
+        var apiResponse model.PomokitResponse
+        err = json.Unmarshal(body, &apiResponse)
+        if err != nil {
+            at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+                Status:   "Error: Invalid API Response Format",
+                Location: "Response Decoding",
+                Response: fmt.Sprintf("Error: %v, Raw Response: %s", err, string(body)),
+            })
+            return
+        }
+        pomodoroReports = apiResponse.Data
+    }
+    if len(pomodoroReports) == 0 {
         at.WriteJSON(respw, http.StatusNoContent, model.Response{
             Status:   "Success: No Data Available",
             Location: "Pomokit API",
@@ -159,6 +170,5 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    at.WriteJSON(respw, http.StatusOK, apiResponse.Data)
+    at.WriteJSON(respw, http.StatusOK, pomodoroReports)
 }
-
