@@ -154,9 +154,23 @@ func GetIQScoreUser(w http.ResponseWriter, r *http.Request) {
 
 func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 	// Ambil nilai dari header "login"
-	loginHeader := r.Header.Get("login")
-	if loginHeader == "" {
+	loginToken := r.Header.Get("login")
+	if loginToken == "" {
 		http.Error(w, `{"error": "Login header tidak ditemukan"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// [NEW] Decode token dan ambil alias pengguna sebagai nama
+	claims, err := watoken.Decode("your-public-key-here", loginToken) // Gunakan public key yang sesuai
+	if err != nil {
+		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
+		return
+	}
+
+	username := claims.Alias // Gunakan alias sebagai pengganti nama pengguna
+
+	if username == "" {
+		http.Error(w, `{"error": "Alias pengguna tidak ditemukan dalam token"}`, http.StatusUnauthorized)
 		return
 	}
 
@@ -164,7 +178,7 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	var iqScore IqScore
 
-	err := iqScoreCollection.FindOne(context.TODO(), bson.M{"name": loginHeader}).Decode(&iqScore)
+	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": username}).Decode(&iqScore)
 	if err != nil {
 		http.Error(w, `{"error": "Skor tidak ditemukan untuk pengguna ini"}`, http.StatusNotFound)
 		return
