@@ -155,7 +155,6 @@ func GetIQScoreUser(w http.ResponseWriter, r *http.Request) {
 
 // Fungsi untuk mengambil jawaban dari database dan mengonversinya
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
-	// Dekode request JSON ke struct UserAnswer
 	var userAnswer UserAnswer
 	err := json.NewDecoder(r.Body).Decode(&userAnswer)
 	if err != nil {
@@ -184,62 +183,25 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debugging: Cek jumlah soal dan jawaban pengguna
-	fmt.Println("Jumlah Soal:", len(correctAnswers))
-	fmt.Println("Jawaban Pengguna:", userAnswer.Answers)
-
 	// Konversi jawaban pengguna
 	convertedAnswers := make([]string, len(userAnswer.Answers))
-	correctCount := 0
-
-	// Pastikan jumlah jawaban tidak melebihi jumlah soal yang tersedia
 	for i, answer := range userAnswer.Answers {
-		if i < len(correctAnswers) && correctAnswers[i].AnswerKey != nil {
-			// Simpan jawaban yang benar ke convertedAnswers
-			convertedAnswers[i] = *correctAnswers[i].AnswerKey
-
-			// Perbandingan jawaban dengan case-insensitive dan trim spasi
-			if strings.ToLower(strings.TrimSpace(answer)) == strings.ToLower(strings.TrimSpace(*correctAnswers[i].AnswerKey)) {
-				correctCount++
+		if i < len(correctAnswers) {
+			if correctAnswers[i].AnswerKey != nil {
+				convertedAnswers[i] = *correctAnswers[i].AnswerKey // Dereference pointer
+			} else {
+				convertedAnswers[i] = answer // Jika nil, gunakan jawaban asli
 			}
 		} else {
-			// Jika tidak ada jawaban benar, gunakan jawaban pengguna sendiri
 			convertedAnswers[i] = answer
 		}
 	}
 
-	// Debugging: Cek hasil konversi jawaban dan skor
-	fmt.Println("Jawaban yang Dikonversi:", convertedAnswers)
-	fmt.Println("Skor yang Dihitung:", correctCount)
-
-	// Hapus data sebelumnya dengan nama yang sama di temp_iq_answers
-	tempCollection := config.Mongoconn.Collection("temp_iq_answers")
-	_, err = tempCollection.DeleteMany(context.TODO(), bson.M{"name": userAnswer.Name})
-
-	if err != nil {
-		http.Error(w, `{"error": "Gagal menghapus data sementara"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Simpan hasil sementara ke MongoDB untuk PostIQScore
-	_, err = tempCollection.InsertOne(context.TODO(), bson.M{
-		"name":       userAnswer.Name,
-		"answers":    userAnswer.Answers,
-		"score":      correctCount, // Simpan jumlah jawaban benar
-		"created_at": time.Now(),
-	})
-
-	if err != nil {
-		http.Error(w, `{"error": "Gagal menyimpan jawaban sementara"}`, http.StatusInternalServerError)
-		return
-	}
-
 	// Kirim hasil kembali ke frontend
 	response := map[string]interface{}{
-		"message": "Jawaban berhasil dikonversi",
-		"answers": convertedAnswers,
-		"score":   correctCount,
 		"name":    userAnswer.Name,
+		"answers": convertedAnswers,
+		"message": "Jawaban berhasil dikonversi",
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -280,22 +242,20 @@ func PostIQScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ambil skor dari temp_iq_answers berdasarkan Name
-	var tempData struct {
-		Score int `bson:"score"` // Skor tersimpan sebagai int di temp_iq_answers
+	// Decode request body sebelum digunakan
+	err = json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Body tidak valid"})
+		return
 	}
 
-	filter := bson.M{"name": requestData.Name}
-	err = config.Mongoconn.Collection("temp_iq_answers").FindOne(context.TODO(), filter).Decode(&tempData)
-
-	// Jika data ditemukan di temp_iq_answers, gunakan skor tersebut
-	if err == nil {
-		requestData.Score = fmt.Sprintf("%d", tempData.Score) // Konversi int ke string
-	}
-
-	// Validasi jika Score masih kosong setelah pengecekan temp_iq_answers
-	if requestData.Score == "" {
-		at.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Score tidak ditemukan"})
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"name": payload.Id})
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error : User tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusNotFound, respn)
 		return
 	}
 
@@ -309,7 +269,7 @@ func PostIQScore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cari data pengguna berdasarkan Name
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"name": requestData.Name})
+	docuser, err = atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"name": requestData.Name})
 	if err != nil {
 		at.WriteJSON(w, http.StatusNotFound, model.Response{
 			Status:   "Error: User tidak ditemukan",
@@ -321,26 +281,24 @@ func PostIQScore(w http.ResponseWriter, r *http.Request) {
 	// Gunakan waktu server saat ini sebagai waktu penyelesaian tes
 	currentTime := time.Now()
 
-	// Simpan data ke iqscore
+	// Simpan ke iqscore
 	newIqScore := IqScore{
 		ID:          primitive.NewObjectID().Hex(),
 		Name:        docuser.Name,
 		PhoneNumber: docuser.PhoneNumber,
-		Score:       requestData.Score, // Simpan sebagai string
+		Score:       requestData.Score,
 		IQ:          matchedScoring.IQ,
 		CreatedAt:   currentTime,
 	}
 
 	insertResult, err := config.Mongoconn.Collection("iqscore").InsertOne(context.TODO(), newIqScore)
 	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Gagal menyimpan data"})
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Gagal menyimpan data"})
 		return
 	}
 
-	// Hapus data sementara dari temp_iq_answers setelah digunakan (jika ada)
-	config.Mongoconn.Collection("temp_iq_answers").DeleteOne(context.TODO(), filter)
-
-	// Kirim respons sukses
+	// Kirim respons sukses (JSON)
 	response := map[string]interface{}{
 		"message":     "Hasil tes berhasil disimpan",
 		"id":          insertResult.InsertedID,
@@ -351,124 +309,7 @@ func PostIQScore(w http.ResponseWriter, r *http.Request) {
 		"created_at":  currentTime.Format(time.RFC3339),
 	}
 
-	// Debugging (Opsional, bisa dihapus jika tidak diperlukan)
-	fmt.Println("Response ke frontend:", response)
-
 	// Gunakan helper at.WriteJSON agar response JSON terformat dengan baik
-	at.WriteJSON(w, http.StatusOK, response)
-}
-
-func PostAnswerAndScore(w http.ResponseWriter, r *http.Request) {
-	// Dekode token untuk mendapatkan informasi pengguna
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-	if err != nil {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Token Tidak Valid",
-			Info:     at.GetSecretFromHeader(r),
-			Location: "Decode Token Error",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	// Dekode request body
-	var requestData struct {
-		Name    string   `json:"name,omitempty"`
-		Answers []string `json:"answers"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Body tidak valid"})
-		return
-	}
-
-	// Jika Name kosong, gunakan dari payload token
-	if requestData.Name == "" {
-		requestData.Name = payload.Id
-	}
-
-	// Validasi jika Name tetap kosong
-	if requestData.Name == "" {
-		at.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Nama tidak boleh kosong"})
-		return
-	}
-
-	// Ambil jawaban benar dari iqquestion di MongoDB
-	collection := config.Mongoconn.Collection("iqquestion")
-	cursor, err := collection.Find(context.TODO(), bson.M{})
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Gagal mengambil soal dari database"})
-		return
-	}
-	defer cursor.Close(context.TODO())
-
-	var correctAnswers []SoalIQ
-	if err = cursor.All(context.TODO(), &correctAnswers); err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Gagal membaca soal dari database"})
-		return
-	}
-
-	// Hitung skor berdasarkan jawaban pengguna
-	correctCount := 0
-	for i, answer := range requestData.Answers {
-		if i < len(correctAnswers) && correctAnswers[i].AnswerKey != nil {
-			if strings.TrimSpace(answer) == strings.TrimSpace(*correctAnswers[i].AnswerKey) {
-				correctCount++
-			}
-		}
-	}
-
-	// Konversi skor menjadi string agar cocok dengan iqscoring
-	scoreStr := fmt.Sprintf("%d", correctCount)
-
-	// Cari referensi IQ di iqscoring berdasarkan skor
-	var matchedScoring IqScoring
-	scoreFilter := bson.M{"score": scoreStr}
-	err = config.Mongoconn.Collection("iqscoring").FindOne(context.TODO(), scoreFilter).Decode(&matchedScoring)
-	if err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "Skor tidak valid"})
-		return
-	}
-
-	// Cari data pengguna berdasarkan Name
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"name": requestData.Name})
-	if err != nil {
-		at.WriteJSON(w, http.StatusNotFound, model.Response{
-			Status:   "Error: User tidak ditemukan",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	// Gunakan waktu server saat ini sebagai waktu penyelesaian tes
-	currentTime := time.Now()
-
-	// Simpan hasil ke iqscore
-	newIqScore := IqScore{
-		ID:          primitive.NewObjectID().Hex(),
-		Name:        docuser.Name,
-		PhoneNumber: docuser.PhoneNumber,
-		Score:       scoreStr, // Simpan sebagai string
-		IQ:          matchedScoring.IQ,
-		CreatedAt:   currentTime,
-	}
-
-	insertResult, err := config.Mongoconn.Collection("iqscore").InsertOne(context.TODO(), newIqScore)
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Gagal menyimpan data"})
-		return
-	}
-
-	// Kirim respons sukses
-	response := map[string]interface{}{
-		"message":     "Hasil tes berhasil disimpan",
-		"id":          insertResult.InsertedID,
-		"name":        docuser.Name,
-		"phonenumber": docuser.PhoneNumber,
-		"score":       scoreStr,
-		"iq":          matchedScoring.IQ,
-		"created_at":  currentTime.Format(time.RFC3339),
-	}
-
+	fmt.Println("Response ke frontend:", response) // Debugging
 	at.WriteJSON(w, http.StatusOK, response)
 }
