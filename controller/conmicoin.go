@@ -304,7 +304,7 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update queue status
-	expiryTime := time.Now().Add(300 * time.Second) // 5 minutes expiry
+	expiryTime := time.Now().Add(900 * time.Second) // 5 minutes expiry
 	_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
@@ -347,7 +347,7 @@ func CreateMerchCoinOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(300 * time.Second)
+		time.Sleep(900 * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.MerchCoinQueue
