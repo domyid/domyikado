@@ -1,10 +1,12 @@
 package report
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -40,46 +42,64 @@ func CountPomokitActivity(reports []model.PomodoroReport) map[string]PomokitInfo
 	return pomokitCount
 }
 
+// GetPomokitDataHarian mengambil data Pomokit untuk periode tertentu
 func GetPomokitDataHarian(db *mongo.Database, filter bson.M) ([]model.PomodoroReport, error) {
-	var conf model.Config
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	
-	err := db.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
-	if err != nil {
-		return nil, errors.New("Config Not Found: " + err.Error())
-	}
+    // Ambil konfigurasi
+    var conf model.Config
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    err := db.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+    if err != nil {
+        return nil, errors.New("Config Not Found: " + err.Error())
+    }
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(conf.PomokitUrl)
-	if err != nil {
-		return nil, errors.New("API Connection Failed: " + err.Error())
-	}
-	defer resp.Body.Close()
+    fmt.Printf("DEBUG: Fetching Pomokit data from %s\n", conf.PomokitUrl)
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API Returned Status %d", resp.StatusCode)
-	}
+    // HTTP Client request ke API Pomokit
+    client := &http.Client{Timeout: 15 * time.Second}
+    resp, err := client.Get(conf.PomokitUrl)
+    if err != nil {
+        return nil, errors.New("API Connection Failed: " + err.Error())
+    }
+    defer resp.Body.Close()
 
-	var pomodoroReports []model.PomodoroReport
-	if err := json.NewDecoder(resp.Body).Decode(&pomodoroReports); err != nil {
-		var apiResponse model.PomokitResponse
-		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-			return nil, errors.New("Invalid API Response: " + err.Error())
-		}
-		pomodoroReports = apiResponse.Data
-	}
+    // Handle non-200 status
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("API Returned Status %d", resp.StatusCode)
+    }
 
-	var filteredReports []model.PomodoroReport
-	today := time.Now().Truncate(24 * time.Hour)
-	for _, report := range pomodoroReports {
-		if report.CreatedAt.After(today) && 
-		   report.CreatedAt.Before(today.Add(24 * time.Hour)) {
-			filteredReports = append(filteredReports, report)
-		}
-	}
+    // Decode response
+    var pomodoroReports []model.PomodoroReport
+    if err := json.NewDecoder(resp.Body).Decode(&pomodoroReports); err != nil {
+        responseBody, _ := io.ReadAll(resp.Body)
+        resp.Body.Close()
+        
+        resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
+        
+        var apiResponse model.PomokitResponse
+        if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+            fmt.Printf("ERROR: Failed to parse API response. Raw response: %s\n", string(responseBody))
+            return nil, errors.New("Invalid API Response: " + err.Error())
+        }
+        pomodoroReports = apiResponse.Data
+    }
 
-	return filteredReports, nil
+    fmt.Printf("DEBUG: Retrieved %d Pomokit reports from API\n", len(pomodoroReports))
+
+    var filteredReports []model.PomodoroReport
+    today := time.Now().Truncate(24 * time.Hour)
+    for _, report := range pomodoroReports {
+        if report.CreatedAt.After(today) && 
+           report.CreatedAt.Before(today.Add(24 * time.Hour)) {
+            filteredReports = append(filteredReports, report)
+            fmt.Printf("DEBUG: Including report for user %s (groupID: '%s')\n", 
+                report.PhoneNumber, report.WaGroupID)
+        }
+    }
+
+    fmt.Printf("DEBUG: After date filtering, %d reports remain\n", len(filteredReports))
+    return filteredReports, nil
 }
 
 func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
@@ -111,8 +131,10 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
     phoneToGroupID := make(map[string]string)
     
     for _, report := range pomokitData {
-        if report.PhoneNumber != "" && report.WaGroupID != "" {
+        if report.PhoneNumber != "" {
             phoneToGroupID[report.PhoneNumber] = report.WaGroupID
+            fmt.Printf("DEBUG: Mapped phone %s to groupID '%s'\n", 
+                report.PhoneNumber, report.WaGroupID)
         }
     }
     
@@ -193,8 +215,8 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
                 status.TotalPoint)
         }
     }
-
-	if !isLibur {
+    
+    if !isLibur {
         msg += "\n*Catatan: Pengguna tanpa aktivitas Pomodoro hari ini akan dikurangi 1 poin*"
     } else {
         msg += "\n*Catatan: Hari ini adalah hari libur, tidak ada pengurangan poin*"
@@ -341,9 +363,11 @@ func GeneratePomokitRekapHarianByGroupID(db *mongo.Database, groupID string) (ms
 }
 
 func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, pomokitData []model.PomodoroReport, groupID string) (totalPoin float64, err error) {
-    today := time.Now().Truncate(24 * time.Hour)
+    currentTime := time.Now()
+    today := currentTime.Truncate(24 * time.Hour)
     tomorrow := today.Add(24 * time.Hour)
     
+    // Define the base filter
     filter := bson.M{
         "phonenumber": phoneNumber,
         "createdat": bson.M{
@@ -351,19 +375,56 @@ func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, po
             "$lt": tomorrow,
         },
     }
-
+    
     if groupID != "" {
         filter["groupid"] = groupID
     } else {
-        filter["groupid"] = ""
+        filter["$or"] = []bson.M{
+            {"groupid": ""},
+            {"groupid": bson.M{"$exists": false}},
+        }
     }
     
     var existingPoints []PomokitPoin
     existingPoints, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", filter)
+    
+    var latestActivityTime time.Time
+    for _, report := range pomokitData {
+        if report.PhoneNumber == phoneNumber {
+            if report.CreatedAt.After(latestActivityTime) {
+                latestActivityTime = report.CreatedAt
+            }
+        }
+    }
+    
     if err == nil && len(existingPoints) > 0 {
-        return GetTotalPomokitPoints(db, phoneNumber)
+        mostRecentRecord := existingPoints[0]
+        for _, record := range existingPoints {
+            if record.CreatedAt.After(mostRecentRecord.CreatedAt) {
+                mostRecentRecord = record
+            }
+        }
+        
+        if latestActivityTime.After(mostRecentRecord.CreatedAt) {
+            fmt.Printf("INFO: Found newer activity data for user %s (groupID: %s), updating points\n", 
+                phoneNumber, groupID)
+            
+            deleteFilter := filter
+            _, err = db.Collection("pomokitpoin").DeleteMany(context.Background(), deleteFilter)
+            if err != nil {
+                return 0, fmt.Errorf("failed to delete old records: %v", err)
+            }
+            
+        } else {
+            fmt.Printf("INFO: No newer activity data for user %s (groupID: %s), keeping existing record\n", 
+                phoneNumber, groupID)
+            return GetTotalPomokitPoints(db, phoneNumber)
+        }
+    } else {
+        fmt.Printf("INFO: Adding new points for user %s (groupID: %s)\n", phoneNumber, groupID)
     }
 
+    // Ambil data user
     usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
     if err != nil {
         return 0, err
@@ -376,7 +437,7 @@ func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, po
         Email:       usr.Email,
         GroupID:     groupID, // Use the groupID as provided (could be empty)
         PoinPomokit: points,  // Use new field name
-        CreatedAt:   time.Now(),
+        CreatedAt:   currentTime, // Use current time
     }
     
     _, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
@@ -399,7 +460,8 @@ func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, po
 }
 
 func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64, groupID string) (totalPoin float64, err error) {
-    today := time.Now().Truncate(24 * time.Hour)
+    currentTime := time.Now()
+    today := currentTime.Truncate(24 * time.Hour)
     tomorrow := today.Add(24 * time.Hour)
     
     filter := bson.M{
@@ -414,13 +476,28 @@ func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64,
     if groupID != "" {
         filter["groupid"] = groupID
     } else {
-        filter["groupid"] = ""
+        filter["$or"] = []bson.M{
+            {"groupid": ""},
+            {"groupid": bson.M{"$exists": false}},
+        }
     }
     
     var existingDeductions []PomokitPoin
     existingDeductions, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", filter)
+    
     if err == nil && len(existingDeductions) > 0 {
-        return GetTotalPomokitPoints(db, phoneNumber)
+        
+        fmt.Printf("INFO: Found existing deduction for user %s (groupID: %s), updating\n", 
+            phoneNumber, groupID)
+        
+        deleteFilter := filter
+        _, err = db.Collection("pomokitpoin").DeleteMany(context.Background(), deleteFilter)
+        if err != nil {
+            return 0, fmt.Errorf("failed to delete old deduction records: %v", err)
+        }
+        
+    } else {
+        fmt.Printf("INFO: Adding new deduction for user %s (groupID: %s)\n", phoneNumber, groupID)
     }
 
     usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
@@ -435,7 +512,7 @@ func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64,
         Email:       usr.Email,
         GroupID:     groupID, // Use groupID as provided (could be empty)
         PoinPomokit: -points, // Use new field name with negative value for deduction
-        CreatedAt:   time.Now(),
+        CreatedAt:   currentTime, // Use current time
     }
     
     _, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
@@ -468,6 +545,9 @@ func GetTotalPomokitPoints(db *mongo.Database, phoneNumber string) (totalPoin fl
     for _, record := range pomokitPoints {
         totalPoin += record.PoinPomokit
     }
+    
+    fmt.Printf("DEBUG: Total PoinPomokit for %s: %.2f from %d records\n", 
+        phoneNumber, totalPoin, len(pomokitPoints))
     
     return totalPoin, nil
 }
