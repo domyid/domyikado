@@ -223,3 +223,79 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 
 	return nil
 }
+
+// RekapPomokitHarian fungsi untuk mengirimkan rekap Pomokit ke grup WhatsApp
+func RekapPomokitHarian(db *mongo.Database) (err error) {
+	// Generate rekap
+	msg, err := GeneratePomokitRekapHarian(db)
+	if err != nil {
+		return err
+	}
+	
+	// Menggunakan manual group ID yang spesifik
+	manualGroupIDs := []string{"120363393689851748"} // Ganti dengan WAGroupID yang ingin digunakan
+
+	var lastErr error
+
+	for _, groupID := range manualGroupIDs {
+		// Kirim pesan ke grup WhatsApp
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+
+		// Protokol untuk wa group id mengandung hyphen
+		if strings.Contains(groupID, "-") {
+			// Dapatkan nomor perwakilan (owner)
+			ownerPhone, err := getGroupOwnerPhone(db, groupID)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			dt.To = ownerPhone
+			dt.IsGroup = false
+		}
+
+		// Kirim WA ke API
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
+}
+
+// // RekapPomokitMingguan menjalankan proses pembuatan dan pengiriman laporan Pomokit mingguan
+// func RekapPomokitMingguan(db *mongo.Database) error {
+// 	manualGroupID := "120363393689851748" // Ganti dengan WAGroupID sesuai kebutuhan
+
+// 	reports, err := GetPomokitReportWeekly(db)
+// 	if err != nil {
+// 		return errors.New("Gagal mengambil data Pomokit mingguan: " + err.Error())
+// 	}
+
+// 	weeklySummaries := CalculateWeeklyPomokitSummary(reports)
+
+// 	msg := GenerateWeeklyReportMessage(weeklySummaries)
+
+// 	dt := &whatsauth.TextMessage{
+// 		To:       manualGroupID,
+// 		IsGroup:  true,
+// 		Messages: msg,
+// 	}
+
+// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 	if err != nil {
+// 		return errors.New("Gagal mengirim laporan mingguan Pomokit: " + err.Error())
+// 	}
+
+// 	return nil
+// }
