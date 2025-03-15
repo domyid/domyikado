@@ -156,23 +156,33 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 	// Ambil nilai dari header "login"
 	loginToken := r.Header.Get("login")
 	if loginToken == "" {
+		fmt.Println("❌ Header 'login' tidak ditemukan!") // Debugging
 		http.Error(w, `{"error": "Login header tidak ditemukan"}`, http.StatusUnauthorized)
 		return
 	}
 
+	// Pastikan public key yang digunakan benar
+	publicKey := "your-public-key-here"                    // Gantilah dengan public key yang benar
+	fmt.Println("🚀 Public Key yang Digunakan:", publicKey) // Debugging public key
+
 	// [NEW] Decode token dan ambil alias pengguna sebagai nama
-	claims, err := watoken.Decode("your-public-key-here", loginToken) // Gunakan public key yang sesuai
+	claims, err := watoken.Decode(publicKey, loginToken) // Gunakan public key yang sesuai
 	if err != nil {
+		fmt.Println("❌ Token tidak valid:", err) // Debugging error
 		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
 		return
 	}
 
-	username := claims.Alias // Gunakan alias sebagai pengganti nama pengguna
+	fmt.Println("✅ Token berhasil diverifikasi:", claims) // Debugging payload token
 
+	username := claims.Alias // Gunakan alias sebagai pengganti nama pengguna
 	if username == "" {
+		fmt.Println("❌ Alias pengguna tidak ditemukan dalam token!") // Debugging
 		http.Error(w, `{"error": "Alias pengguna tidak ditemukan dalam token"}`, http.StatusUnauthorized)
 		return
 	}
+
+	fmt.Println("✅ Nama Pengguna dari Token:", username) // Debugging username
 
 	// Gunakan loginHeader sebagai nama pengguna untuk query ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
@@ -180,9 +190,12 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 
 	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": username}).Decode(&iqScore)
 	if err != nil {
+		fmt.Println("❌ Skor tidak ditemukan untuk pengguna ini!") // Debugging
 		http.Error(w, `{"error": "Skor tidak ditemukan untuk pengguna ini"}`, http.StatusNotFound)
 		return
 	}
+
+	fmt.Println("✅ Data Skor Ditemukan:", iqScore) // Debugging data dari MongoDB
 
 	// Kirim hasil dalam format JSON
 	response := map[string]interface{}{
@@ -198,14 +211,14 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 }
 
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
-	// 1️⃣ **Cek Token Login di Header**
+	// Cek Token Login di Header
 	loginHeader := r.Header.Get("login")
 	if loginHeader == "" {
 		http.Error(w, `{"error": "Akses ditolak! Token login diperlukan."}`, http.StatusUnauthorized)
 		return
 	}
 
-	// 2️⃣ **Decode JSON Request**
+	// Decode JSON Request
 	var userAnswer UserAnswer
 	err := json.NewDecoder(r.Body).Decode(&userAnswer)
 	if err != nil {
@@ -213,13 +226,13 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3️⃣ **Validasi Nama**
+	// Validasi Nama
 	if userAnswer.Name == "" {
 		http.Error(w, `{"error": "Nama tidak boleh kosong"}`, http.StatusBadRequest)
 		return
 	}
 
-	// 4️⃣ **Ambil Jawaban Benar dari MongoDB**
+	// Ambil Jawaban Benar dari MongoDB
 	collection := config.Mongoconn.Collection("iqquestion")
 	cursor, err := collection.Find(context.TODO(), bson.M{})
 	if err != nil {
@@ -234,7 +247,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5️⃣ **Hitung Jawaban yang Benar**
+	// Hitung Jawaban yang Benar
 	correctCount := 0
 	for i, answer := range userAnswer.Answers {
 		if i < len(correctAnswers) && correctAnswers[i].AnswerKey != nil {
@@ -244,7 +257,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 6️⃣ **Ambil IQ Berdasarkan Skor**
+	// Ambil IQ Berdasarkan Skor
 	iqScoringCollection := config.Mongoconn.Collection("iqscoring")
 	var iqScoring IqScoring
 	err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}).Decode(&iqScoring)
@@ -253,7 +266,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 7️⃣ **Simpan Hasil ke MongoDB*
+	// Simpan Hasil ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	newIqScore := IqScore{
 		ID:        primitive.NewObjectID(),
