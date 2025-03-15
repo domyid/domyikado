@@ -258,111 +258,150 @@ func GeneratePomokitRekapHarian(db *mongo.Database) (msg string, err error) {
 }
 
 func AddPomokitPoints(db *mongo.Database, phoneNumber string, points float64, pomokitData []model.PomodoroReport, groupID string) (totalPoin float64, err error) {
-	// Ambil data user
-	usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
-	if err != nil {
-		return 0, err
-	}
-	
-	// Buat entry untuk pomokitpoin
-	pomokitPoin := PomokitPoin{
-		UserID:      usr.ID,
-		Name:        usr.Name,
-		PhoneNumber: usr.PhoneNumber,
-		Email:       usr.Email,
-		GroupID:     groupID, // Gunakan groupID apa adanya (bisa kosong)
-		Poin:        points,
-		Activity:    "Pomodoro Session",
-	}
-	
-	// Simpan ke collection pomokitpoin
-	_, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
-	if err != nil {
-		return 0, err
-	}
-	
-	// Ambil total poin dari collection pomokitpoin
-	totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
-	if err != nil {
-		return 0, err
-	}
-	
-	// Update poin user di collection user juga
-	usr.Poin = totalPoin
-	_, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
-	if err != nil {
-		return totalPoin, nil // Tetap kembalikan total poin meskipun ada error saat update user
-	}
-	
-	return totalPoin, nil
+    // Check if points already added today for this phone number
+    today := time.Now().Truncate(24 * time.Hour)
+    tomorrow := today.Add(24 * time.Hour)
+    
+    // Look for existing points record for today
+    var existingPoints []PomokitPoin
+    filter := bson.M{
+        "phonenumber": phoneNumber,
+        "groupid": groupID,
+        "activity": "Pomodoro Session",
+        "createdat": bson.M{
+            "$gte": today,
+            "$lt": tomorrow,
+        },
+    }
+    
+    existingPoints, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", filter)
+    if err == nil && len(existingPoints) > 0 {
+        // Points already added today, return the current total
+        return GetTotalPomokitPoints(db, phoneNumber)
+    }
+
+    // Proceed with adding points as before
+    usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
+    if err != nil {
+        return 0, err
+    }
+    
+    // Buat entry untuk pomokitpoin dengan timestamp
+    pomokitPoin := PomokitPoin{
+        UserID:      usr.ID,
+        Name:        usr.Name,
+        PhoneNumber: usr.PhoneNumber,
+        Email:       usr.Email,
+        GroupID:     groupID,
+        Poin:        points,
+        Activity:    "Pomodoro Session",
+        CreatedAt:   time.Now(), // Add current timestamp
+    }
+    
+    // Save to pomokitpoin collection
+    _, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
+    if err != nil {
+        return 0, err
+    }
+    
+    // Get total points from pomokitpoin collection
+    totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
+    if err != nil {
+        return 0, err
+    }
+    
+    // Update user's points in user collection
+    usr.Poin = totalPoin
+    _, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
+    if err != nil {
+        return totalPoin, nil
+    }
+    
+    return totalPoin, nil
 }
 
 // Helper function untuk mengurangi poin Pomokit
 func DeductPomokitPoints(db *mongo.Database, phoneNumber string, points float64, groupID string) (totalPoin float64, err error) {
-	// Ambil data user
-	usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
-	if err != nil {
-		return 0, err
-	}
-	
-	// Buat entry untuk pomokitpoin dengan poin negatif
-	pomokitPoin := PomokitPoin{
-		UserID:      usr.ID,
-		Name:        usr.Name,
-		PhoneNumber: usr.PhoneNumber,
-		Email:       usr.Email,
-		GroupID:     groupID, // Gunakan groupID apa adanya (bisa kosong)
-		Poin:        -points, // Nilai negatif untuk pengurangan
-		Activity:    "No Pomodoro Session",
-	}
-	
-	// Simpan ke collection pomokitpoin
-	_, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
-	if err != nil {
-		return 0, err
-	}
-	
-	// Ambil total poin dari collection pomokitpoin
-	totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
-	if err != nil {
-		return 0, err
-	}
-	
-	// Update poin user di collection user juga
-	usr.Poin = totalPoin
-	_, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
-	if err != nil {
-		return totalPoin, nil // Tetap kembalikan total poin meskipun ada error saat update user
-	}
-	
-	return totalPoin, nil
+    // Check if points already deducted today for this phone number
+    today := time.Now().Truncate(24 * time.Hour)
+    tomorrow := today.Add(24 * time.Hour)
+    
+    // Look for existing deduction record for today
+    var existingDeductions []PomokitPoin
+    filter := bson.M{
+        "phonenumber": phoneNumber,
+        "groupid": groupID,
+        "activity": "No Pomodoro Session",
+        "createdat": bson.M{
+            "$gte": today,
+            "$lt": tomorrow,
+        },
+    }
+    
+    existingDeductions, err = atdb.GetAllDoc[[]PomokitPoin](db, "pomokitpoin", filter)
+    if err == nil && len(existingDeductions) > 0 {
+        return GetTotalPomokitPoints(db, phoneNumber)
+    }
+
+    usr, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phoneNumber})
+    if err != nil {
+        return 0, err
+    }
+    
+    pomokitPoin := PomokitPoin{
+        UserID:      usr.ID,
+        Name:        usr.Name,
+        PhoneNumber: usr.PhoneNumber,
+        Email:       usr.Email,
+        GroupID:     groupID,
+        Poin:        -points,
+        Activity:    "No Pomodoro Session",
+        CreatedAt:   time.Now(), // Add current timestamp
+    }
+    
+    _, err = atdb.InsertOneDoc(db, "pomokitpoin", pomokitPoin)
+    if err != nil {
+        return 0, err
+    }
+    
+    totalPoin, err = GetTotalPomokitPoints(db, phoneNumber)
+    if err != nil {
+        return 0, err
+    }
+    
+    usr.Poin = totalPoin
+    _, err = atdb.ReplaceOneDoc(db, "user", bson.M{"phonenumber": phoneNumber}, usr)
+    if err != nil {
+        return totalPoin, nil
+    }
+    
+    return totalPoin, nil
 }
 
 func GeneratePomokitRekapHarianByGroupID(db *mongo.Database, groupID string) (msg string, err error) {
-	// Ambil data Pomokit hari ini
-	pomokitData, err := GetPomokitDataHarian(db, TodayFilter())
-	if err != nil {
-		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
-	}
+    filter := bson.M{}
+    if groupID != "" {
+        filter = bson.M{"wagroupid": groupID}
+    }
+    
+    pomokitData, err := GetPomokitDataHarian(db, filter)
+    if err != nil {
+        return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+    }
 	
 	// Filter data berdasarkan WAGroupID jika groupID tidak kosong
 	var filteredPomokitData []model.PomodoroReport
 	if groupID != "" {
-		// Filter data untuk grup tertentu
 		for _, report := range pomokitData {
-			// Hanya ambil data dengan groupID yang sama
 			if report.WaGroupID == groupID {
 				filteredPomokitData = append(filteredPomokitData, report)
 			}
 		}
 	} else {
-		// Jika groupID kosong, gunakan semua data
 		filteredPomokitData = pomokitData
 	}
 	
-	// Jika tidak ada data untuk grup ini
 	if len(filteredPomokitData) == 0 && groupID != "" {
-		// Ambil data grup untuk mendapatkan nama grup
 		var projectName string = "Grup Ini"
 		project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
 		if err == nil {
@@ -374,20 +413,16 @@ func GeneratePomokitRekapHarianByGroupID(db *mongo.Database, groupID string) (ms
 		return "*Rekap Aktivitas Pomodoro Hari Ini:*\n\nTidak ada aktivitas Pomodoro yang tercatat hari ini.", nil
 	}
 	
-	// Buat pesan rekap
 	if groupID != "" {
 		msg = fmt.Sprintf("*Rekap Aktivitas Pomodoro Hari Ini untuk GroupID %s:*\n\n", groupID)
 	} else {
 		msg = "*Rekap Aktivitas Pomodoro Hari Ini:*\n\n"
 	}
 	
-	// Cek apakah hari libur
 	isLibur := HariLibur(GetDateSekarang())
 	
-	// Hitung aktivitas per pengguna
 	pomokitCounts := CountPomokitActivity(filteredPomokitData)
 	
-	// Ambil anggota grup jika GroupID tidak kosong
 	var groupMembers []model.Userdomyikado
 	if groupID != "" {
 		project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
@@ -401,7 +436,6 @@ func GeneratePomokitRekapHarianByGroupID(db *mongo.Database, groupID string) (ms
 			}
 		}
 	} else {
-		// Jika groupID kosong, ambil semua pengguna
 		allUsers, _ := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{})
 		groupMembers = allUsers
 	}
