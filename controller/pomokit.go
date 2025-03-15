@@ -17,7 +17,6 @@ import (
 )
 
 func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
-    // [1] Validasi Token
     payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
     if err != nil {
         at.WriteJSON(respw, http.StatusForbidden, model.Response{
@@ -28,8 +27,6 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         })
         return
     }
-
-    // [2] Ambil Config dari Database
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -43,8 +40,6 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         })
         return
     }
-
-    // [3] HTTP Request ke API Pomokit
     client := &http.Client{Timeout: 15 * time.Second}
     resp, err := client.Get(conf.PomokitUrl) // GET request tanpa header tambahan
     if err != nil {
@@ -57,7 +52,6 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
     }
     defer resp.Body.Close()
 
-    // [4] Handle Status Code
     if resp.StatusCode != http.StatusOK {
         body, _ := io.ReadAll(resp.Body)
         at.WriteJSON(respw, http.StatusBadGateway, model.Response{
@@ -67,8 +61,6 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         })
         return
     }
-
-    // [5] Decode Response Langsung ke Slice
     var apiResponse []model.PomodoroReport
     if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
         body, _ := io.ReadAll(resp.Body)
@@ -79,18 +71,13 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         })
         return
     }
-
-    // [6] Cari User berdasarkan nomor telepon
-    var foundReport *model.PomodoroReport
-    for i, report := range apiResponse {
+    var matchingReports []model.PomodoroReport
+    for _, report := range apiResponse {
         if report.PhoneNumber == payload.Id {
-            foundReport = &apiResponse[i] // Gunakan pointer ke elemen asli
-            break
+            matchingReports = append(matchingReports, report)
         }
     }
-
-    // [7] Handle User Tidak Ditemukan
-    if foundReport == nil {
+    if len(matchingReports) == 0 {
         at.WriteJSON(respw, http.StatusNotFound, model.PomodoroReport{
             PhoneNumber: payload.Id,
             Name:        payload.Alias,
@@ -98,8 +85,7 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // [9] Return Response
-    at.WriteJSON(respw, http.StatusOK, foundReport)
+    at.WriteJSON(respw, http.StatusOK, matchingReports)
 }
 
 func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
