@@ -13,3 +13,5 @@ var WAAPIGetDevice string = "https://api.wa.my.id/api/device/"
 var PublicKeyWhatsAuth string
 
 var WAAPIToken string
+
+var StravaActivityAPI string = "https://asia-southeast1-awangga.cloudfunctions.net/wamyid/strava/activities"

@@ -90,6 +90,44 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 
 }
 
+func RekapStravaMingguan(db *mongo.Database) error {
+	wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
+
+	var lastErr error
+
+	for _, groupID := range wagroupidlist {
+		msg, perwkilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
+		if err != nil {
+			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
+			continue
+		}
+
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+
+		if strings.Contains(groupID, "-") {
+			dt.To = perwkilanphone
+			dt.IsGroup = false
+		}
+
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
+}
+
 func RekapMingguIni(db *mongo.Database) (err error) {
 	filter := bson.M{"_id": WeeklyFilter()}
 	wagroupidlist, err := atdb.GetAllDistinctDoc(db, filter, "project.wagroupid", "pushrepo")
@@ -185,4 +223,3 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 
 	return nil
 }
-
