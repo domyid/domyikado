@@ -111,7 +111,6 @@ type PomokitPoin struct {
     PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
     Email       string             `json:"email,omitempty" bson:"email,omitempty"`
     GroupID     string             `json:"groupid,omitempty" bson:"groupid,omitempty"`
-    Poin        float64            `json:"poin,omitempty" bson:"poin,omitempty"`
-    Activity    string             `json:"activity,omitempty" bson:"activity,omitempty"`
+    PoinPomokit float64            `json:"poinpomokit,omitempty" bson:"poinpomokit,omitempty"`
     CreatedAt   time.Time          `json:"createdat,omitempty" bson:"createdat,omitempty"`
 }
