@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -27,10 +28,21 @@ func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg st
 
 	msg = "*Laporan Aktivitas Strava Minggu ini :*\n\n"
 
+	// Ubah map menjadi slice agar bisa diurutkan
+	var userList []StravaInfo
+	for _, info := range phoneNumberCount {
+		userList = append(userList, info)
+	}
+
+	// Urutkan berdasarkan Count dari terbesar ke terkecil
+	sort.Slice(userList, func(i, j int) bool {
+		return userList[i].Count > userList[j].Count
+	})
+
 	var aktifitasAda, aktifitasKosong string
 
-	for _, info := range phoneNumberCount {
-
+	// Loop data yang sudah diurutkan
+	for _, info := range userList {
 		if info.Count > 0 {
 			aktifitasAda += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas\n"
 		} else {
@@ -94,53 +106,6 @@ func getStravaActivities() ([]model.StravaActivity, error) {
 
 	return filteredActivities, nil
 }
-
-// func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, error) {
-// 	// 1️⃣ Ambil semua aktivitas Strava dari API
-// 	activities, err := getStravaActivities()
-// 	if err != nil {
-// 		return nil, fmt.Errorf("gagal mengambil data aktivitas Strava: %v", err)
-// 	}
-
-// 	// 2️⃣ Buat map untuk menyimpan aktivitas berdasarkan Picture dari Strava
-// 	pictureToCount := make(map[string]float64)
-// 	pictureToName := make(map[string]string)
-
-// 	for _, activity := range activities {
-// 		pictureToCount[activity.Picture]++ // Hitung aktivitas berdasarkan Picture
-// 		pictureToName[activity.Picture] = activity.Name
-// 	}
-
-// 	// 3️⃣ Ambil semua user dari database
-// 	usersFromDB, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{})
-// 	if err != nil {
-// 		return nil, fmt.Errorf("gagal mengambil data user dari database: %v", err)
-// 	}
-
-// 	var users []StravaInfo
-
-// 	for _, user := range usersFromDB {
-// 		count, found := pictureToCount[user.StravaProfilePicture] // Cek apakah ada aktivitas
-// 		name := pictureToName[user.StravaProfilePicture]          // Cek apakah ada nama dari Strava
-
-// 		if !found && user.StravaProfilePicture != "" {
-// 			// Jika profile picture terisi tapi tidak ditemukan di Strava, set aktivitas ke 0
-// 			count = 0
-// 		}
-
-// 		if name == "" {
-// 			name = user.Name // Jika nama tidak ditemukan di Strava, gunakan nama dari database
-// 		}
-
-// 		users = append(users, StravaInfo{
-// 			Name:        name,
-// 			PhoneNumber: user.PhoneNumber,
-// 			Count:       count, // Bisa 0 jika tidak ada aktivitas atau tidak cocok
-// 		})
-// 	}
-
-// 	return users, nil
-// }
 
 func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, error) {
 	// Ambil semua aktivitas Strava
