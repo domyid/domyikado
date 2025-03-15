@@ -90,16 +90,65 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 
 }
 
+// func RekapStravaMingguan(db *mongo.Database) error {
+// 	wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
+
+// 	var lastErr error
+
+// 	for _, groupID := range wagroupidlist {
+// 		msg, perwkilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
+// 		if err != nil {
+// 			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
+// 			continue
+// 		}
+
+// 		dt := &whatsauth.TextMessage{
+// 			To:       groupID,
+// 			IsGroup:  true,
+// 			Messages: msg,
+// 		}
+
+// 		if strings.Contains(groupID, "-") {
+// 			dt.To = perwkilanphone
+// 			dt.IsGroup = false
+// 		}
+
+// 		var resp model.Response
+// 		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 		if err != nil {
+// 			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+// 			continue
+// 		}
+// 	}
+
+// 	if lastErr != nil {
+// 		return lastErr
+// 	}
+
+// 	return nil
+// }
+
 func RekapStravaMingguan(db *mongo.Database) error {
-	wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
+	phoneToGroupID, err := GetWagroupIDsFromAPI()
+	if err != nil {
+		return err
+	}
+
+	groupMessages := make(map[string]string)
 
 	var lastErr error
 
-	for _, groupID := range wagroupidlist {
-		msg, perwkilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
+	for _, groupID := range phoneToGroupID {
+		msg, perwakilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
 		if err != nil {
 			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
 			continue
+		}
+
+		if _, ok := groupMessages[groupID]; !ok {
+			groupMessages[groupID] = msg
+		} else {
+			groupMessages[groupID] += msg
 		}
 
 		dt := &whatsauth.TextMessage{
@@ -109,7 +158,7 @@ func RekapStravaMingguan(db *mongo.Database) error {
 		}
 
 		if strings.Contains(groupID, "-") {
-			dt.To = perwkilanphone
+			dt.To = perwakilanphone
 			dt.IsGroup = false
 		}
 

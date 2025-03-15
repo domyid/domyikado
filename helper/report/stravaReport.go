@@ -20,6 +20,20 @@ type StravaInfo struct {
 	PhoneNumber string
 }
 
+func GetWagroupIDsFromAPI() (map[string]string, error) {
+	_, doc, err := atapi.Get[[]model.PomodoroReport](config.DataPomokitAPI)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+	}
+
+	phoneToGroupID := make(map[string]string)
+	for _, report := range doc {
+		phoneToGroupID[report.PhoneNumber] = report.WaGroupID
+	}
+
+	return phoneToGroupID, nil
+}
+
 func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
 	phoneNumberCount, err := getDataStravaMasukPerMinggu(db)
 	if err != nil {
@@ -71,42 +85,6 @@ func getDataStravaMasukPerMinggu(db *mongo.Database) (map[string]StravaInfo, err
 	return countDuplicatePhoneNumbers(users), nil
 }
 
-func getWeekStartEnd(t time.Time) (time.Time, time.Time) {
-	weekday := int(t.Weekday())
-	// Jika hari Minggu (0), kita mundur 6 hari ke Senin sebelumnya
-	if weekday == 0 {
-		weekday = 7
-	}
-
-	// Dapatkan Senin di awal minggu ini
-	monday := t.AddDate(0, 0, -weekday+1)
-	sunday := monday.AddDate(0, 0, 6) // Hitung Minggu
-
-	monday = time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, t.Location())
-	sunday = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 59, 999999999, t.Location())
-
-	return monday, sunday
-}
-
-func getStravaActivities() ([]model.StravaActivity, error) {
-	_, doc, err := atapi.Get[[]model.StravaActivity](config.StravaActivityAPI)
-	if err != nil {
-		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
-	}
-
-	monday, sunday := getWeekStartEnd(time.Now())
-
-	var filteredActivities []model.StravaActivity
-	for _, activity := range doc {
-		activityTime := activity.CreatedAt
-		if activity.Status == "Valid" && !activityTime.Before(monday) && activityTime.Before(sunday) {
-			filteredActivities = append(filteredActivities, activity)
-		}
-	}
-
-	return filteredActivities, nil
-}
-
 func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, error) {
 	// Ambil semua aktivitas Strava
 	activities, err := getStravaActivities()
@@ -150,6 +128,40 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, 
 	return users, nil
 }
 
+func getStravaActivities() ([]model.StravaActivity, error) {
+	_, doc, err := atapi.Get[[]model.StravaActivity](config.StravaActivityAPI)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
+	}
+
+	monday, sunday := getWeekStartEnd(time.Now())
+
+	var filteredActivities []model.StravaActivity
+	for _, activity := range doc {
+		activityTime := activity.CreatedAt
+		if activity.Status == "Valid" && !activityTime.Before(monday) && activityTime.Before(sunday) {
+			filteredActivities = append(filteredActivities, activity)
+		}
+	}
+
+	return filteredActivities, nil
+}
+
+func getWagroupIDFromPomokit(phoneNumber string) (string, error) {
+	_, doc, err := atapi.Get[[]model.PomodoroReport](config.DataPomokitAPI)
+	if err != nil {
+		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+	}
+
+	for _, report := range doc {
+		if report.PhoneNumber == phoneNumber {
+			return report.WaGroupID, nil
+		}
+	}
+
+	return "", fmt.Errorf("tidak ada data Pomokit yang cocok")
+}
+
 func countDuplicatePhoneNumbers(users []StravaInfo) map[string]StravaInfo {
 	phoneNumberCount := make(map[string]StravaInfo)
 
@@ -169,4 +181,21 @@ func countDuplicatePhoneNumbers(users []StravaInfo) map[string]StravaInfo {
 	}
 
 	return phoneNumberCount
+}
+
+func getWeekStartEnd(t time.Time) (time.Time, time.Time) {
+	weekday := int(t.Weekday())
+	// Jika hari Minggu (0), kita mundur 6 hari ke Senin sebelumnya
+	if weekday == 0 {
+		weekday = 7
+	}
+
+	// Dapatkan Senin di awal minggu ini
+	monday := t.AddDate(0, 0, -weekday+1)
+	sunday := monday.AddDate(0, 0, 6) // Hitung Minggu
+
+	monday = time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, t.Location())
+	sunday = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 59, 999999999, t.Location())
+
+	return monday, sunday
 }
