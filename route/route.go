@@ -195,8 +195,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// 	controller.GetPomokitRekapMingguan(w, r)
 	case method == "GET" && path == "/refresh/report/pomokit":
 		controller.GetPomokitRekapHarian(w, r)
+	case method == "GET" && path == "/report/pomokit/all":
+		controller.GetTotalPomokitPoin(w, r)
 
-		
+
 	default:
 		controller.NotFound(w, r)
 	}

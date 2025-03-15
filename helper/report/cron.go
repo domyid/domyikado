@@ -273,6 +273,54 @@ func RekapPomokitHarian(db *mongo.Database) (err error) {
 	return nil
 }
 
+func RekapTotalPomokitPoin(db *mongo.Database) (err error) {
+    // Generate rekap
+    msg, err := GenerateTotalPomokitReport(db)
+    if err != nil {
+        return err
+    }
+    
+    // Menggunakan manual group ID yang spesifik
+    manualGroupIDs := []string{"120363393689851748"} // Ganti dengan WAGroupID yang ingin digunakan
+
+    var lastErr error
+
+    for _, groupID := range manualGroupIDs {
+        // Kirim pesan ke grup WhatsApp
+        dt := &whatsauth.TextMessage{
+            To:       groupID,
+            IsGroup:  true,
+            Messages: msg,
+        }
+
+        // Protokol untuk wa group id mengandung hyphen
+        if strings.Contains(groupID, "-") {
+            // Dapatkan nomor perwakilan (owner)
+            ownerPhone, err := getGroupOwnerPhone(db, groupID)
+            if err != nil {
+                lastErr = err
+                continue
+            }
+            dt.To = ownerPhone
+            dt.IsGroup = false
+        }
+
+        // Kirim WA ke API
+        var resp model.Response
+        _, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+        if err != nil {
+            lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+            continue
+        }
+    }
+
+    if lastErr != nil {
+        return lastErr
+    }
+
+    return nil
+}
+
 // // RekapPomokitMingguan menjalankan proses pembuatan dan pengiriman laporan Pomokit mingguan
 // func RekapPomokitMingguan(db *mongo.Database) error {
 // 	manualGroupID := "120363393689851748" // Ganti dengan WAGroupID sesuai kebutuhan
