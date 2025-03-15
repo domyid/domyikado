@@ -38,4 +38,5 @@ type Config struct {
 	DomyikadoPresensiURL   string `json:"domyikadopresensiurl,omitempty" bson:"domyikadopresensiurl,omitempty"`
 	DomyikadoSecret        string `json:"domyikadosecret,omitempty" bson:"domyikadosecret,omitempty"`
 	ApproveBimbinganURL    string `json:"approvebimbinganurl,omitempty" bson:"approvebimbinganurl,omitempty"`
+	PomokitUrl			   string `json:"pomokiturl,omitempty" bson:"pomokiturl,omitempty"`
 }

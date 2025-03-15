@@ -1,142 +1,182 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/model"
 
 	"github.com/gocroot/helper/at"
-	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/watoken"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
-func GetAllReportCycle(respw http.ResponseWriter, req *http.Request) {
-	docuser, err := watoken.ParseToken(respw, req)
-	if err != nil {
-		return
-	}
-	
-	existingCycles, err := atdb.GetAllDoc[[]model.PomodoroReport](config.Mongoconn, "pomokitreport", primitive.M{"owner._id": docuser.ID})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data cycle tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotFound, respn)
-		return
-	}
-	
-	if len(existingCycles) == 0 {
-		var respn model.Response
-		respn.Status = "Error : Data cycle tidak di temukan"
-		respn.Response = "Belum ada data cycle yang tersedia"
-		at.WriteJSON(respw, http.StatusNotFound, respn)
-		return
-	}
-	
-	at.WriteJSON(respw, http.StatusOK, existingCycles)
+func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
+    // Validasi token
+    payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+    if err != nil {
+        at.WriteJSON(respw, http.StatusForbidden, model.Response{
+            Status:   "Error: Invalid Token",
+            Info:     at.GetSecretFromHeader(req),
+            Location: "Token Validation",
+            Response: err.Error(),
+        })
+        return
+    }
+
+    // Ambil konfigurasi dari database
+    var conf model.Config
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    err = config.Mongoconn.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+    if err != nil {
+        at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Config Not Found",
+            Location: "Database Config",
+            Response: err.Error(),
+        })
+        return
+    }
+
+    // HTTP Client dengan timeout
+    client := &http.Client{
+        Timeout: 10 * time.Second,
+    }
+    
+    // Request ke API Pomokit
+    resp, err := client.Get(conf.PomokitUrl)
+    if err != nil {
+        at.WriteJSON(respw, http.StatusBadGateway, model.Response{
+            Status:   "Error: API Connection Failed",
+            Location: "Pomokit API",
+            Response: err.Error(),
+        })
+        return
+    }
+    defer resp.Body.Close()
+
+    // Cek status response
+    if resp.StatusCode != http.StatusOK {
+        at.WriteJSON(respw, http.StatusBadGateway, model.Response{
+            Status:   fmt.Sprintf("Error: API Returned Status %d", resp.StatusCode),
+            Location: "Pomokit API",
+            Response: "Invalid response from Pomokit service",
+        })
+        return
+    }
+
+    // Decode response
+    var apiResponse model.PomokitResponse
+    if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+        at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Invalid API Response",
+            Location: "Response Decoding",
+            Response: err.Error(),
+        })
+        return
+    }
+
+    // Cari user berdasarkan nomor telepon
+    var foundReport *model.PomodoroReport
+    for _, report := range apiResponse.Data {
+        if report.PhoneNumber == payload.Id {
+            foundReport = &report
+            break
+        }
+    }
+
+    // Jika tidak ditemukan
+    if foundReport == nil {
+        at.WriteJSON(respw, http.StatusNotFound, model.PomodoroReport{
+            PhoneNumber: payload.Id,
+            Name:        payload.Alias,
+        })
+        return
+    }
+
+    // Update nama dari payload jika diperlukan
+    if foundReport.Name != payload.Alias {
+        foundReport.Name = payload.Alias
+    }
+
+    at.WriteJSON(respw, http.StatusOK, foundReport)
 }
 
-func GetReportCycleById(respw http.ResponseWriter, req *http.Request) {
-    // Otentikasi pengguna
-    docuser, err := watoken.ParseToken(respw, req)
+func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
+    // Validasi token
+    _, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
     if err != nil {
+        at.WriteJSON(respw, http.StatusForbidden, model.Response{
+            Status:   "Error: Invalid Token",
+            Location: "Token Validation",
+            Response: err.Error(),
+        })
         return
     }
-    
-    // Mendapatkan ID dari parameter URL
-    cycleId := req.URL.Query().Get("id")
-    if cycleId == "" {
-        var respn model.Response
-        respn.Status = "Error : ID tidak diberikan"
-        respn.Response = "Parameter ID diperlukan"
-        at.WriteJSON(respw, http.StatusBadRequest, respn)
-        return
-    }
-    
-    // Konversi string ID ke ObjectID
-    objectID, err := primitive.ObjectIDFromHex(cycleId)
-    if err != nil {
-        var respn model.Response
-        respn.Status = "Error : Format ID tidak valid"
-        respn.Response = err.Error()
-        at.WriteJSON(respw, http.StatusBadRequest, respn)
-        return
-    }
-    
-    // Mendapatkan dokumen spesifik berdasarkan ID dan verifikasi pemilik
-    cycle, err := atdb.GetOneDoc[model.PomodoroReport](config.Mongoconn, "pomokitreport", 
-        primitive.M{"_id": objectID, "owner._id": docuser.ID})
-    if err != nil {
-        var respn model.Response
-        respn.Status = "Error : Data cycle tidak ditemukan"
-        respn.Response = err.Error()
-        at.WriteJSON(respw, http.StatusNotFound, respn)
-        return
-    }
-    
-    at.WriteJSON(respw, http.StatusOK, cycle)
-}
 
-func PostReport(respw http.ResponseWriter, req *http.Request) {
-	payload, err := watoken.ParseToken(respw, req)
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
-		return
-	}
-	var cycle model.PomodoroReport
-	err = json.NewDecoder(req.Body).Decode(&cycle)
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data cycle tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.ID})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data user tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
-		return
-	}
-	obtainablereport, err := atdb.GetOneDoc[model.PomodoroReport](config.Mongoconn, "project", primitive.M{"_id": cycle.ID, "owner._id": docuser.ID})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error: Project tidak ditemukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotFound, respn)
-		return
-	}
-	cycle.ID = obtainablereport.ID
-	cycle.Owner = docuser
-	cycle.PhoneNumber = obtainablereport.PhoneNumber
-	cycle.Cycle = obtainablereport.Cycle
-	cycle.Hostname = obtainablereport.Hostname
-	cycle.IP = obtainablereport.IP
-	cycle.Screenshots = obtainablereport.Screenshots
-	cycle.Pekerjaan = obtainablereport.Pekerjaan
-	cycle.Token = obtainablereport.Token
-	cycle.URLPekerjaan = obtainablereport.URLPekerjaan
-	cycle.CreatedAt = obtainablereport.CreatedAt
+    // Ambil konfigurasi
+    var conf model.Config
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    err = config.Mongoconn.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+    if err != nil {
+        at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Config Not Found",
+            Location: "Database Config",
+            Response: err.Error(),
+        })
+        return
+    }
 
-	
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "pomokitreport", cycle)
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data cycle tidak di temukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-	
-	at.WriteJSON(respw, http.StatusCreated, cycle)
+    // HTTP Client
+    client := &http.Client{Timeout: 15 * time.Second}
+    resp, err := client.Get(conf.PomokitUrl)
+    if err != nil {
+        at.WriteJSON(respw, http.StatusBadGateway, model.Response{
+            Status:   "Error: API Connection Failed",
+            Location: "Pomokit API",
+            Response: err.Error(),
+        })
+        return
+    }
+    defer resp.Body.Close()
+
+    // Handle non-200 status
+    if resp.StatusCode != http.StatusOK {
+        at.WriteJSON(respw, http.StatusBadGateway, model.Response{
+            Status:   fmt.Sprintf("Error: API Returned Status %d", resp.StatusCode),
+            Location: "Pomokit API",
+            Response: "Invalid response from Pomokit service",
+        })
+        return
+    }
+
+    // Decode response
+    var apiResponse model.PomokitResponse
+    if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+        at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Invalid API Response",
+            Location: "Response Decoding",
+            Response: err.Error(),
+        })
+        return
+    }
+
+    // Validasi data kosong
+    if len(apiResponse.Data) == 0 {
+        at.WriteJSON(respw, http.StatusNoContent, model.Response{
+            Status:   "Success: No Data Available",
+            Location: "Pomokit API",
+            Response: "Tidak ada data yang ditemukan",
+        })
+        return
+    }
+
+    at.WriteJSON(respw, http.StatusOK, apiResponse.Data)
 }
