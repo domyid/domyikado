@@ -1,6 +1,7 @@
 package report
 
 import (
+	"time"
 
 	"github.com/gocroot/helper/gcallapi"
 	"github.com/gocroot/model"
@@ -96,7 +97,6 @@ type PresensiDomyikado struct {
 	Lokasi      string             `json:"lokasi,omitempty" bson:"lokasi,omitempty"`
 }
 
-// PomokitInfo untuk menyimpan info pengguna dan jumlah aktivitas Pomokit
 type PomokitInfo struct {
 	Count       float64
 	Name        string
@@ -113,4 +113,5 @@ type PomokitPoin struct {
     GroupID     string             `json:"groupid,omitempty" bson:"groupid,omitempty"`
     Poin        float64            `json:"poin,omitempty" bson:"poin,omitempty"`
     Activity    string             `json:"activity,omitempty" bson:"activity,omitempty"`
+    CreatedAt   time.Time          `json:"createdat,omitempty" bson:"createdat,omitempty"`
 }
