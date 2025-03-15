@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Struct SoalIQ sesuai dengan koleksi iqquestion di db MongoDB
@@ -183,25 +185,65 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Konversi jawaban pengguna
-	convertedAnswers := make([]string, len(userAnswer.Answers))
+	// Menghitung jumlah jawaban yang benar
+	correctCount := 0
 	for i, answer := range userAnswer.Answers {
-		if i < len(correctAnswers) {
-			if correctAnswers[i].AnswerKey != nil {
-				convertedAnswers[i] = *correctAnswers[i].AnswerKey // Dereference pointer
-			} else {
-				convertedAnswers[i] = answer // Jika nil, gunakan jawaban asli
+		if i < len(correctAnswers) && correctAnswers[i].AnswerKey != nil {
+			if strings.TrimSpace(answer) == strings.TrimSpace(*correctAnswers[i].AnswerKey) {
+				correctCount++
 			}
-		} else {
-			convertedAnswers[i] = answer
 		}
+	}
+
+	// Ambil nilai IQ berdasarkan skor
+	iqScoringCollection := config.Mongoconn.Collection("iqscoring")
+	var iqScoring IqScoring
+	err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}).Decode(&iqScoring)
+	if err != nil {
+		http.Error(w, `{"error": "Gagal mendapatkan data IQ dari database"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Generate ID Angka Secara Otomatis
+	iqScoreCollection := config.Mongoconn.Collection("iqscore")
+
+	// Cari ID terbesar saat ini
+	var lastRecord IqScore
+	opts := options.FindOne().SetSort(bson.M{"id": -1}) // Sortir berdasarkan ID terbesar
+	err = iqScoreCollection.FindOne(context.TODO(), bson.M{}, opts).Decode(&lastRecord)
+
+	newID := "1" // Default jika belum ada data
+	if err == nil && lastRecord.ID != "" {
+		// Konversi ID terakhir ke angka dan tambahkan 1
+		lastID, convErr := strconv.Atoi(lastRecord.ID)
+		if convErr == nil {
+			newID = fmt.Sprintf("%d", lastID+1)
+		}
+	}
+
+	// Simpan hasil ke iqscore
+	iqScoreCollection = config.Mongoconn.Collection("iqscore")
+	newIqScore := IqScore{
+		ID:        newID,
+		Name:      userAnswer.Name,
+		Score:     fmt.Sprintf("%d", correctCount),
+		IQ:        iqScoring.IQ,
+		CreatedAt: time.Now(),
+	}
+
+	_, err = iqScoreCollection.InsertOne(context.TODO(), newIqScore)
+	if err != nil {
+		http.Error(w, `{"error": "Gagal menyimpan skor ke database"}`, http.StatusInternalServerError)
+		return
 	}
 
 	// Kirim hasil kembali ke frontend
 	response := map[string]interface{}{
+		"id":      newIqScore.ID,
 		"name":    userAnswer.Name,
-		"answers": convertedAnswers,
-		"message": "Jawaban berhasil dikonversi",
+		"score":   newIqScore.Score,
+		"iq":      newIqScore.IQ,
+		"message": "Jawaban berhasil disimpan",
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
