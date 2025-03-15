@@ -155,6 +155,7 @@ func GetIQScoreUser(w http.ResponseWriter, r *http.Request) {
 
 // Fungsi untuk mengambil jawaban dari database dan mengonversinya
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
+	// Dekode request JSON ke struct UserAnswer
 	var userAnswer UserAnswer
 	err := json.NewDecoder(r.Body).Decode(&userAnswer)
 	if err != nil {
@@ -183,23 +184,44 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Debugging: Cek jumlah soal dan jawaban pengguna
+	fmt.Println("Jumlah Soal:", len(correctAnswers))
+	fmt.Println("Jawaban Pengguna:", userAnswer.Answers)
+
 	// Konversi jawaban pengguna
 	convertedAnswers := make([]string, len(userAnswer.Answers))
 	correctCount := 0
+
+	// Pastikan jumlah jawaban tidak melebihi jumlah soal yang tersedia
 	for i, answer := range userAnswer.Answers {
 		if i < len(correctAnswers) && correctAnswers[i].AnswerKey != nil {
+			// Simpan jawaban yang benar ke convertedAnswers
 			convertedAnswers[i] = *correctAnswers[i].AnswerKey
-			// Periksa apakah jawaban benar
-			if strings.TrimSpace(answer) == strings.TrimSpace(*correctAnswers[i].AnswerKey) {
+
+			// Perbandingan jawaban dengan case-insensitive dan trim spasi
+			if strings.ToLower(strings.TrimSpace(answer)) == strings.ToLower(strings.TrimSpace(*correctAnswers[i].AnswerKey)) {
 				correctCount++
 			}
 		} else {
+			// Jika tidak ada jawaban benar, gunakan jawaban pengguna sendiri
 			convertedAnswers[i] = answer
 		}
 	}
 
-	// Simpan hasil sementara ke MongoDB (digunakan untuk PostIQScore)
+	// Debugging: Cek hasil konversi jawaban dan skor
+	fmt.Println("Jawaban yang Dikonversi:", convertedAnswers)
+	fmt.Println("Skor yang Dihitung:", correctCount)
+
+	// Hapus data sebelumnya dengan nama yang sama di temp_iq_answers
 	tempCollection := config.Mongoconn.Collection("temp_iq_answers")
+	_, err = tempCollection.DeleteMany(context.TODO(), bson.M{"name": userAnswer.Name})
+
+	if err != nil {
+		http.Error(w, `{"error": "Gagal menghapus data sementara"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Simpan hasil sementara ke MongoDB untuk PostIQScore
 	_, err = tempCollection.InsertOne(context.TODO(), bson.M{
 		"name":       userAnswer.Name,
 		"answers":    userAnswer.Answers,
