@@ -8,6 +8,7 @@ import (
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atdb"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -44,6 +45,13 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: "Berhasil simpan data",
+	})
+}
+
+func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
+	report.KirimLaporanPengunjungWebKeGrup(config.Mongoconn)
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Response: "Berhasil simpan data",
 	})
