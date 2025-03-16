@@ -380,6 +380,15 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Konversi waktu ke zona WIB (UTC+7)
+	loc, err := time.LoadLocation("Asia/Jakarta") // WIB (Western Indonesian Time)
+	if err != nil {
+		http.Error(w, `{"error": "Gagal mengatur zona waktu"}`, http.StatusInternalServerError)
+		return
+	}
+
+	now := time.Now().In(loc) // Waktu saat ini dalam WIB
+
 	// Simpan Hasil ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	newIqScore := IqScore{
@@ -387,7 +396,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		Name:      userAnswer.Name,
 		Score:     fmt.Sprintf("%d", correctCount),
 		IQ:        iqScoring.IQ,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 	}
 
 	_, err = iqScoreCollection.InsertOne(context.TODO(), newIqScore)
@@ -404,7 +413,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		"score":    newIqScore.Score,
 		"iq":       newIqScore.IQ,
 		"correct":  correctCount,
-		"datetime": newIqScore.CreatedAt.Format("2006-01-02 15:04:05"),
+		"datetime": now.Format("2006-01-02 15:04:05 MST"), // Format dengan zona waktu WIB
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
