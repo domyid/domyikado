@@ -97,6 +97,14 @@ func GenerateRekapMessageKemarinPerWAGroupID(db *mongo.Database, groupId string)
 	return
 }
 
+func GenerateRekapPengunjungWebPerWAGroupID(db *mongo.Database) (msg string, err error) {
+	msg, err = GetVisitorReportForWhatsApp(db)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": YesterdayFilter(), "project.wagroupid": groupId}
 	pushrepodata, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", filter)
