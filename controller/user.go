@@ -185,6 +185,7 @@ func PostDataUser(respw http.ResponseWriter, req *http.Request) {
 	docuser.NPM = usr.NPM
 	docuser.Wonpaywallet = usr.Wonpaywallet
 	docuser.StravaProfilePicture = usr.StravaProfilePicture
+	docuser.AthleteId = usr.AthleteId
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id}, docuser)
 	if err != nil {
 		var respn model.Response
@@ -274,6 +275,9 @@ func PostDataUserFromWA(respw http.ResponseWriter, req *http.Request) {
 	}
 	if usr.StravaProfilePicture != "" {
 		docuser.StravaProfilePicture = usr.StravaProfilePicture
+	}
+	if usr.AthleteId != "" {
+		docuser.AthleteId = usr.AthleteId
 	}
 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": usr.PhoneNumber}, docuser)
