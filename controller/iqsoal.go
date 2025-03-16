@@ -57,7 +57,7 @@ type IqScore struct {
 	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
 	Score       string             `json:"score" bson:"score"`
 	IQ          string             `json:"iq" bson:"iq"`
-	CreatedAt   time.Time          `json:"created_at" bson:"created_at"`
+	CreatedAt   string             `json:"created_at" bson:"created_at"`
 	UpdatedAt   *time.Time         `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
 
@@ -299,7 +299,7 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 		Poin:        user.Poin,
 		Score:       userScore,
 		IQ:          userIQ,
-		CreatedAt:   iqScore.CreatedAt.String(),
+		CreatedAt:   iqScore.CreatedAt,
 	}
 
 	respw.Header().Set("Content-Type", "application/json")
@@ -387,7 +387,9 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().In(loc) // Waktu saat ini dalam WIB
+	// Gunakan `time.Now().In(loc).Format()` agar benar-benar tersimpan dalam WIB
+	nowWIB := time.Now().In(loc)
+	formattedTime := nowWIB.Format("2006-01-02 15:04:05") // Format yang digunakan untuk menyimpan
 
 	// Simpan Hasil ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
@@ -396,7 +398,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		Name:      userAnswer.Name,
 		Score:     fmt.Sprintf("%d", correctCount),
 		IQ:        iqScoring.IQ,
-		CreatedAt: now,
+		CreatedAt: formattedTime,
 	}
 
 	_, err = iqScoreCollection.InsertOne(context.TODO(), newIqScore)
@@ -413,7 +415,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		"score":    newIqScore.Score,
 		"iq":       newIqScore.IQ,
 		"correct":  correctCount,
-		"datetime": now.Format("2006-01-02 15:04:05 MST"), // Format dengan zona waktu WIB
+		"datetime": formattedTime + "WIB", // Format dengan zona waktu WIB
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
