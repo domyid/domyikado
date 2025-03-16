@@ -11,6 +11,7 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
@@ -307,24 +308,42 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	// Cek Token Login di Header
-	loginHeader := r.Header.Get("login")
-	if loginHeader == "" {
+	token := at.GetLoginFromHeader(r)
+	if token == "" {
 		http.Error(w, `{"error": "Akses ditolak! Token login diperlukan."}`, http.StatusUnauthorized)
 		return
 	}
 
-	// Decode JSON Request
+	// Decode token untuk mendapatkan user ID dan Alias
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
+	if err != nil {
+		http.Error(w, `{"error": "Token tidak valid atau tidak dapat didecode"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Ambil data user dari MongoDB berdasarkan `phonenumber`
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+
+	if err != nil {
+		// Jika user tidak ditemukan di database, buat docuser baru dari token
+		docuser.PhoneNumber = payload.Id
+		docuser.Name = payload.Alias
+	} else {
+		// Jika ditemukan, gunakan nama dari database
+		docuser.Name = payload.Alias
+	}
+
+	// Decode JSON Request dari body
 	var userAnswer UserAnswer
-	err := json.NewDecoder(r.Body).Decode(&userAnswer)
+	err = json.NewDecoder(r.Body).Decode(&userAnswer)
 	if err != nil {
 		http.Error(w, `{"error": "Gagal membaca data"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Validasi Nama
+	// Gunakan nama dari `docuser` jika `userAnswer.Name` kosong
 	if userAnswer.Name == "" {
-		http.Error(w, `{"error": "Nama tidak boleh kosong"}`, http.StatusBadRequest)
-		return
+		userAnswer.Name = docuser.Name
 	}
 
 	// Ambil Jawaban Benar dari MongoDB
@@ -352,7 +371,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Ambil IQ Berdasarkan Skor
+	// Ambil IQ Berdasarkan Skor dari koleksi `iqscoring`
 	iqScoringCollection := config.Mongoconn.Collection("iqscoring")
 	var iqScoring IqScoring
 	err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}).Decode(&iqScoring)
@@ -377,11 +396,11 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 8️⃣ **Respon JSON yang akan dikirimkan ke frontend**
+	// Respon JSON yang akan dikirimkan ke frontend
 	response := map[string]interface{}{
 		"status":   "success",
 		"message":  "Jawaban berhasil disimpan!",
-		"name":     userAnswer.Name,
+		"name":     newIqScore.Name,
 		"score":    newIqScore.Score,
 		"iq":       newIqScore.IQ,
 		"correct":  correctCount,
