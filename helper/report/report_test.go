@@ -16,13 +16,25 @@ var mongoinfo = atdb.DBInfo{
 
 var Mongoconn, ErrorMongoconn = atdb.MongoConnect(mongoinfo)
 
+// func TestGenerateReport(t *testing.T) {
+// 	config.WAAPIToken = "v4.public."
+// 	fmt.Println(mongoinfo.DBString)
+// 	err := RekapMeetingKemarin(Mongoconn)
+// 	fmt.Println(err)
+// 	//fmt.Println(md)
+
+// }
+
 func TestGenerateReport(t *testing.T) {
 	config.WAAPIToken = "v4.public."
 	fmt.Println(mongoinfo.DBString)
-	err := RekapMeetingKemarin(Mongoconn)
-	fmt.Println(err)
-	//fmt.Println(md)
 
+	err := RekapStravaMingguan(Mongoconn)
+	if err != nil {
+		fmt.Println("Error:", err)
+	} else {
+		fmt.Println("Laporan berhasil dibuat!")
+	}
 }
 
 /* func TestGenerateReportLayanan(t *testing.T) {

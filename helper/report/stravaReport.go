@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
@@ -18,6 +19,7 @@ type StravaInfo struct {
 	Count       float64
 	Name        string
 	PhoneNumber string
+	TotalKm     float64
 }
 
 func GetWagroupIDsFromAPI() (map[string]string, error) {
@@ -58,7 +60,7 @@ func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg st
 	// Loop data yang sudah diurutkan
 	for _, info := range userList {
 		if info.Count > 0 {
-			aktifitasAda += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas\n"
+			aktifitasAda += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas " + " (" + strconv.FormatFloat(info.TotalKm, 'f', 1, 64) + " km)\n"
 		} else {
 			aktifitasKosong += "⛔ " + info.Name + " (" + info.PhoneNumber + "): 0 aktivitas\n"
 		}
@@ -101,10 +103,10 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, 
 
 	// Loop semua aktivitas Strava
 	for _, activity := range activities {
-		profile := activity.Picture // Gunakan Picture sebagai referensi ke database user
+		phone := activity.PhoneNumber // Gunakan Picture sebagai referensi ke database user
 
 		// Cari user di database berdasarkan Strava profile picture
-		doc, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"stravaprofilepicture": profile})
+		doc, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phone})
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				continue // Lanjut ke aktivitas berikutnya jika tidak ditemukan
@@ -113,10 +115,14 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, 
 		}
 
 		// Simpan hasil yang cocok
+		distanceStr := strings.Replace(activity.Distance, " km", "", -1) // Hapus " km"
+		distance, _ := strconv.ParseFloat(distanceStr, 64)
+
 		users = append(users, StravaInfo{
 			Name:        activity.Name,
 			PhoneNumber: doc.PhoneNumber,
-			Count:       1, // Awalnya 1, nanti ditambahkan jika ada duplikasi
+			Count:       1,
+			TotalKm:     distance,
 		})
 	}
 
@@ -147,36 +153,33 @@ func getStravaActivities() ([]model.StravaActivity, error) {
 	return filteredActivities, nil
 }
 
-func getWagroupIDFromPomokit(phoneNumber string) (string, error) {
-	_, doc, err := atapi.Get[[]model.PomodoroReport](config.DataPomokitAPI)
-	if err != nil {
-		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
-	}
+// func getWagroupIDFromPomokit(phoneNumber string) (string, error) {
+// 	_, doc, err := atapi.Get[[]model.PomodoroReport](config.DataPomokitAPI)
+// 	if err != nil {
+// 		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+// 	}
 
-	for _, report := range doc {
-		if report.PhoneNumber == phoneNumber {
-			return report.WaGroupID, nil
-		}
-	}
+// 	for _, report := range doc {
+// 		if report.PhoneNumber == phoneNumber {
+// 			return report.WaGroupID, nil
+// 		}
+// 	}
 
-	return "", fmt.Errorf("tidak ada data Pomokit yang cocok")
-}
+// 	return "", fmt.Errorf("tidak ada data Pomokit yang cocok")
+// }
 
 func countDuplicatePhoneNumbers(users []StravaInfo) map[string]StravaInfo {
 	phoneNumberCount := make(map[string]StravaInfo)
 
 	for _, user := range users {
-		key := user.PhoneNumber // Gunakan PhoneNumber sebagai key
+		key := user.PhoneNumber
 
 		if info, exists := phoneNumberCount[key]; exists {
-			info.Count++
-			phoneNumberCount[key] = info
+			info.Count++                 // Tambah jumlah aktivitas
+			info.TotalKm += user.TotalKm // **Jumlahkan total jarak**
+			phoneNumberCount[key] = info // Simpan kembali ke map
 		} else {
-			phoneNumberCount[key] = StravaInfo{
-				Name:        user.Name,
-				PhoneNumber: user.PhoneNumber,
-				Count:       1,
-			}
+			phoneNumberCount[key] = user // Simpan data baru
 		}
 	}
 

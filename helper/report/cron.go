@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gocroot/config"
@@ -97,6 +98,7 @@ func RekapStravaMingguan(db *mongo.Database) error {
 
 	for _, groupID := range wagroupidlist {
 		msg, perwkilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
+		fmt.Println("Pesan Rekap:", msg)
 		if err != nil {
 			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
 			continue
