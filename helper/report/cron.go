@@ -231,7 +231,7 @@ func RekapPomokitHarian(db *mongo.Database) (err error) {
 	if err != nil {
 		return err
 	}
-	
+
 	// Menggunakan manual group ID yang spesifik
 	manualGroupIDs := []string{"120363393689851748"} // Ganti dengan WAGroupID yang ingin digunakan
 
@@ -274,51 +274,98 @@ func RekapPomokitHarian(db *mongo.Database) (err error) {
 }
 
 func RekapTotalPomokitPoin(db *mongo.Database) (err error) {
-    // Generate rekap
-    msg, err := GenerateTotalPomokitReportNoPenalty(db)
-    if err != nil {
-        return err
-    }
-    
-    // Menggunakan manual group ID yang spesifik
-    manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
+	// Generate rekap
+	msg, err := GenerateTotalPomokitReportNoPenalty(db)
+	if err != nil {
+		return err
+	}
 
-    var lastErr error
+	// Menggunakan manual group ID yang spesifik
+	manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
 
-    for _, groupID := range manualGroupIDs {
-        // Kirim pesan ke grup WhatsApp
-        dt := &whatsauth.TextMessage{
-            To:       groupID,
-            IsGroup:  true,
-            Messages: msg,
-        }
+	var lastErr error
 
-        // Protokol untuk wa group id mengandung hyphen
-        if strings.Contains(groupID, "-") {
-            // Dapatkan nomor perwakilan (owner)
-            ownerPhone, err := getGroupOwnerPhone(db, groupID)
-            if err != nil {
-                lastErr = err
-                continue
-            }
-            dt.To = ownerPhone
-            dt.IsGroup = false
-        }
+	for _, groupID := range manualGroupIDs {
+		// Kirim pesan ke grup WhatsApp
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
 
-        // Kirim WA ke API
-        var resp model.Response
-        _, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-        if err != nil {
-            lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
-            continue
-        }
-    }
+		// Protokol untuk wa group id mengandung hyphen
+		if strings.Contains(groupID, "-") {
+			// Dapatkan nomor perwakilan (owner)
+			ownerPhone, err := getGroupOwnerPhone(db, groupID)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			dt.To = ownerPhone
+			dt.IsGroup = false
+		}
 
-    if lastErr != nil {
-        return lastErr
-    }
+		// Kirim WA ke API
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
 
-    return nil
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
+}
+
+func KirimLaporanPengunjungWebKeGrup(db *mongo.Database) (err error) {
+	msg, err := GenerateRekapPengunjungWebPerWAGroupID(db)
+	if err != nil {
+		return err
+	}
+
+	// Menggunakan manual group ID yang spesifik
+	manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
+
+	var lastErr error
+
+	for _, groupID := range manualGroupIDs {
+		// Kirim pesan ke grup WhatsApp
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+
+		// Protokol untuk wa group id mengandung hyphen
+		if strings.Contains(groupID, "-") {
+			// Dapatkan nomor perwakilan (owner)
+			ownerPhone, err := getGroupOwnerPhone(db, groupID)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			dt.To = ownerPhone
+			dt.IsGroup = false
+		}
+
+		// Kirim WA ke API
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
 }
 
 // // RekapPomokitMingguan menjalankan proses pembuatan dan pengiriman laporan Pomokit mingguan
