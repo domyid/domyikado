@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sort"
 	"strconv"
@@ -115,7 +116,19 @@ func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (ph
 	return
 }
 
+func getValidHostnames() []string {
+	var validHostnames []string
+	for _, domain := range domainProyek1 {
+		validHostnames = append(validHostnames, domain.Project_Hostname)
+	}
+	return validHostnames
+}
+
 func GetVisitorReportForWhatsApp(db *mongo.Database) (string, error) {
+	hostnameToPhone := make(map[string]string)
+	for _, domain := range domainProyek1 {
+		hostnameToPhone[domain.Project_Hostname] = domain.PhoneNumber
+	}
 	filter := bson.M{
 		"_id": YesterdayFilter(),
 		"$and": []bson.M{
@@ -124,6 +137,9 @@ func GetVisitorReportForWhatsApp(db *mongo.Database) (string, error) {
 			},
 			{
 				"hostname": bson.M{"$not": bson.M{"$regex": `^[a-z0-9]+--`}}, // Hostname tanpa prefix acak
+			},
+			{
+				"hostname": bson.M{"$in": getValidHostnames()}, // Hanya hostname dari domainProyek1 yang ditampilkan
 			},
 		},
 	}
@@ -140,7 +156,10 @@ func GetVisitorReportForWhatsApp(db *mongo.Database) (string, error) {
 
 	msg := "*Laporan Unique Visitor Kemarin:*\n"
 	for hostname, count := range counts {
-		msg += "✅ " + hostname + ": +" + strconv.Itoa(count) + "\n"
+		phone, found := hostnameToPhone[hostname]
+		if found {
+			msg += fmt.Sprintf("✅ %s (%s): +%d\n", hostname, phone, count)
+		}
 	}
 	return msg, nil
 }
