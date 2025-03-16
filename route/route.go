@@ -188,7 +188,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
-
+	case method == "POST" && path == "/api/laporantracker":
+		controller.LaporanengunjungWeb(w, r)
 	//strava coba
 	// case method == "GET" && path == "/refresh/report/stravamingguan":
 	// 	controller.GetStravaData(w, r)
