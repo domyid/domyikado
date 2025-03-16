@@ -222,26 +222,28 @@ func GetIqScoreByLoginHeader(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
-	// Ambil token dari header "login"
-	loginToken := r.Header.Get("login")
-	if loginToken == "" {
-		http.Error(w, `{"error": "Login header tidak ditemukan"}`, http.StatusUnauthorized)
-		return
-	}
-
-	// Decode token untuk mendapatkan `phonenumber`
-	publicKey := "your-public-key-here" // Ganti dengan public key yang valid
-	decodedPayload, err := watoken.Decode(publicKey, loginToken)
+func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
+	// Decode token menggunakan `at.GetLoginFromHeader(req)`
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
-		http.Error(w, `{"error": "Token tidak valid atau tidak dapat didecode"}`, http.StatusUnauthorized)
+		at.WriteJSON(respw, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(req),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
 		return
 	}
 
 	// Ambil `phonenumber` dari payload
-	phoneNumber := decodedPayload.Id
+	phoneNumber := payload.Id
 	if phoneNumber == "" {
-		http.Error(w, `{"error": "Nomor telepon tidak ditemukan dalam token"}`, http.StatusUnauthorized)
+		at.WriteJSON(respw, http.StatusUnauthorized, model.Response{
+			Status:   "Error: Missing Phonenumber",
+			Info:     "Nomor telepon tidak ditemukan dalam token",
+			Location: "Token Parsing",
+			Response: "Invalid Payload",
+		})
 		return
 	}
 
@@ -253,7 +255,12 @@ func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
 	var user model.Userdomyikado
 	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
 	if err != nil {
-		http.Error(w, `{"error": "User tidak ditemukan"}`, http.StatusNotFound)
+		at.WriteJSON(respw, http.StatusNotFound, model.Response{
+			Status:   "Error: User Not Found",
+			Info:     "Tidak ada user dengan nomor telepon ini",
+			Location: "User Lookup",
+			Response: err.Error(),
+		})
 		return
 	}
 
@@ -294,8 +301,8 @@ func GetUserAndIqScore(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   iqScore.CreatedAt.String(),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	respw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(respw).Encode(response)
 }
 
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
