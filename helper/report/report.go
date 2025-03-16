@@ -107,6 +107,36 @@ func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (ph
 	return
 }
 
+func GetVisitorReportForWhatsApp(db *mongo.Database) (string, error) {
+	filter := bson.M{
+		"_id": YesterdayFilter(),
+		"$and": []bson.M{
+			{
+				"hostname": bson.M{"$nin": []string{"", "127.0.0.1", "3.27.215.75"}}, // Hostname domain tidak valid
+			},
+			{
+				"hostname": bson.M{"$not": bson.M{"$regex": `^[a-z0-9]+--`}}, // Hostname tanpa prefix acak
+			},
+		},
+	}
+
+	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
+	if err != nil {
+		return "", err
+	}
+
+	counts := make(map[string]int)
+	for _, lap := range laps {
+		counts[lap.Hostname]++
+	}
+
+	msg := "*Laporan Unique Visitor Kemarin:*\n"
+	for hostname, count := range counts {
+		msg += "✅ " + hostname + ": +" + strconv.Itoa(count) + "\n"
+	}
+	return msg, nil
+}
+
 func GetDataLaporanKemarinPerWAGroupID(db *mongo.Database, waGroupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": YesterdayFilter(), "project.wagroupid": waGroupId}
 	laps, err := atdb.GetAllDoc[[]Laporan](db, "uxlaporan", filter)
