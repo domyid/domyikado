@@ -12,6 +12,7 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -1092,4 +1093,53 @@ func ConfirmMerchCoinNotification(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 		Message: "Notification received",
 	})
+}
+
+// GetMerchCoinReport generates and sends daily MerchCoin transaction report
+func GetMerchCoinReport(w http.ResponseWriter, r *http.Request) {
+	var resp model.Response
+
+	err := report.RekapMerchCoinHarian(config.Mongoconn)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	resp.Status = "Success"
+	resp.Response = "MerchCoin report has been generated and sent"
+	at.WriteJSON(w, http.StatusOK, resp)
+}
+
+// GetMerchCoinReportPreview returns a preview of MerchCoin daily transaction report without sending it
+func GetMerchCoinReportPreview(w http.ResponseWriter, r *http.Request) {
+	report, err := report.GetDailyMerchCoinTransactions(config.Mongoconn)
+	if err != nil {
+		var resp model.Response
+		resp.Status = "Error"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Respond with the raw report text instead of JSON
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(report))
+}
+
+// GetMerchCoinFullReport returns a preview of complete MerchCoin report with historical data
+func GetMerchCoinFullReport(w http.ResponseWriter, r *http.Request) {
+	report, err := report.GenerateMerchCoinReport(config.Mongoconn)
+	if err != nil {
+		var resp model.Response
+		resp.Status = "Error"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Respond with the raw report text instead of JSON
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(report))
 }
