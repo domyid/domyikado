@@ -114,6 +114,18 @@ func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
+	// 4. Menjalankan fungsi RekapStravaYesterday dalam goroutine
+	go func() {
+		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
+		if err := report.RekapStravaYesterday(config.Mongoconn); err != nil {
+			mu.Lock()
+			lastErr = err
+			resp.Response = err.Error()
+			httpstatus = http.StatusInternalServerError
+			mu.Unlock()
+		}
+	}()
+
 	wg.Wait() // Menunggu sampai semua goroutine selesai
 
 	// Menggunakan status yang benar dari kesalahan terakhir jika ada
