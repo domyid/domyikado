@@ -45,13 +45,13 @@ func PostInboxNomor(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, httpstatus, resp)
 }
 
-// jalan setiap jam 3 pagi
+// jalan setiap jam 8 pagi
 func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 	httpstatus := http.StatusServiceUnavailable
 
 	var wg sync.WaitGroup
-	wg.Add(3) // Menambahkan jumlah goroutine yang akan dijalankan
+	wg.Add(4) // Menambahkan jumlah goroutine yang akan dijalankan
 
 	// Mutex untuk mengamankan akses ke variabel resp dan httpstatus
 	var mu sync.Mutex
