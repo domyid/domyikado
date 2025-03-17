@@ -29,7 +29,7 @@ func TestGenerateReport(t *testing.T) {
 	config.WAAPIToken = "v4.public."
 	fmt.Println(mongoinfo.DBString)
 
-	err := RekapStravaMingguan(Mongoconn)
+	err := RekapStravaYesterday(Mongoconn)
 	if err != nil {
 		fmt.Println("Error:", err)
 	} else {

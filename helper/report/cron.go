@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gocroot/config"
@@ -90,10 +91,10 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 
 }
 
-func RekapStravaMingguan(db *mongo.Database) error {
+func RekapStravaYesterday(db *mongo.Database) error {
 	// wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
 	// Ambil data Strava dari database
-	phoneNumberCount, err := getDataStravaMasukPerMinggu(db)
+	phoneNumberCount, err := getTotalDataStravaMasuk(db, true)
 	if err != nil {
 		return errors.New("gagal mengambil data Strava: " + err.Error())
 	}
@@ -115,7 +116,7 @@ func RekapStravaMingguan(db *mongo.Database) error {
 	var lastErr error
 
 	for _, groupID := range wagroupidlist {
-		msg, perwakilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
+		msg, perwakilanphone, err := GenerateRekapPoinStrava(db, groupID)
 		if err != nil {
 			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
 			continue
@@ -130,6 +131,10 @@ func RekapStravaMingguan(db *mongo.Database) error {
 		if strings.Contains(groupID, "-") {
 			dt.To = perwakilanphone
 			dt.IsGroup = false
+		}
+
+		if dt.IsGroup {
+			fmt.Println(msg)
 		}
 
 		var resp model.Response

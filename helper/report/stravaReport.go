@@ -1,10 +1,12 @@
 package report
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
@@ -59,50 +61,30 @@ func GetGrupIDFromProject(db *mongo.Database, phoneNumbers []string) ([]string, 
 	return result, nil
 }
 
-func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
-	phoneNumberCount, err := getDataStravaMasukPerMinggu(db)
+func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
+	dailyData, err := getTotalDataStravaMasuk(db, false)
 	if err != nil {
-		return "", "", fmt.Errorf("gagal mengambil data Strava: %v", err)
+		return "", "", fmt.Errorf("gagal mengambil data Strava harian: %v", err)
+	}
+	totalData, err := getTotalDataStravaMasuk(db, true)
+	if err != nil {
+		return "", "", fmt.Errorf("gagal mengambil data Strava total: %v", err)
 	}
 
-	msg = "*Laporan Total Aktivitas Strava:*\n\n"
+	msg = "*Laporan Aktivitas Strava:*"
+	msg += "\n\n*Kemarin - Hari Ini:*\n"
+	msg += formatStravaData(dailyData)
 
-	// Ubah map menjadi slice agar bisa diurutkan
-	var userList []StravaInfo
-	for _, info := range phoneNumberCount {
-		userList = append(userList, info)
-	}
+	msg += "\n\n*Total Keseluruhan:*\n"
+	msg += formatStravaData(totalData)
 
-	// Urutkan berdasarkan Count dari terbesar ke terkecil
-	sort.Slice(userList, func(i, j int) bool {
-		return userList[i].Count > userList[j].Count
-	})
-
-	var aktifitasAda, aktifitasKosong string
-
-	// Loop data yang sudah diurutkan
-	for _, info := range userList {
-		if info.Count > 0 {
-			aktifitasAda += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas " + " (" + strconv.FormatFloat(info.TotalKm, 'f', 1, 64) + " km)\n"
-		} else {
-			aktifitasKosong += "⛔ " + info.Name + " (" + info.PhoneNumber + "): 0 aktivitas\n"
-		}
-	}
-
-	if aktifitasAda != "" {
-		msg += "Data yang sudah melakukan aktivitas: \n" + aktifitasAda + "\n"
-	}
-	if aktifitasKosong != "" {
-		msg += "Data yang belum melakukan aktivitas: \n" + aktifitasKosong + "\n"
-	}
-
-	msg += "\nJika dirasa sudah melakukan aktivitas namun tidak tercatat, mungkin ada yang salah dengan link strava profile picture. Silahkan lakukan update strava profile picture di do.my.id yang sesuai dengan link profile picture di Strava atau ketik keyword *'strava update in'* pada bot domyikado. Jika sudah silahkan cek kembali strava profile picture di do.my.id apakah sama dengan link yang di berikan oleh bot domyikado. LInk Strava Profile Picture bukan Link https://www.strava.com/athletes/111111111"
+	msg += "\n\nJika dirasa sudah melakukan aktivitas namun tidak tercatat, mungkin ada yang salah dengan link Strava profile picture. Silakan lakukan update Strava profile picture di do.my.id yang sesuai dengan link profile picture di Strava."
 
 	return msg, "", nil
 }
 
-func getDataStravaMasukPerMinggu(db *mongo.Database) (map[string]StravaInfo, error) {
-	users, err := getPhoneNumberAndNameFromStravaActivity(db)
+func getTotalDataStravaMasuk(db *mongo.Database, isTotal bool) (map[string]StravaInfo, error) {
+	users, err := getPhoneNumberAndNameFromStravaActivity(db, isTotal)
 	if err != nil {
 		return nil, err
 	}
@@ -110,9 +92,35 @@ func getDataStravaMasukPerMinggu(db *mongo.Database) (map[string]StravaInfo, err
 	return countDuplicatePhoneNumbers(users), nil
 }
 
-func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, error) {
+func formatStravaData(data map[string]StravaInfo) string {
+	var userList []StravaInfo
+	for _, info := range data {
+		userList = append(userList, info)
+	}
+
+	sort.Slice(userList, func(i, j int) bool {
+		return userList[i].Count > userList[j].Count
+	})
+
+	var result string
+	for _, info := range userList {
+		result += fmt.Sprintf("✅ %s (%s): %.0f aktivitas (%.1f km)\n", info.Name, info.PhoneNumber, info.Count, info.TotalKm)
+	}
+
+	return result
+}
+
+func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database, isTotal bool) ([]StravaInfo, error) {
 	// Ambil semua aktivitas Strava
-	activities, err := getStravaActivitiesPerWeek(db)
+	var activities []model.StravaActivity
+	var err error
+
+	if isTotal {
+		activities, err = getStravaActivitiesTotal(db)
+	} else {
+		activities, err = getStravaActivitiesPerDay(db)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil data aktivitas Strava: %v", err)
 	}
@@ -157,7 +165,7 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, 
 	return users, nil
 }
 
-func getStravaActivitiesPerWeek(db *mongo.Database) ([]model.StravaActivity, error) {
+func getStravaActivitiesPerDay(db *mongo.Database) ([]model.StravaActivity, error) {
 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil config url: %v", err)
@@ -168,12 +176,39 @@ func getStravaActivitiesPerWeek(db *mongo.Database) ([]model.StravaActivity, err
 		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
 	}
 
-	// monday, sunday := getWeekStartEnd(time.Now())
+	startOfDay, endOfDay := getStartAndEndOfYesterday(time.Now())
 
 	var filteredActivities []model.StravaActivity
 	for _, activity := range doc {
-		// activityTime := activity.CreatedAt
-		if activity.Status == "Valid" /*&& !activityTime.Before(monday) && activityTime.Before(sunday)*/ {
+		activityTime := activity.CreatedAt
+
+		// Cek apakah aktivitas terjadi pada hari ini
+		if activity.Status == "Valid" && activityTime.After(startOfDay) && activityTime.Before(endOfDay) {
+			filteredActivities = append(filteredActivities, activity)
+		}
+	}
+
+	if len(filteredActivities) == 0 {
+		return nil, errors.New("tidak ada aktivitas yang tercatat kemarin")
+	}
+
+	return filteredActivities, nil
+}
+
+func getStravaActivitiesTotal(db *mongo.Database) ([]model.StravaActivity, error) {
+	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil config url: %v", err)
+	}
+
+	_, doc, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
+	}
+
+	var filteredActivities []model.StravaActivity
+	for _, activity := range doc {
+		if activity.Status == "Valid" {
 			filteredActivities = append(filteredActivities, activity)
 		}
 	}
@@ -199,19 +234,12 @@ func countDuplicatePhoneNumbers(users []StravaInfo) map[string]StravaInfo {
 	return phoneNumberCount
 }
 
-// func getWeekStartEnd(t time.Time) (time.Time, time.Time) {
-// 	weekday := int(t.Weekday())
-// 	// Jika hari Minggu (0), kita mundur 6 hari ke Senin sebelumnya
-// 	if weekday == 0 {
-// 		weekday = 7
-// 	}
+func getStartAndEndOfYesterday(t time.Time) (time.Time, time.Time) {
+	location, _ := time.LoadLocation("Asia/Jakarta")
+	today := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, location)
+	yesterday := today.AddDate(0, 0, -1)
+	start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, location)
+	end := time.Date(today.Year(), today.Month(), today.Day(), 23, 59, 59, 999999999, location)
 
-// 	// Dapatkan Senin di awal minggu ini
-// 	monday := t.AddDate(0, 0, -weekday+1)
-// 	sunday := monday.AddDate(0, 0, 6) // Hitung Minggu
-
-// 	monday = time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, t.Location())
-// 	sunday = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 59, 999999999, t.Location())
-
-// 	return monday, sunday
-// }
+	return start, end
+}
