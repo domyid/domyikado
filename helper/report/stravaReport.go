@@ -117,7 +117,9 @@ func formatStravaData(data []StravaInfo) string {
 
 	var result string
 	for _, info := range data {
-		result += fmt.Sprintf("✅ %s (%s): %.0f aktivitas (%.1f km)\n", info.Name, info.PhoneNumber, info.Count, info.TotalKm)
+		// result += fmt.Sprintf("✅ %s (%s): %.0f aktivitas (%.1f km)\n", info.Name, info.PhoneNumber, info.Count, info.TotalKm)
+		result += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas (" + strconv.FormatFloat(info.TotalKm, 'f', 1, 64) + " km)\n"
+
 	}
 
 	return result
