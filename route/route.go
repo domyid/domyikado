@@ -165,10 +165,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetOneIqQuestion(w, r)
 	case method == "GET" && path == "/api/iqscoring":
 		controller.GetIqScoring(w, r)
-	case method == "GET" && path == "/api/iq/scoreuser":
-		controller.GetIQScoreUser(w, r)
-	case method == "GET" && path == "/api/iq/user":
-		controller.GetIqScoreByLoginHeader(w, r)
 	case method == "GET" && path == "/api/iq/new":
 		controller.GetUserAndIqScore(w, r)
 	case method == "POST" && path == "/api/iq/answer":
