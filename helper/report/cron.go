@@ -3,7 +3,6 @@ package report
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/gocroot/config"
@@ -92,56 +91,78 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 }
 
 func RekapStravaYesterday(db *mongo.Database) error {
-	// wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
-	// Ambil data Strava dari database
-	phoneNumberCount, err := getTotalDataStravaMasuk(db, true)
+	// Ambil data Strava yang sudah termasuk grup WA
+	phoneNumberCount, err := GetTotalDataStravaMasuk(db, false)
 	if err != nil {
 		return errors.New("gagal mengambil data Strava: " + err.Error())
 	}
 
-	// Ambil daftar nomor telepon dari data Strava
-	phoneNumbers := GetAllPhoneNumbersFromStrava(phoneNumberCount)
-
-	// Ambil daftar grup WA berdasarkan nomor telepon
-	wagroupidlist, err := GetGrupIDFromProject(db, phoneNumbers)
-	if err != nil {
-		return errors.New("gagal mengambil daftar grup WA: " + err.Error())
-	}
-
-	// Jika tidak ada grup, hentikan proses
-	if len(wagroupidlist) == 0 {
-		return errors.New("tidak ada grup yang ditemukan untuk rekap Strava")
+	// Jika tidak ada data masuk, hentikan proses
+	if len(phoneNumberCount) == 0 {
+		return errors.New("tidak ada data Strava untuk direkap")
 	}
 
 	var lastErr error
+	groupSet := make(map[string]bool) // Untuk menghindari pengiriman ganda ke grup yang sama
 
-	for _, groupID := range wagroupidlist {
-		msg, perwakilanphone, err := GenerateRekapPoinStrava(db, groupID)
-		if err != nil {
-			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
-			continue
-		}
+	// Loop langsung berdasarkan data Strava yang sudah ada grupnya
+	for _, info := range phoneNumberCount {
+		for _, groupID := range info.WaGroupID { // Ambil group ID dari hasil sebelumnya
+			// Cegah pengiriman ganda jika grup sudah diproses
+			if _, exists := groupSet[groupID]; exists {
+				continue
+			}
+			groupSet[groupID] = true // Tandai bahwa grup ini sudah diproses
 
-		dt := &whatsauth.TextMessage{
-			To:       groupID,
-			IsGroup:  true,
-			Messages: msg,
-		}
+			msg, perwakilanphone, err := GenerateRekapPoinStrava(db, groupID)
+			if err != nil {
+				lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
+				continue
+			}
 
-		if strings.Contains(groupID, "-") {
-			dt.To = perwakilanphone
-			dt.IsGroup = false
-		}
+			allowedGroups := map[string]bool{
+				"120363022595651310": true,
+				"120363298977628161": true,
+				"120363347214689840": true,
+			}
 
-		if dt.IsGroup {
-			fmt.Println(msg)
-		}
+			// Cek apakah grup saat ini ada dalam daftar yang diperbolehkan
+			if !allowedGroups[groupID] {
+				continue
+			}
 
-		var resp model.Response
-		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-		if err != nil {
-			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
-			continue
+			dt := &whatsauth.TextMessage{
+				To:       groupID,
+				IsGroup:  true,
+				Messages: msg,
+			}
+
+			if strings.Contains(groupID, "-") { // Jika private chat, kirim ke perwakilan
+				dt.To = perwakilanphone
+				dt.IsGroup = false
+			}
+
+			// if dt.IsGroup {
+			// 	logFile, err := os.OpenFile("app4.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+			// 	if err != nil {
+			// 		log.Fatal(err)
+			// 	}
+			// 	defer logFile.Close()
+
+			// 	// Mengatur output logger ke file
+			// 	log.SetOutput(logFile)
+
+			// 	log.Println("Kirim ke grup: ", groupID)
+			// 	log.Println(msg)
+			// }
+
+			// Kirim pesan via API
+			var resp model.Response
+			_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+			if err != nil {
+				lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+				continue
+			}
 		}
 	}
 

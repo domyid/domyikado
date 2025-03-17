@@ -189,9 +189,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.SimpanInformasiUser(w, r)
 	case method == "POST" && path == "/api/laporantracker":
 		controller.LaporanengunjungWeb(w, r)
-	//strava coba
-	case method == "GET" && path == "/refresh/report/stravamingguan":
-		controller.GetStravaData(w, r)
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
 
@@ -205,6 +202,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetPomokitRekapHarian(w, r)
 	case method == "GET" && path == "/report/pomokit/all":
 		controller.GetTotalPomokitPoin(w, r)
+
+	//strava coba
+	case method == "GET" && path == "/refresh/report/stravamingguan":
+		controller.GetStravaData(w, r)
 
 	default:
 		controller.NotFound(w, r)
