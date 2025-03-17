@@ -506,7 +506,7 @@ func SendMerchCoinDailyReport(db *mongo.Database, waAPIToken string, waAPIMessag
 
 	// Get config to find recipient for the report
 	var conf model.Config
-	err = db.Collection("config").FindOne(context.Background(), bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+	err = db.Collection("config").FindOne(context.Background(), bson.M{"phonenumber": "6285312924192"}).Decode(&conf)
 	if err != nil {
 		return err
 	}
@@ -593,7 +593,7 @@ func RekapMerchCoinHarian(db *mongo.Database) error {
 
 	// Get config
 	var conf model.Config
-	err = db.Collection("config").FindOne(context.Background(), bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+	err = db.Collection("config").FindOne(context.Background(), bson.M{"phonenumber": "6285312924192"}).Decode(&conf)
 	if err != nil {
 		return err
 	}
