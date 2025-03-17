@@ -12,14 +12,9 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
-	"github.com/gocroot/helper/atapi"
-	"github.com/gocroot/helper/atdb"
-	"github.com/gocroot/helper/report"
-	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -1099,214 +1094,214 @@ func ConfirmMerchCoinNotification(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetMerchCoinDailyReport sends daily MerchCoin transaction reports to all groups
-func GetMerchCoinDailyReport(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
+// // GetMerchCoinDailyReport sends daily MerchCoin transaction reports to all groups
+// func GetMerchCoinDailyReport(respw http.ResponseWriter, req *http.Request) {
+// 	var resp model.Response
 
-	// Get all active project groups first
-	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
-	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
-	if err != nil {
-		resp.Info = "Failed to query projects"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-		return
-	}
+// 	// Get all active project groups first
+// 	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
+// 	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
+// 	if err != nil {
+// 		resp.Info = "Failed to query projects"
+// 		resp.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+// 		return
+// 	}
 
-	// Get overall summary of MerchCoin transactions
-	overallSummary := report.GetMerchCoinOverallSummary(config.Mongoconn)
-	if overallSummary == "" {
-		resp.Info = "No transactions to report"
-		resp.Response = "No MerchCoin transactions found for the time period"
-		at.WriteJSON(respw, http.StatusNotFound, resp)
-		return
-	}
+// 	// Get overall summary of MerchCoin transactions
+// 	overallSummary := report.GetMerchCoinOverallSummary(config.Mongoconn)
+// 	if overallSummary == "" {
+// 		resp.Info = "No transactions to report"
+// 		resp.Response = "No MerchCoin transactions found for the time period"
+// 		at.WriteJSON(respw, http.StatusNotFound, resp)
+// 		return
+// 	}
 
-	// Send to all active groups
-	var successCount int = 0
-	for _, project := range projects {
-		if project.WAGroupID != "" {
-			dt := &whatsauth.TextMessage{
-				To:       project.WAGroupID,
-				IsGroup:  true,
-				Messages: overallSummary,
-			}
+// 	// Send to all active groups
+// 	var successCount int = 0
+// 	for _, project := range projects {
+// 		if project.WAGroupID != "" {
+// 			dt := &whatsauth.TextMessage{
+// 				To:       project.WAGroupID,
+// 				IsGroup:  true,
+// 				Messages: overallSummary,
+// 			}
 
-			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-			if err != nil {
-				// Log error but continue with other groups
-				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
-				continue
-			}
+// 			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 			if err != nil {
+// 				// Log error but continue with other groups
+// 				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
+// 				continue
+// 			}
 
-			successCount++
-		}
-	}
+// 			successCount++
+// 		}
+// 	}
 
-	// Also send to a specific default group (like in GetReportHariIni)
-	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
-	dt := &whatsauth.TextMessage{
-		To:       defaultGroupID,
-		IsGroup:  true,
-		Messages: overallSummary,
-	}
+// 	// Also send to a specific default group (like in GetReportHariIni)
+// 	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
+// 	dt := &whatsauth.TextMessage{
+// 		To:       defaultGroupID,
+// 		IsGroup:  true,
+// 		Messages: overallSummary,
+// 	}
 
-	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-	if err != nil {
-		resp.Info = "Failed to send to default group"
-		resp.Response = err.Error()
-	} else {
-		successCount++
-	}
+// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 	if err != nil {
+// 		resp.Info = "Failed to send to default group"
+// 		resp.Response = err.Error()
+// 	} else {
+// 		successCount++
+// 	}
 
-	// Also send to all distinct WAGroupIDs from yesterday's transactions
-	filter := bson.M{"_id": report.YesterdayFilter()}
-	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
-	if err == nil {
-		for _, wagroupid := range wagroupidlist {
-			// Type assertion to convert any to string
-			groupID, ok := wagroupid.(string)
-			if !ok || groupID == "" {
-				continue
-			}
+// 	// Also send to all distinct WAGroupIDs from yesterday's transactions
+// 	filter := bson.M{"_id": report.YesterdayFilter()}
+// 	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
+// 	if err == nil {
+// 		for _, wagroupid := range wagroupidlist {
+// 			// Type assertion to convert any to string
+// 			groupID, ok := wagroupid.(string)
+// 			if !ok || groupID == "" {
+// 				continue
+// 			}
 
-			// Check if we've already sent to this group
-			alreadySent := false
-			for _, project := range projects {
-				if project.WAGroupID == groupID {
-					alreadySent = true
-					break
-				}
-			}
+// 			// Check if we've already sent to this group
+// 			alreadySent := false
+// 			for _, project := range projects {
+// 				if project.WAGroupID == groupID {
+// 					alreadySent = true
+// 					break
+// 				}
+// 			}
 
-			if !alreadySent && groupID != defaultGroupID {
-				dt := &whatsauth.TextMessage{
-					To:       groupID,
-					IsGroup:  true,
-					Messages: overallSummary,
-				}
+// 			if !alreadySent && groupID != defaultGroupID {
+// 				dt := &whatsauth.TextMessage{
+// 					To:       groupID,
+// 					IsGroup:  true,
+// 					Messages: overallSummary,
+// 				}
 
-				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-				if err != nil {
-					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
-					continue
-				}
+// 				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 				if err != nil {
+// 					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
+// 					continue
+// 				}
 
-				successCount++
-			}
-		}
-	}
+// 				successCount++
+// 			}
+// 		}
+// 	}
 
-	resp.Status = "Success"
-	resp.Response = fmt.Sprintf("MerchCoin daily reports sent to %d groups", successCount)
-	at.WriteJSON(respw, http.StatusOK, resp)
-}
+// 	resp.Status = "Success"
+// 	resp.Response = fmt.Sprintf("MerchCoin daily reports sent to %d groups", successCount)
+// 	at.WriteJSON(respw, http.StatusOK, resp)
+// }
 
-// GetMerchCoinWeeklyReport sends weekly MerchCoin transaction reports to all groups
-func GetMerchCoinWeeklyReport(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
+// // GetMerchCoinWeeklyReport sends weekly MerchCoin transaction reports to all groups
+// func GetMerchCoinWeeklyReport(respw http.ResponseWriter, req *http.Request) {
+// 	var resp model.Response
 
-	// Get weekly summary
-	weeklySummary := report.GetMerchCoinWeeklySummary(config.Mongoconn)
-	if weeklySummary == "" {
-		resp.Status = "Error"
-		resp.Response = "No transactions found for weekly report"
-		at.WriteJSON(respw, http.StatusNotFound, resp)
-		return
-	}
+// 	// Get weekly summary
+// 	weeklySummary := report.GetMerchCoinWeeklySummary(config.Mongoconn)
+// 	if weeklySummary == "" {
+// 		resp.Status = "Error"
+// 		resp.Response = "No transactions found for weekly report"
+// 		at.WriteJSON(respw, http.StatusNotFound, resp)
+// 		return
+// 	}
 
-	// Get all active project groups
-	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
-	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
-	if err != nil {
-		resp.Status = "Error"
-		resp.Info = "Failed to retrieve projects"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-		return
-	}
+// 	// Get all active project groups
+// 	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
+// 	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
+// 	if err != nil {
+// 		resp.Status = "Error"
+// 		resp.Info = "Failed to retrieve projects"
+// 		resp.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+// 		return
+// 	}
 
-	// Send to all active groups
-	var successCount int = 0
-	for _, project := range projects {
-		if project.WAGroupID != "" {
-			dt := &whatsauth.TextMessage{
-				To:       project.WAGroupID,
-				IsGroup:  true,
-				Messages: weeklySummary,
-			}
+// 	// Send to all active groups
+// 	var successCount int = 0
+// 	for _, project := range projects {
+// 		if project.WAGroupID != "" {
+// 			dt := &whatsauth.TextMessage{
+// 				To:       project.WAGroupID,
+// 				IsGroup:  true,
+// 				Messages: weeklySummary,
+// 			}
 
-			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-			if err != nil {
-				// Log error but continue with other groups
-				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
-				continue
-			}
+// 			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 			if err != nil {
+// 				// Log error but continue with other groups
+// 				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
+// 				continue
+// 			}
 
-			successCount++
-		}
-	}
+// 			successCount++
+// 		}
+// 	}
 
-	// Also send to a specific default group (like in GetReportHariIni)
-	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
-	dt := &whatsauth.TextMessage{
-		To:       defaultGroupID,
-		IsGroup:  true,
-		Messages: weeklySummary,
-	}
+// 	// Also send to a specific default group (like in GetReportHariIni)
+// 	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
+// 	dt := &whatsauth.TextMessage{
+// 		To:       defaultGroupID,
+// 		IsGroup:  true,
+// 		Messages: weeklySummary,
+// 	}
 
-	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-	if err != nil {
-		resp.Info = "Failed to send to default group"
-		resp.Response = err.Error()
-	} else {
-		successCount++
-	}
+// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 	if err != nil {
+// 		resp.Info = "Failed to send to default group"
+// 		resp.Response = err.Error()
+// 	} else {
+// 		successCount++
+// 	}
 
-	// Also send to all distinct WAGroupIDs from recent transactions
-	filter := bson.M{
-		"_id": bson.M{
-			"$gte": primitive.NewObjectIDFromTimestamp(report.GetDateSekarang().AddDate(0, 0, -7)),
-			"$lt":  primitive.NewObjectIDFromTimestamp(report.GetDateSekarang()),
-		},
-	}
-	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
-	if err == nil {
-		for _, wagroupid := range wagroupidlist {
-			// Type assertion to convert any to string
-			groupID, ok := wagroupid.(string)
-			if !ok || groupID == "" {
-				continue
-			}
+// 	// Also send to all distinct WAGroupIDs from recent transactions
+// 	filter := bson.M{
+// 		"_id": bson.M{
+// 			"$gte": primitive.NewObjectIDFromTimestamp(report.GetDateSekarang().AddDate(0, 0, -7)),
+// 			"$lt":  primitive.NewObjectIDFromTimestamp(report.GetDateSekarang()),
+// 		},
+// 	}
+// 	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
+// 	if err == nil {
+// 		for _, wagroupid := range wagroupidlist {
+// 			// Type assertion to convert any to string
+// 			groupID, ok := wagroupid.(string)
+// 			if !ok || groupID == "" {
+// 				continue
+// 			}
 
-			// Check if we've already sent to this group
-			alreadySent := false
-			for _, project := range projects {
-				if project.WAGroupID == groupID {
-					alreadySent = true
-					break
-				}
-			}
+// 			// Check if we've already sent to this group
+// 			alreadySent := false
+// 			for _, project := range projects {
+// 				if project.WAGroupID == groupID {
+// 					alreadySent = true
+// 					break
+// 				}
+// 			}
 
-			if !alreadySent && groupID != defaultGroupID {
-				dt := &whatsauth.TextMessage{
-					To:       groupID,
-					IsGroup:  true,
-					Messages: weeklySummary,
-				}
+// 			if !alreadySent && groupID != defaultGroupID {
+// 				dt := &whatsauth.TextMessage{
+// 					To:       groupID,
+// 					IsGroup:  true,
+// 					Messages: weeklySummary,
+// 				}
 
-				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-				if err != nil {
-					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
-					continue
-				}
+// 				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+// 				if err != nil {
+// 					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
+// 					continue
+// 				}
 
-				successCount++
-			}
-		}
-	}
+// 				successCount++
+// 			}
+// 		}
+// 	}
 
-	resp.Status = "Success"
-	resp.Response = fmt.Sprintf("MerchCoin weekly reports sent to %d groups", successCount)
-	at.WriteJSON(respw, http.StatusOK, resp)
-}
+// 	resp.Status = "Success"
+// 	resp.Response = fmt.Sprintf("MerchCoin weekly reports sent to %d groups", successCount)
+// 	at.WriteJSON(respw, http.StatusOK, resp)
+// }
