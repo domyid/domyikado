@@ -12,7 +12,10 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/atapi"
+	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/report"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -1095,51 +1098,167 @@ func ConfirmMerchCoinNotification(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetMerchCoinReport generates and sends daily MerchCoin transaction report
-func GetMerchCoinReport(w http.ResponseWriter, r *http.Request) {
+// GetMerchCoinDailyReport sends daily MerchCoin transaction reports to configured WhatsApp groups
+func GetMerchCoinDailyReport(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
-	err := report.RekapMerchCoinHarian(config.Mongoconn)
+	// Get distinct wallet addresses from yesterday's transactions
+	filter := bson.M{"_id": report.YesterdayFilter()}
+	userWalletsList, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "user.wonpaywallet", "merchcoinorders")
 	if err != nil {
-		resp.Status = "Error"
+		resp.Info = "Failed to query distinct wallet addresses"
 		resp.Response = err.Error()
-		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		at.WriteJSON(respw, http.StatusUnauthorized, resp)
 		return
+	}
+
+	// For each wallet address, send detailed report to the corresponding user or group
+	for _, userWallet := range userWalletsList {
+		// Type assertion to convert any to string
+		walletAddress, ok := userWallet.(string)
+		if !ok || walletAddress == "" {
+			continue // Skip empty or non-string wallet addresses
+		}
+
+		// Find users with this wallet address
+		userFilter := bson.M{"wonpaywallet": walletAddress}
+		users, err := atdb.GetAllDoc[[]model.Userdomyikado](config.Mongoconn, "user", userFilter)
+		if err != nil || len(users) == 0 {
+			continue // Skip if user not found
+		}
+
+		// Get the first user with this wallet
+		user := users[0]
+
+		// Get the message content
+		message := report.GetMerchCoinDailyTransactions(config.Mongoconn, walletAddress)
+		if message == "" {
+			continue // Skip if no transactions to report
+		}
+
+		// Prepare WhatsApp message
+		dt := &whatsauth.TextMessage{
+			To:       user.PhoneNumber,
+			IsGroup:  false,
+			Messages: message,
+		}
+
+		// Send to group if user is part of a project with WAGroupID
+		projectFilter := bson.M{"members._id": user.ID}
+		projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
+		if err == nil && len(projects) > 0 {
+			for _, project := range projects {
+				if project.WAGroupID != "" {
+					// Send to group instead
+					dt.To = project.WAGroupID
+					dt.IsGroup = true
+
+					// Send message
+					_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+					if err != nil {
+						continue // Try next project if this one fails
+					}
+
+					// Successfully sent to one group, break the loop
+					break
+				}
+			}
+		} else {
+			// Send directly to user if no project found
+			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+			if err != nil {
+				continue // Skip if sending fails
+			}
+		}
+	}
+
+	// Summary of all MerchCoin transactions
+	overallSummary := report.GetMerchCoinOverallSummary(config.Mongoconn)
+	if overallSummary != "" {
+		// Get config for admin number
+		var conf model.Config
+		err = config.Mongoconn.Collection("config").FindOne(req.Context(), bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+		if err == nil {
+			// Send summary to admin
+			dt := &whatsauth.TextMessage{
+				To:       conf.PhoneNumber,
+				IsGroup:  false,
+				Messages: overallSummary,
+			}
+
+			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+			if err != nil {
+				resp.Info = "Failed to send overall summary"
+				resp.Response = err.Error()
+			}
+		}
 	}
 
 	resp.Status = "Success"
-	resp.Response = "MerchCoin report has been generated and sent"
-	at.WriteJSON(w, http.StatusOK, resp)
+	resp.Response = "MerchCoin daily reports generated and sent successfully"
+	at.WriteJSON(respw, http.StatusOK, resp)
 }
 
-// GetMerchCoinReportPreview returns a preview of MerchCoin daily transaction report without sending it
-func GetMerchCoinReportPreview(w http.ResponseWriter, r *http.Request) {
-	report, err := report.GetDailyMerchCoinTransactions(config.Mongoconn)
-	if err != nil {
-		var resp model.Response
+// GetMerchCoinWeeklyReport sends weekly MerchCoin transaction reports
+func GetMerchCoinWeeklyReport(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+
+	// Get weekly summary
+	weeklySummary := report.GetMerchCoinWeeklySummary(config.Mongoconn)
+	if weeklySummary == "" {
 		resp.Status = "Error"
-		resp.Response = err.Error()
-		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		resp.Response = "No transactions found for weekly report"
+		at.WriteJSON(respw, http.StatusNotFound, resp)
 		return
 	}
 
-	// Respond with the raw report text instead of JSON
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(report))
-}
-
-// GetMerchCoinFullReport returns a preview of complete MerchCoin report with historical data
-func GetMerchCoinFullReport(w http.ResponseWriter, r *http.Request) {
-	report, err := report.GenerateMerchCoinReport(config.Mongoconn)
+	// Get config for admin number and any configured announcement group
+	var conf model.Config
+	err := config.Mongoconn.Collection("config").FindOne(req.Context(), bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
 	if err != nil {
-		var resp model.Response
 		resp.Status = "Error"
+		resp.Info = "Failed to retrieve config"
 		resp.Response = err.Error()
-		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
 		return
 	}
 
-	// Respond with the raw report text instead of JSON
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(report))
+	// Send to admin
+	dt := &whatsauth.TextMessage{
+		To:       conf.PhoneNumber,
+		IsGroup:  false,
+		Messages: weeklySummary,
+	}
+
+	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to send weekly report to admin"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Get all active project groups
+	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
+	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
+	if err == nil && len(projects) > 0 {
+		for _, project := range projects {
+			if project.WAGroupID != "" {
+				// Send to group
+				dt := &whatsauth.TextMessage{
+					To:       project.WAGroupID,
+					IsGroup:  true,
+					Messages: weeklySummary,
+				}
+
+				// Don't wait for response, just send
+				go atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+			}
+		}
+	}
+
+	resp.Status = "Success"
+	resp.Response = "MerchCoin weekly report generated and sent successfully"
+	at.WriteJSON(respw, http.StatusOK, resp)
 }

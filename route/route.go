@@ -139,6 +139,11 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
 		// z
+	// MerchCoin Reports Routes
+	case method == "GET" && path == "/api/merchcoin/report/daily":
+		controller.GetMerchCoinDailyReport(w, r)
+	case method == "GET" && path == "/api/merchcoin/report/weekly":
+		controller.GetMerchCoinWeeklyReport(w, r)
 	// MerchCoin Payment Routes
 	case method == "POST" && path == "/api/merchcoin/createOrder":
 		controller.CreateMerchCoinOrder(w, r)
@@ -158,13 +163,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ConfirmMerchCoinNotification(w, r)
 	case method == "POST" && path == "/api/merchcoin/simulate":
 		controller.SimulateMerchCoinPayment(w, r)
-		//z
-	case method == "GET" && path == "/api/merchcoin/report/send":
-		controller.GetMerchCoinReport(w, r)
-	case method == "GET" && path == "/api/merchcoin/report/preview":
-		controller.GetMerchCoinReportPreview(w, r)
-	case method == "GET" && path == "/api/merchcoin/report/full":
-		controller.GetMerchCoinFullReport(w, r)
 	// IQ
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)
