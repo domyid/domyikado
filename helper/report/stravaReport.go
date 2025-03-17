@@ -5,9 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/gocroot/config"
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/model"
@@ -22,18 +20,43 @@ type StravaInfo struct {
 	TotalKm     float64
 }
 
-func GetWagroupIDsFromAPI() (map[string]string, error) {
-	_, doc, err := atapi.Get[[]model.PomodoroReport](config.DataPomokitAPI)
+func GetAllPhoneNumbersFromStrava(users map[string]StravaInfo) []string {
+	var phoneNumbers []string
+	phoneSet := make(map[string]bool) // Untuk menghindari duplikasi
+
+	for _, info := range users {
+		if _, exists := phoneSet[info.PhoneNumber]; !exists {
+			phoneSet[info.PhoneNumber] = true
+			phoneNumbers = append(phoneNumbers, info.PhoneNumber)
+		}
+	}
+
+	return phoneNumbers
+}
+
+func GetGrupIDFromProject(db *mongo.Database, phoneNumbers []string) ([]string, error) {
+	// Filter mencari grup berdasarkan anggota dengan nomor telepon yang cocok
+	filter := bson.M{
+		"members": bson.M{
+			"$elemMatch": bson.M{"phonenumber": bson.M{"$in": phoneNumbers}},
+		},
+	}
+
+	// Ambil daftar wagroupid dari koleksi "project"
+	wagroupIDs, err := atdb.GetAllDistinctDoc(db, filter, "wagroupid", "project")
 	if err != nil {
-		return nil, fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+		return nil, fmt.Errorf("gagal mengambil wagroupid: %v", err)
 	}
 
-	phoneToGroupID := make(map[string]string)
-	for _, report := range doc {
-		phoneToGroupID[report.PhoneNumber] = report.WaGroupID
+	// Konversi hasil ke slice string
+	var result []string
+	for _, id := range wagroupIDs {
+		if str, ok := id.(string); ok {
+			result = append(result, str)
+		}
 	}
 
-	return phoneToGroupID, nil
+	return result, nil
 }
 
 func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
@@ -42,7 +65,7 @@ func GenerateRekapPoinStravaMingguan(db *mongo.Database, groupId string) (msg st
 		return "", "", fmt.Errorf("gagal mengambil data Strava: %v", err)
 	}
 
-	msg = "*Laporan Aktivitas Strava Minggu ini :*\n\n"
+	msg = "*Laporan Total Aktivitas Strava:*\n\n"
 
 	// Ubah map menjadi slice agar bisa diurutkan
 	var userList []StravaInfo
@@ -89,7 +112,7 @@ func getDataStravaMasukPerMinggu(db *mongo.Database) (map[string]StravaInfo, err
 
 func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, error) {
 	// Ambil semua aktivitas Strava
-	activities, err := getStravaActivities()
+	activities, err := getStravaActivitiesPerWeek(db)
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil data aktivitas Strava: %v", err)
 	}
@@ -134,39 +157,29 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, 
 	return users, nil
 }
 
-func getStravaActivities() ([]model.StravaActivity, error) {
-	_, doc, err := atapi.Get[[]model.StravaActivity](config.StravaActivityAPI)
+func getStravaActivitiesPerWeek(db *mongo.Database) ([]model.StravaActivity, error) {
+	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil config url: %v", err)
+	}
+
+	_, doc, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
 	}
 
-	monday, sunday := getWeekStartEnd(time.Now())
+	// monday, sunday := getWeekStartEnd(time.Now())
 
 	var filteredActivities []model.StravaActivity
 	for _, activity := range doc {
-		activityTime := activity.CreatedAt
-		if activity.Status == "Valid" && !activityTime.Before(monday) && activityTime.Before(sunday) {
+		// activityTime := activity.CreatedAt
+		if activity.Status == "Valid" /*&& !activityTime.Before(monday) && activityTime.Before(sunday)*/ {
 			filteredActivities = append(filteredActivities, activity)
 		}
 	}
 
 	return filteredActivities, nil
 }
-
-// func getWagroupIDFromPomokit(phoneNumber string) (string, error) {
-// 	_, doc, err := atapi.Get[[]model.PomodoroReport](config.DataPomokitAPI)
-// 	if err != nil {
-// 		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
-// 	}
-
-// 	for _, report := range doc {
-// 		if report.PhoneNumber == phoneNumber {
-// 			return report.WaGroupID, nil
-// 		}
-// 	}
-
-// 	return "", fmt.Errorf("tidak ada data Pomokit yang cocok")
-// }
 
 func countDuplicatePhoneNumbers(users []StravaInfo) map[string]StravaInfo {
 	phoneNumberCount := make(map[string]StravaInfo)
@@ -186,19 +199,19 @@ func countDuplicatePhoneNumbers(users []StravaInfo) map[string]StravaInfo {
 	return phoneNumberCount
 }
 
-func getWeekStartEnd(t time.Time) (time.Time, time.Time) {
-	weekday := int(t.Weekday())
-	// Jika hari Minggu (0), kita mundur 6 hari ke Senin sebelumnya
-	if weekday == 0 {
-		weekday = 7
-	}
+// func getWeekStartEnd(t time.Time) (time.Time, time.Time) {
+// 	weekday := int(t.Weekday())
+// 	// Jika hari Minggu (0), kita mundur 6 hari ke Senin sebelumnya
+// 	if weekday == 0 {
+// 		weekday = 7
+// 	}
 
-	// Dapatkan Senin di awal minggu ini
-	monday := t.AddDate(0, 0, -weekday+1)
-	sunday := monday.AddDate(0, 0, 6) // Hitung Minggu
+// 	// Dapatkan Senin di awal minggu ini
+// 	monday := t.AddDate(0, 0, -weekday+1)
+// 	sunday := monday.AddDate(0, 0, 6) // Hitung Minggu
 
-	monday = time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, t.Location())
-	sunday = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 59, 999999999, t.Location())
+// 	monday = time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, t.Location())
+// 	sunday = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 59, 999999999, t.Location())
 
-	return monday, sunday
-}
+// 	return monday, sunday
+// }

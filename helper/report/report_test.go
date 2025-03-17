@@ -2,15 +2,19 @@ package report
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/atdb"
 )
 
+// var mongoinfo = atdb.DBInfo{
+// 	DBString: os.Getenv("MONGODOMYID"),
+// 	DBName:   "domyid",
+// }
+
 var mongoinfo = atdb.DBInfo{
-	DBString: os.Getenv("MONGODOMYID"),
+	DBString: "mongodb+srv://ulbi:k0dGfeYgAorMKDAz@cluster0.fvazjna.mongodb.net/",
 	DBName:   "domyid",
 }
 

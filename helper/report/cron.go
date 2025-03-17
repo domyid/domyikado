@@ -3,7 +3,6 @@ package report
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/gocroot/config"
@@ -92,13 +91,31 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 }
 
 func RekapStravaMingguan(db *mongo.Database) error {
-	wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
+	// wagroupidlist := []string{"120363298977628161"} // Hardcode grup WA
+	// Ambil data Strava dari database
+	phoneNumberCount, err := getDataStravaMasukPerMinggu(db)
+	if err != nil {
+		return errors.New("gagal mengambil data Strava: " + err.Error())
+	}
+
+	// Ambil daftar nomor telepon dari data Strava
+	phoneNumbers := GetAllPhoneNumbersFromStrava(phoneNumberCount)
+
+	// Ambil daftar grup WA berdasarkan nomor telepon
+	wagroupidlist, err := GetGrupIDFromProject(db, phoneNumbers)
+	if err != nil {
+		return errors.New("gagal mengambil daftar grup WA: " + err.Error())
+	}
+
+	// Jika tidak ada grup, hentikan proses
+	if len(wagroupidlist) == 0 {
+		return errors.New("tidak ada grup yang ditemukan untuk rekap Strava")
+	}
 
 	var lastErr error
 
 	for _, groupID := range wagroupidlist {
-		msg, perwkilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
-		fmt.Println("Pesan Rekap:", msg)
+		msg, perwakilanphone, err := GenerateRekapPoinStravaMingguan(db, groupID)
 		if err != nil {
 			lastErr = errors.New("Gagal Membuat Rekapitulasi: " + err.Error())
 			continue
@@ -111,7 +128,7 @@ func RekapStravaMingguan(db *mongo.Database) error {
 		}
 
 		if strings.Contains(groupID, "-") {
-			dt.To = perwkilanphone
+			dt.To = perwakilanphone
 			dt.IsGroup = false
 		}
 

@@ -191,8 +191,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/laporantracker":
 		controller.LaporanengunjungWeb(w, r)
 	//strava coba
-	// case method == "GET" && path == "/refresh/report/stravamingguan":
-	// 	controller.GetStravaData(w, r)
+	case method == "GET" && path == "/refresh/report/stravamingguan":
+		controller.GetStravaData(w, r)
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
 
