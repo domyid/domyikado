@@ -61,7 +61,7 @@ func GetStravaData(respw http.ResponseWriter, req *http.Request) {
 	// 2. Menjalankan fungsi RekapStravaMingguan dalam goroutine
 	go func() {
 		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
-		if err := report.RekapStravaMingguan(config.Mongoconn); err != nil {
+		if err := report.RekapStravaYesterday(config.Mongoconn); err != nil {
 			mu.Lock()
 			lastErr = err
 			resp.Response = err.Error()
