@@ -12,10 +12,12 @@ import (
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atdb"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Struct SoalIQ sesuai dengan koleksi iqquestion di db MongoDB
@@ -317,4 +319,28 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// **Handler untuk memanggil Rekapitulasi IQ Score Harian**
+func GetIqScoreData(w http.ResponseWriter, r *http.Request) {
+	// Ambil koneksi database
+	var db *mongo.Database = config.Mongoconn
+
+	// Jalankan fungsi rekap IQ Score harian
+	err := report.RekapIqScoreHarian(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal melakukan rekap IQ Score",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Respon sukses
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap IQ Score berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
 }

@@ -439,3 +439,60 @@ func KirimLaporanPengunjungWebKeGrup(db *mongo.Database) (err error) {
 
 // 	return nil
 // }
+
+// Fungsi utama untuk mengirim rekap IQ Score ke WhatsApp Group
+func RekapIqScoreHarian(db *mongo.Database) error {
+	// Ambil data IQ Score terbaru
+	_, err := GetTotalDataIqMasuk(db) // Kita hanya butuh daftar grup, tidak perlu data detail
+	if err != nil {
+		return errors.New("gagal mengambil data IQ Score: " + err.Error())
+	}
+
+	// **Manual Group ID untuk Testing**
+	manualGroupIDs := []string{"120363298977628161"} // **Ganti dengan Group ID yang sesuai**
+
+	var lastErr error
+	groupSet := make(map[string]bool) // Menghindari pengiriman ganda
+
+	// Looping hanya untuk Group ID
+	for _, groupID := range manualGroupIDs {
+		if _, exists := groupSet[groupID]; exists {
+			continue
+		}
+		groupSet[groupID] = true // Tandai bahwa grup ini sudah diproses
+
+		// **Buat pesan rekapitulasi IQ Score**
+		msg, perwakilanphone, err := GenerateRekapPoinIqScore(db, groupID)
+		if err != nil {
+			lastErr = errors.New("Gagal Membuat Rekapitulasi IQ Score: " + err.Error())
+			continue
+		}
+
+		// **Siapkan pesan untuk WhatsApp**
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+
+		// **Jika bukan Group WA, kirim sebagai Private Chat**
+		if strings.Contains(groupID, "-") {
+			dt.To = perwakilanphone
+			dt.IsGroup = false
+		}
+
+		// **Kirim ke WhatsApp**
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Gagal mengirim ke WhatsApp: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
+}
