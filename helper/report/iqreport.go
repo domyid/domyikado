@@ -2,310 +2,253 @@ package report
 
 import (
 	"context"
-	"errors"
+	// "errors"
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
-	"time"
 
-	"github.com/gocroot/helper/atapi"
-	"github.com/gocroot/helper/atdb"
-	"github.com/gocroot/model"
+	// "time"
+
+	// "github.com/gocroot/helper/atapi"
+	// "github.com/gocroot/helper/atdb"
+	// "github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Struct untuk menyimpan data IQ Score
 type IqScoreInfo struct {
-	Name      	string
+	Name        string
 	PhoneNumber string
-	Score     	string
-	IQ        	string
-	WaGroupID 	[]string
+	Score       string
+	IQ          string
+	WaGroupID   []string
 }
 
 func GenerateRekapPoinIqScore(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
 	// Ambil data dari koleksi iqscore
-	dailyData, err := GetTotalDataIqMasuk(db, false)
+	dailyScoreData, err := GetTotalDataIqMasuk(db, false)
 	if err != nil {
 		return "", "", fmt.Errorf("gagal mengambil data IQ harian: %v", err)
 	}
-	totalData, err := GetTotalDataIqMasuk(db, true)
+	totalScoreData, err := GetTotalDataIqMasuk(db, true)
 	if err != nil {
 		return "", "", fmt.Errorf("gagal mengambil data IQ total: %v", err)
 	}
 
 	// Buat list untuk menyimpan user yang termasuk dalam groupId
-	var filteredDailyData []IqScoreInfo
-	var filteredTotalData []IqScoreInfo
+	var filteredDailyScoreData []IqScoreInfo
+	var filteredTotalScoreData []IqScoreInfo
 
-	// Filter dailyData yang termasuk dalam groupId
-	for _, info := range dailyData {
+	// Filter dailyScoreData yang termasuk dalam groupId
+	for _, info := range dailyScoreData {
 		for _, gid := range info.WaGroupID {
 			if gid == groupId {
-				filteredDailyData = append(filteredDailyData, info)
+				filteredDailyScoreData = append(filteredDailyScoreData, info)
 				break
 			}
 		}
 	}
 
-	func GetTotalDataStravaMasuk(db *mongo.Database, isTotal bool) (map[string]StravaInfo, error) {
-		users, err := getPhoneNumberAndNameFromStravaActivity(db, isTotal)
-		if err != nil {
-			return nil, err
-		}
-	
-		// Hitung jumlah aktivitas per nomor telepon
-		allData := duplicatePhoneNumbersCount(users)
-	
-		// Tidak perlu ambil grup WA lagi, karena sudah ada di `users`
-		filteredData := make(map[string]StravaInfo)
-		for phone, info := range allData {
-			// Jika user sudah punya grup WA, langsung gunakan
-			if len(info.WaGroupID) > 0 {
-				filteredData[phone] = info
+	// Filter totalData yang termasuk dalam groupId
+	for _, info := range totalScoreData {
+		for _, gid := range info.WaGroupID {
+			if gid == groupId {
+				filteredTotalScoreData = append(filteredTotalScoreData, info)
+				break
 			}
 		}
-	
-		return filteredData, nil
 	}
-	
-	func formatStravaData(data []StravaInfo) string {
-		if len(data) == 0 {
-			return "Tidak ada aktivitas yang tercatat."
-		}
-	
-		// Urutkan berdasarkan jumlah aktivitas tertinggi
-		sort.Slice(data, func(i, j int) bool {
-			return data[i].Count > data[j].Count
-		})
-	
-		var result string
-		for _, info := range data {
-			// result += fmt.Sprintf("✅ %s (%s): %.0f aktivitas (%.1f km)\n", info.Name, info.PhoneNumber, info.Count, info.TotalKm)
-			result += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas (" + strconv.FormatFloat(info.TotalKm, 'f', 1, 64) + " km)\n"
-	
-		}
-	
-		return result
+
+	// Jika grup tidak memiliki anggota, jangan kirim pesan
+	if len(filteredDailyScoreData) == 0 && len(filteredTotalScoreData) == 0 {
+		return "", "", fmt.Errorf("tidak ada data Score IQ untuk grup %s", groupId)
 	}
-	
-	func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database, isTotal bool) ([]StravaInfo, error) {
-		// Ambil semua aktivitas Strava
-		var activities []model.StravaActivity
-		var err error
-	
-		if isTotal {
-			activities, err = getStravaActivitiesTotal(db)
+
+	// Format pesan
+	msg = "*Laporan Score IQ:*"
+	msg += "\n\n*Kemarin - Hari Ini:*\n"
+	msg += formatIqScoreData(filteredDailyScoreData)
+
+	msg += "\n\n*Total Keseluruhan:*\n"
+	msg += formatIqScoreData(filteredTotalScoreData)
+
+	msg += "\n\nJika dirasa sudah melakukan test namun tidak tercatat, mungkin ada yang salah dengan nomor hp. Silakan lakukan update nomor hp di do.my.id yang sesuai dengan nomor di whatsapp."
+
+	// Set perwakilan pertama sebagai nomor yang akan menerima pesan jika private
+	if len(filteredDailyScoreData) > 0 {
+		perwakilanphone = filteredDailyScoreData[0].PhoneNumber
+	} else if len(filteredTotalScoreData) > 0 {
+		perwakilanphone = filteredTotalScoreData[0].PhoneNumber
+	}
+
+	return msg, perwakilanphone, nil
+}
+
+func GetTotalDataIqMasuk(db *mongo.Database, isTotal bool) (map[string]IqScoreInfo, error) {
+	users, err := getPhoneNumberAndNameFromIqScore(db, isTotal)
+	if err != nil {
+		return nil, err
+	}
+
+	// Hitung jumlah aktivitas per nomor telepon
+	allData := ByduplicatePhoneNumbersCount(users)
+
+	// Tidak perlu ambil grup WA lagi, karena sudah ada di `users`
+	filteredData := make(map[string]IqScoreInfo)
+	for phone, info := range allData {
+		// Jika user sudah punya grup WA, langsung gunakan
+		if len(info.WaGroupID) > 0 {
+			filteredData[phone] = info
+		}
+	}
+
+	return filteredData, nil
+}
+
+// Fungsi untuk memformat data IQ Score dalam pesan WhatsApp
+func formatIqScoreData(data []IqScoreInfo) string {
+	if len(data) == 0 {
+		return "Tidak ada skor IQ yang tercatat."
+	}
+
+	// Urutkan berdasarkan skor tertinggi
+	sort.Slice(data, func(i, j int) bool {
+		// Mengubah string skor menjadi integer agar bisa dibandingkan
+		scoreI, _ := strconv.Atoi(data[i].Score)
+		scoreJ, _ := strconv.Atoi(data[j].Score)
+		return scoreI > scoreJ
+	})
+
+	var result string
+	for _, iq := range data {
+		result += fmt.Sprintf("✅ *%s* - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	}
+
+	return result
+}
+
+// Fungsi untuk mengambil data IQ Score berdasarkan nomor telepon
+func getPhoneNumberAndNameFromIqScore(db *mongo.Database, isTotal bool) ([]IqScoreInfo, error) {
+	collection := db.Collection("iqscore")
+
+	// Ambil semua data dari koleksi iqscore
+	cursor, err := collection.Find(context.TODO(), bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil data IQ Score: %v", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	var users []IqScoreInfo
+	if err = cursor.All(context.TODO(), &users); err != nil {
+		return nil, fmt.Errorf("gagal membaca data IQ Score: %v", err)
+	}
+
+	// Kumpulkan nomor telepon unik
+	var phoneNumbers []string
+	phoneSet := make(map[string]bool)
+	for _, user := range users {
+		if !phoneSet[user.PhoneNumber] {
+			phoneSet[user.PhoneNumber] = true
+			phoneNumbers = append(phoneNumbers, user.PhoneNumber)
+		}
+	}
+
+	// Ambil daftar grup WhatsApp berdasarkan nomor telepon
+	groupMap, err := GetGroupIDFromProject(db, phoneNumbers)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil grup WhatsApp: %v", err)
+	}
+
+	// Tambahkan WaGroupID ke setiap pengguna
+	for i, user := range users {
+		if waGroups, exists := groupMap[user.PhoneNumber]; exists {
+			users[i].WaGroupID = waGroups
+		}
+	}
+
+	return users, nil
+}
+
+// Fungsi untuk menghitung jumlah peserta IQ Score berdasarkan nomor telepon
+func ByduplicatePhoneNumbersCount(users []IqScoreInfo) map[string]IqScoreInfo {
+	phoneNumberCount := make(map[string]IqScoreInfo)
+
+	for _, user := range users {
+		key := user.PhoneNumber
+
+		if info, exists := phoneNumberCount[key]; exists {
+			// Tambah skor ke dalam map (misal: sum total skor atau tetap dengan skor terakhir)
+			info.Score = user.Score
+			info.IQ = user.IQ
+			phoneNumberCount[key] = info // Simpan kembali ke map
 		} else {
-			activities, err = getStravaActivitiesPerDay(db)
+			phoneNumberCount[key] = user // Simpan data baru
 		}
-	
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil data aktivitas Strava: %v", err)
+	}
+
+	return phoneNumberCount
+}
+
+func GetGroupIDFromProject(db *mongo.Database, phoneNumbers []string) (map[string][]string, error) {
+	// Filter mencari grup berdasarkan anggota dengan nomor telepon yang cocok
+	filter := bson.M{
+		"members": bson.M{
+			"$elemMatch": bson.M{"phonenumber": bson.M{"$in": phoneNumbers}},
+		},
+	}
+
+	// Ambil daftar semua dokumen yang sesuai
+	cursor, err := db.Collection("project").Find(context.TODO(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil data proyek: %v", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	// Map untuk menyimpan grup ID unik berdasarkan nomor telepon
+	groupMap := make(map[string]map[string]bool)
+
+	for cursor.Next(context.TODO()) {
+		var project struct {
+			Members []struct {
+				PhoneNumber string `bson:"phonenumber"`
+			} `bson:"members"`
+			WaGroupID string `bson:"wagroupid"`
 		}
-	
-		// Pastikan ada aktivitas
-		if len(activities) == 0 {
-			return nil, fmt.Errorf("tidak ada aktivitas Strava yang ditemukan")
+
+		if err := cursor.Decode(&project); err != nil {
+			return nil, fmt.Errorf("gagal mendekode proyek: %v", err)
 		}
-	
-		var users []StravaInfo
-		var phoneNumbers []string
-		phoneSet := make(map[string]bool)
-	
-		// Kumpulkan semua nomor telepon unik
-		for _, activity := range activities {
-			phone := activity.PhoneNumber
-			if !phoneSet[phone] {
-				phoneSet[phone] = true
-				phoneNumbers = append(phoneNumbers, phone)
-			}
-		}
-	
-		// Ambil daftar grup WA unik berdasarkan nomor telepon
-		groupMap, err := getGrupIDFromProject(db, phoneNumbers)
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil grup WhatsApp: %v", err)
-		}
-	
-		// Loop aktivitas untuk membangun data StravaInfo
-		for _, activity := range activities {
-			phone := activity.PhoneNumber
-	
-			// Ambil user dari database berdasarkan nomor telepon
-			_, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phone})
-			if err != nil {
-				if err == mongo.ErrNoDocuments {
-					continue
+
+		// Simpan grup ID berdasarkan nomor telepon yang sesuai
+		for _, member := range project.Members {
+			phone := member.PhoneNumber
+			if Contain(phoneNumbers, phone) { // Pastikan nomor ada dalam daftar yang dicari
+				if _, exists := groupMap[phone]; !exists {
+					groupMap[phone] = make(map[string]bool)
 				}
-				return nil, fmt.Errorf("gagal mengambil profil dari database: %v", err)
+				groupMap[phone][project.WaGroupID] = true
 			}
-	
-			// Konversi jarak dari string ke float
-			distanceStr := strings.Replace(activity.Distance, " km", "", -1)
-			distance, _ := strconv.ParseFloat(distanceStr, 64)
-	
-			// Ambil grup WA unik dari hasil query sebelumnya
-			waGroupIDs := groupMap[phone]
-	
-			// Tambahkan ke hasil
-			users = append(users, StravaInfo{
-				Name:        activity.Name,
-				PhoneNumber: phone,
-				Count:       1,
-				TotalKm:     distance,
-				WaGroupID:   waGroupIDs,
-			})
 		}
-	
-		if len(users) == 0 {
-			return nil, fmt.Errorf("tidak ada profil Strava yang cocok di database")
-		}
-	
-		return users, nil
 	}
-	
-	func getGrupIDFromProject(db *mongo.Database, phoneNumbers []string) (map[string][]string, error) {
-		// Filter mencari grup berdasarkan anggota dengan nomor telepon yang cocok
-		filter := bson.M{
-			"members": bson.M{
-				"$elemMatch": bson.M{"phonenumber": bson.M{"$in": phoneNumbers}},
-			},
+
+	// Konversi map ke slice unik
+	finalGroupMap := make(map[string][]string)
+	for phone, groups := range groupMap {
+		for groupID := range groups {
+			finalGroupMap[phone] = append(finalGroupMap[phone], groupID)
 		}
-	
-		// Ambil daftar semua dokumen yang sesuai
-		cursor, err := db.Collection("project").Find(context.TODO(), filter)
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil data proyek: %v", err)
-		}
-		defer cursor.Close(context.TODO())
-	
-		// Map untuk menyimpan grup ID unik berdasarkan nomor telepon
-		groupMap := make(map[string]map[string]bool)
-	
-		for cursor.Next(context.TODO()) {
-			var project struct {
-				Members []struct {
-					PhoneNumber string `bson:"phonenumber"`
-				} `bson:"members"`
-				WaGroupID string `bson:"wagroupid"`
-			}
-	
-			if err := cursor.Decode(&project); err != nil {
-				return nil, fmt.Errorf("gagal mendekode proyek: %v", err)
-			}
-	
-			// Simpan grup ID berdasarkan nomor telepon yang sesuai
-			for _, member := range project.Members {
-				phone := member.PhoneNumber
-				if contains(phoneNumbers, phone) { // Pastikan nomor ada dalam daftar yang dicari
-					if _, exists := groupMap[phone]; !exists {
-						groupMap[phone] = make(map[string]bool)
-					}
-					groupMap[phone][project.WaGroupID] = true
-				}
-			}
-		}
-	
-		// Konversi map ke slice unik
-		finalGroupMap := make(map[string][]string)
-		for phone, groups := range groupMap {
-			for groupID := range groups {
-				finalGroupMap[phone] = append(finalGroupMap[phone], groupID)
-			}
-		}
-	
-		return finalGroupMap, nil
 	}
-	
-	func getStravaActivitiesPerDay(db *mongo.Database) ([]model.StravaActivity, error) {
-		conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil config url: %v", err)
+
+	return finalGroupMap, nil
+}
+
+// Fungsi bantuan untuk mengecek apakah sebuah nilai ada dalam slice
+func Contain(slice []string, value string) bool {
+	for _, v := range slice {
+		if v == value {
+			return true
 		}
-	
-		_, doc, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
-		}
-	
-		startOfDay, endOfDay := getStartAndEndOfYesterday(time.Now())
-	
-		var filteredActivities []model.StravaActivity
-		for _, activity := range doc {
-			activityTime := activity.CreatedAt
-	
-			// Cek apakah aktivitas terjadi pada hari ini
-			if activity.Status == "Valid" && activityTime.After(startOfDay) && activityTime.Before(endOfDay) {
-				filteredActivities = append(filteredActivities, activity)
-			}
-		}
-	
-		if len(filteredActivities) == 0 {
-			return nil, errors.New("tidak ada aktivitas yang tercatat kemarin")
-		}
-	
-		return filteredActivities, nil
 	}
-	
-	func getStravaActivitiesTotal(db *mongo.Database) ([]model.StravaActivity, error) {
-		conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil config url: %v", err)
-		}
-	
-		_, doc, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
-		}
-	
-		var filteredActivities []model.StravaActivity
-		for _, activity := range doc {
-			if activity.Status == "Valid" {
-				filteredActivities = append(filteredActivities, activity)
-			}
-		}
-	
-		return filteredActivities, nil
-	}
-	
-	func duplicatePhoneNumbersCount(users []StravaInfo) map[string]StravaInfo {
-		phoneNumberCount := make(map[string]StravaInfo)
-	
-		for _, user := range users {
-			key := user.PhoneNumber
-	
-			if info, exists := phoneNumberCount[key]; exists {
-				info.Count++                 // Tambah jumlah aktivitas
-				info.TotalKm += user.TotalKm // **Jumlahkan total jarak**
-				phoneNumberCount[key] = info // Simpan kembali ke map
-			} else {
-				phoneNumberCount[key] = user // Simpan data baru
-			}
-		}
-	
-		return phoneNumberCount
-	}
-	
-	func getStartAndEndOfYesterday(t time.Time) (time.Time, time.Time) {
-		location, _ := time.LoadLocation("Asia/Jakarta")
-		today := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, location)
-		yesterday := today.AddDate(0, 0, -1)
-		start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, location)
-		end := time.Date(today.Year(), today.Month(), today.Day(), 23, 59, 59, 999999999, location)
-	
-		return start, end
-	}
-	
-	// Fungsi bantuan untuk mengecek apakah sebuah nilai ada dalam slice
-	func contains(slice []string, value string) bool {
-		for _, v := range slice {
-			if v == value {
-				return true
-			}
-		}
-		return false
-	}
-	
+	return false
+}
