@@ -49,7 +49,7 @@ func GenerateRekapPoinIqScore(db *mongo.Database, groupID string) (string, strin
 	}
 
 	// Buat pesan rekap
-	msg := "*📊 Rekapitulasi Hasil Tes IQ Harian 📊*\n\n"
+	msg := "*📊 Rekap Total Hasil Tes IQ 📊*\n\n"
 	for _, iq := range filteredData {
 		msg += fmt.Sprintf("✅ *%s* - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
 	}
