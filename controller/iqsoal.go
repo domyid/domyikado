@@ -290,11 +290,12 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	// Simpan Hasil ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	newIqScore := IqScore{
-		ID:        primitive.NewObjectID(),
-		Name:      userAnswer.Name,
-		Score:     fmt.Sprintf("%d", correctCount),
-		IQ:        iqScoring.IQ,
-		CreatedAt: formattedTime,
+		ID:          primitive.NewObjectID(),
+		Name:        userAnswer.Name,
+		PhoneNumber: docuser.PhoneNumber,
+		Score:       fmt.Sprintf("%d", correctCount),
+		IQ:          iqScoring.IQ,
+		CreatedAt:   formattedTime,
 	}
 
 	_, err = iqScoreCollection.InsertOne(context.TODO(), newIqScore)
@@ -305,13 +306,14 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 
 	// Respon JSON yang akan dikirimkan ke frontend
 	response := map[string]interface{}{
-		"status":   "success",
-		"message":  "Jawaban berhasil disimpan!",
-		"name":     newIqScore.Name,
-		"score":    newIqScore.Score,
-		"iq":       newIqScore.IQ,
-		"correct":  correctCount,
-		"datetime": formattedTime + "WIB", // Format dengan zona waktu WIB
+		"status":      "success",
+		"message":     "Jawaban berhasil disimpan!",
+		"name":        newIqScore.Name,
+		"phoneNumber": newIqScore.PhoneNumber,
+		"score":       newIqScore.Score,
+		"iq":          newIqScore.IQ,
+		"correct":     correctCount,
+		"datetime":    formattedTime + "WIB", // Format dengan zona waktu WIB
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
