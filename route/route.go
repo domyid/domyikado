@@ -173,6 +173,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/iq/answer":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostAnswer(w, r)
+		// Endpoint untuk meng-refresh rekap IQ Score harian
+	case method == "GET" && path == "/refresh/report/iqscoreharian":
+		controller.GetIqScoreData(w, r)
 	// Pomodoro
 	// case method == "GET" && path == ("/api/pomokit/report"):
 	// 	controller.GetPomokitDataUser(w, r)
