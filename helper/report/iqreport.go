@@ -2,6 +2,8 @@ package report
 
 import (
 	"context"
+	"strings"
+
 	// "errors"
 	"fmt"
 	"sort"
@@ -18,42 +20,41 @@ import (
 
 // Struct untuk menyimpan data IQ Score
 type IqScoreInfo struct {
-	Name        string
-	PhoneNumber string
-	Score       string
-	IQ          string
-	WaGroupID   []string
+	Name        string `bson:"name"`
+	PhoneNumber string `bson:"phonenumber"`
+	Score       string `bson:"score"`
+	IQ          string `bson:"iq"`
+	WaGroupID   string `bson:"wagroupid"` // ✅ Ubah ke string, lalu kita proses ke slice
 }
 
 // ✅ **Fungsi utama untuk menghasilkan rekap IQ Score yang akan dikirim ke WhatsApp**
 func GenerateRekapPoinIqScore(db *mongo.Database, groupID string) (string, string, error) {
-	// **Ambil data IQ Score dari database**
+	// Ambil data IQ Score terbaru
 	dataIqScore, err := GetTotalDataIqMasuk(db)
 	if err != nil {
 		return "", "", fmt.Errorf("gagal mengambil data IQ Score: %v", err)
 	}
 
-	// **Filter hanya data yang sesuai dengan Group ID**
+	// Filter hanya data yang sesuai dengan Group ID
 	var filteredData []IqScoreInfo
 	for _, info := range dataIqScore {
-		for _, gid := range info.WaGroupID {
-			if gid == groupID {
-				filteredData = append(filteredData, info)
-				break // Stop iterasi setelah menemukan kecocokan pertama
-			}
+		if info.WaGroupID == groupID { // ✅ Cek langsung sebagai string
+			filteredData = append(filteredData, info)
 		}
 	}
 
-	// **Jika tidak ada data untuk grup ini, hentikan proses**
+	// Jika tidak ada data untuk grup ini, hentikan proses
 	if len(filteredData) == 0 {
 		return "", "", fmt.Errorf("tidak ada data IQ Score untuk grup %s", groupID)
 	}
 
-	// **Buat pesan rekap IQ Score**
+	// Buat pesan rekap
 	msg := "*📊 Rekapitulasi Hasil Tes IQ Harian 📊*\n\n"
-	msg += formatIqScoreData(filteredData)
+	for _, iq := range filteredData {
+		msg += fmt.Sprintf("✅ *%s* - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	}
 
-	// **Pilih perwakilan pertama sebagai penerima jika private chat**
+	// Pilih perwakilan pertama sebagai nomor yang akan menerima pesan jika private chat
 	perwakilanphone := filteredData[0].PhoneNumber
 
 	return msg, perwakilanphone, nil
@@ -61,7 +62,6 @@ func GenerateRekapPoinIqScore(db *mongo.Database, groupID string) (string, strin
 
 // ✅ **Fungsi untuk mengambil seluruh data IQ Score dari database**
 func GetTotalDataIqMasuk(db *mongo.Database) ([]IqScoreInfo, error) {
-	// **Ambil semua data dari koleksi `iqscore` langsung dari MongoDB**
 	collection := db.Collection("iqscore")
 	cursor, err := collection.Find(context.TODO(), bson.M{})
 	if err != nil {
@@ -74,18 +74,11 @@ func GetTotalDataIqMasuk(db *mongo.Database) ([]IqScoreInfo, error) {
 		return nil, fmt.Errorf("gagal membaca data IQ Score: %v", err)
 	}
 
-	// **Ambil daftar grup WhatsApp berdasarkan nomor telepon**
-	phoneNumbers := extractUniquePhoneNumbers(users)
-	groupMap, err := GetGroupIDFromProject(db, phoneNumbers)
-	if err != nil {
-		return nil, fmt.Errorf("gagal mengambil grup WhatsApp: %v", err)
-	}
-
-	// **Tambahkan WaGroupID ke setiap pengguna**
+	// **Konversi wagroupid dari string ke slice**
 	for i, user := range users {
-		if waGroups, exists := groupMap[user.PhoneNumber]; exists {
-			users[i].WaGroupID = waGroups
-		}
+		// **Pastikan tidak ada spasi ekstra atau koma di akhir**
+		cleanedGroupID := strings.TrimSpace(user.WaGroupID)
+		users[i].WaGroupID = cleanedGroupID
 	}
 
 	return users, nil
