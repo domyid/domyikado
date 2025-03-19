@@ -449,7 +449,7 @@ func RekapIqScoreHarian(db *mongo.Database) error {
 	}
 
 	// **Manual Group ID untuk Testing**
-	manualGroupIDs := []string{"120363298977628161"} // **Ganti dengan Group ID yang sesuai**
+	manualGroupIDs := []string{"120363022595651310"} // **Ganti dengan Group ID yang sesuai**
 
 	var lastErr error
 	groupSet := make(map[string]bool) // Menghindari pengiriman ganda
