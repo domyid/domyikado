@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -409,4 +410,273 @@ func GenerateMerchCoinReportsForCronJob(db *mongo.Database) error {
 	}
 
 	return nil
+}
+
+// GetMerchCoinPointsReport generates a report of MerchCoin points for specific groups
+func GetMerchCoinPointsReport(db *mongo.Database) string {
+	// Only send to specific group IDs
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+	groupIDStr := strings.Join(allowedGroupIDs, " and ")
+
+	// Get today's date for filtering
+	today := time.Now().Format("2006-01-02")
+
+	// Query processed points from merchcointosend collection
+	filter := bson.M{
+		"processedDate": today,
+		"reported":      false,
+	}
+
+	pointRecords, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", filter)
+	if err != nil || len(pointRecords) == 0 {
+		return fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n\nNo point calculations to report for today.", groupIDStr)
+	}
+
+	// Group points by user
+	userPoints := make(map[string]struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		TotalPoints float64
+		Wallet      string
+		TxCount     int
+	})
+
+	for _, record := range pointRecords {
+		user, exists := userPoints[record.PhoneNumber]
+		if !exists {
+			user = struct {
+				Name        string
+				PhoneNumber string
+				NPM         string
+				TotalPoints float64
+				Wallet      string
+				TxCount     int
+			}{
+				Name:        record.Name,
+				PhoneNumber: record.PhoneNumber,
+				NPM:         record.NPM,
+				TotalPoints: 0,
+				Wallet:      record.WonpayWallet,
+				TxCount:     0,
+			}
+		}
+
+		user.TotalPoints += record.Points
+		user.TxCount++
+		userPoints[record.PhoneNumber] = user
+	}
+
+	// Create sorted list of users by points
+	type UserRank struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		Points      float64
+		Wallet      string
+		TxCount     int
+	}
+
+	var rankings []UserRank
+	for _, info := range userPoints {
+		rankings = append(rankings, UserRank{
+			Name:        info.Name,
+			PhoneNumber: info.PhoneNumber,
+			NPM:         info.NPM,
+			Points:      info.TotalPoints,
+			Wallet:      info.Wallet,
+			TxCount:     info.TxCount,
+		})
+	}
+
+	// Sort by points (descending)
+	sort.Slice(rankings, func(i, j int) bool {
+		return rankings[i].Points > rankings[j].Points
+	})
+
+	// Build the message
+	message := fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n", groupIDStr)
+	message += fmt.Sprintf("Date: %s\n\n", time.Now().Format("Monday, January 2, 2006"))
+	message += "*Point Rankings:*\n"
+
+	for i, rank := range rankings {
+		var displayWallet string = "Not Set"
+		if rank.Wallet != "" {
+			if len(rank.Wallet) > 12 {
+				displayWallet = rank.Wallet[:6] + "..." + rank.Wallet[len(rank.Wallet)-6:]
+			} else {
+				displayWallet = rank.Wallet
+			}
+		}
+
+		npmDisplay := rank.NPM
+		if npmDisplay == "" {
+			npmDisplay = "N/A"
+		}
+
+		message += fmt.Sprintf("%d. %s (%s)\n   NPM: %s\n   Points: %.2f\n   Wallet: %s\n   Transactions: %d\n\n",
+			i+1,
+			rank.Name,
+			rank.PhoneNumber,
+			npmDisplay,
+			rank.Points,
+			displayWallet,
+			rank.TxCount)
+	}
+
+	message += "*Points are calculated as: (transaction amount / daily average) × 100*\n"
+	message += "*Higher points are awarded for transactions above the daily average.*"
+
+	// Update records to mark as reported
+	for _, record := range pointRecords {
+		_, err := db.Collection("merchcointosend").UpdateMany(
+			context.Background(),
+			bson.M{"phoneNumber": record.PhoneNumber, "processedDate": today},
+			bson.M{"$set": bson.M{"reported": true}},
+		)
+		if err != nil {
+			fmt.Printf("Error marking records as reported: %v\n", err)
+		}
+	}
+
+	return message
+}
+
+// GetMerchCoinPointsDailyReport generates and sends a daily report of MerchCoin points
+func GetMerchCoinPointsDailyReport(db *mongo.Database) string {
+	// Generate the report focusing on the specific groups
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+	groupIDStr := strings.Join(allowedGroupIDs, " and ")
+
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+
+	// Query all points calculated for yesterday
+	filter := bson.M{
+		"processedDate": yesterday,
+	}
+
+	pointRecords, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", filter)
+	if err != nil || len(pointRecords) == 0 {
+		return fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n\nNo point calculations for yesterday.", groupIDStr)
+	}
+
+	// Group points by user
+	userPoints := make(map[string]struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		TotalPoints float64
+		TotalAmount float64
+		Wallet      string
+		TxCount     int
+	})
+
+	for _, record := range pointRecords {
+		user, exists := userPoints[record.PhoneNumber]
+		if !exists {
+			user = struct {
+				Name        string
+				PhoneNumber string
+				NPM         string
+				TotalPoints float64
+				TotalAmount float64
+				Wallet      string
+				TxCount     int
+			}{
+				Name:        record.Name,
+				PhoneNumber: record.PhoneNumber,
+				NPM:         record.NPM,
+				TotalPoints: 0,
+				TotalAmount: 0,
+				Wallet:      record.WonpayWallet,
+				TxCount:     0,
+			}
+		}
+
+		user.TotalPoints += record.Points
+		user.TotalAmount += record.Amount
+		user.TxCount++
+		userPoints[record.PhoneNumber] = user
+	}
+
+	// Create sorted list of users by points
+	type UserRank struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		Points      float64
+		Amount      float64
+		Wallet      string
+		TxCount     int
+	}
+
+	var rankings []UserRank
+	for _, info := range userPoints {
+		rankings = append(rankings, UserRank{
+			Name:        info.Name,
+			PhoneNumber: info.PhoneNumber,
+			NPM:         info.NPM,
+			Points:      info.TotalPoints,
+			Amount:      info.TotalAmount,
+			Wallet:      info.Wallet,
+			TxCount:     info.TxCount,
+		})
+	}
+
+	// Sort by points (descending)
+	sort.Slice(rankings, func(i, j int) bool {
+		return rankings[i].Points > rankings[j].Points
+	})
+
+	// Build the message
+	message := fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n", groupIDStr)
+	message += fmt.Sprintf("Date: %s\n\n", time.Now().AddDate(0, 0, -1).Format("Monday, January 2, 2006"))
+
+	// Calculate overall statistics
+	var totalPoints, totalAmount float64
+	var totalTxCount int
+
+	for _, rank := range rankings {
+		totalPoints += rank.Points
+		totalAmount += rank.Amount
+		totalTxCount += rank.TxCount
+	}
+
+	message += fmt.Sprintf("Total Transactions: %d\n", totalTxCount)
+	message += fmt.Sprintf("Total Amount: %.8f MBC\n", totalAmount)
+	message += fmt.Sprintf("Total Points Awarded: %.2f\n\n", totalPoints)
+
+	message += "*Point Rankings:*\n"
+
+	for i, rank := range rankings {
+		// Format wallet address to be shorter
+		var displayWallet string = "Not Set"
+		if rank.Wallet != "" {
+			if len(rank.Wallet) > 12 {
+				displayWallet = rank.Wallet[:6] + "..." + rank.Wallet[len(rank.Wallet)-6:]
+			} else {
+				displayWallet = rank.Wallet
+			}
+		}
+
+		npmDisplay := rank.NPM
+		if npmDisplay == "" {
+			npmDisplay = "N/A"
+		}
+
+		message += fmt.Sprintf("%d. %s (%s)\n   NPM: %s\n   Points: %.2f\n   Amount: %.8f MBC\n   Wallet: %s\n   Transactions: %d\n\n",
+			i+1,
+			rank.Name,
+			rank.PhoneNumber,
+			npmDisplay,
+			rank.Points,
+			rank.Amount,
+			displayWallet,
+			rank.TxCount)
+	}
+
+	message += "*Points are calculated as: (transaction amount / daily average) × 100*\n"
+	message += "*Higher points are awarded for transactions above the daily average.*"
+
+	return message
 }

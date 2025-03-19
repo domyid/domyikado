@@ -8,13 +8,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/atapi"
+	"github.com/gocroot/helper/atdb"
+	"github.com/gocroot/helper/report"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -682,7 +690,7 @@ func CheckStep2Handler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CheckStep3Handler finalizes the payment after the step 2 delay
+// UpdatedCheckStep3Handler incorporates point calculations
 func CheckStep3Handler(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 	txid := r.URL.Query().Get("txid")
@@ -762,6 +770,21 @@ func CheckStep3Handler(w http.ResponseWriter, r *http.Request) {
 	// Update payment totals with the actual amount from Step 3
 	updateMerchCoinPaymentTotal(actualAmount)
 
+	// Process the transaction to calculate points
+	err = ProcessMerchCoinTransaction(config.Mongoconn, order)
+	if err != nil {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Point Calculation Failed",
+			"Failed to calculate points for transaction.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		// Continue anyway, we don't want to fail the transaction just because point calculation failed
+	}
+
 	// Reset queue
 	_, err = config.Mongoconn.Collection("merchcoinqueue").UpdateOne(
 		context.Background(),
@@ -801,7 +824,7 @@ func CheckStep3Handler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ManuallyConfirmMerchCoinPayment manually confirms a MerchCoin payment
+// Updated ManuallyConfirmMerchCoinPayment to include point processing
 func ManuallyConfirmMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 
@@ -877,6 +900,23 @@ func ManuallyConfirmMerchCoinPayment(w http.ResponseWriter, r *http.Request) {
 			Message: "Error updating order status",
 		})
 		return
+	}
+
+	// Process the transaction to calculate points
+	order.TxID = request.TxID
+	order.Amount = request.Amount
+	err = ProcessMerchCoinTransaction(config.Mongoconn, order)
+	if err != nil {
+		sendMerchCoinDiscordEmbed(
+			"🔴 Error: Point Calculation Failed",
+			"Failed to calculate points for transaction.",
+			15548997, // ColorRed
+			[]MerchCoinDiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		// Continue anyway, we don't want to fail the transaction just because point calculation failed
 	}
 
 	// Update payment totals
@@ -1094,214 +1134,1166 @@ func ConfirmMerchCoinNotification(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// // GetMerchCoinDailyReport sends daily MerchCoin transaction reports to all groups
-// func GetMerchCoinDailyReport(respw http.ResponseWriter, req *http.Request) {
-// 	var resp model.Response
+// GetMerchCoinDailyReport sends daily MerchCoin transaction reports to all groups
+func GetMerchCoinDailyReport(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
 
-// 	// Get all active project groups first
-// 	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
-// 	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
-// 	if err != nil {
-// 		resp.Info = "Failed to query projects"
-// 		resp.Response = err.Error()
-// 		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-// 		return
-// 	}
+	// Get all active project groups first
+	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
+	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
+	if err != nil {
+		resp.Info = "Failed to query projects"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
 
-// 	// Get overall summary of MerchCoin transactions
-// 	overallSummary := report.GetMerchCoinOverallSummary(config.Mongoconn)
-// 	if overallSummary == "" {
-// 		resp.Info = "No transactions to report"
-// 		resp.Response = "No MerchCoin transactions found for the time period"
-// 		at.WriteJSON(respw, http.StatusNotFound, resp)
-// 		return
-// 	}
+	// Get overall summary of MerchCoin transactions
+	overallSummary := report.GetMerchCoinOverallSummary(config.Mongoconn)
+	if overallSummary == "" {
+		resp.Info = "No transactions to report"
+		resp.Response = "No MerchCoin transactions found for the time period"
+		at.WriteJSON(respw, http.StatusNotFound, resp)
+		return
+	}
 
-// 	// Send to all active groups
-// 	var successCount int = 0
-// 	for _, project := range projects {
-// 		if project.WAGroupID != "" {
-// 			dt := &whatsauth.TextMessage{
-// 				To:       project.WAGroupID,
-// 				IsGroup:  true,
-// 				Messages: overallSummary,
-// 			}
+	// Send to all active groups
+	var successCount int = 0
+	for _, project := range projects {
+		if project.WAGroupID != "" {
+			dt := &whatsauth.TextMessage{
+				To:       project.WAGroupID,
+				IsGroup:  true,
+				Messages: overallSummary,
+			}
 
-// 			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 			if err != nil {
-// 				// Log error but continue with other groups
-// 				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
-// 				continue
-// 			}
+			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+			if err != nil {
+				// Log error but continue with other groups
+				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
+				continue
+			}
 
-// 			successCount++
-// 		}
-// 	}
+			successCount++
+		}
+	}
 
-// 	// Also send to a specific default group (like in GetReportHariIni)
-// 	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
-// 	dt := &whatsauth.TextMessage{
-// 		To:       defaultGroupID,
-// 		IsGroup:  true,
-// 		Messages: overallSummary,
-// 	}
+	// Also send to a specific default group (like in GetReportHariIni)
+	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
+	dt := &whatsauth.TextMessage{
+		To:       defaultGroupID,
+		IsGroup:  true,
+		Messages: overallSummary,
+	}
 
-// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 	if err != nil {
-// 		resp.Info = "Failed to send to default group"
-// 		resp.Response = err.Error()
-// 	} else {
-// 		successCount++
-// 	}
+	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Info = "Failed to send to default group"
+		resp.Response = err.Error()
+	} else {
+		successCount++
+	}
 
-// 	// Also send to all distinct WAGroupIDs from yesterday's transactions
-// 	filter := bson.M{"_id": report.YesterdayFilter()}
-// 	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
-// 	if err == nil {
-// 		for _, wagroupid := range wagroupidlist {
-// 			// Type assertion to convert any to string
-// 			groupID, ok := wagroupid.(string)
-// 			if !ok || groupID == "" {
-// 				continue
-// 			}
+	// Also send to all distinct WAGroupIDs from yesterday's transactions
+	filter := bson.M{"_id": report.YesterdayFilter()}
+	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
+	if err == nil {
+		for _, wagroupid := range wagroupidlist {
+			// Type assertion to convert any to string
+			groupID, ok := wagroupid.(string)
+			if !ok || groupID == "" {
+				continue
+			}
 
-// 			// Check if we've already sent to this group
-// 			alreadySent := false
-// 			for _, project := range projects {
-// 				if project.WAGroupID == groupID {
-// 					alreadySent = true
-// 					break
-// 				}
-// 			}
+			// Check if we've already sent to this group
+			alreadySent := false
+			for _, project := range projects {
+				if project.WAGroupID == groupID {
+					alreadySent = true
+					break
+				}
+			}
 
-// 			if !alreadySent && groupID != defaultGroupID {
-// 				dt := &whatsauth.TextMessage{
-// 					To:       groupID,
-// 					IsGroup:  true,
-// 					Messages: overallSummary,
-// 				}
+			if !alreadySent && groupID != defaultGroupID {
+				dt := &whatsauth.TextMessage{
+					To:       groupID,
+					IsGroup:  true,
+					Messages: overallSummary,
+				}
 
-// 				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 				if err != nil {
-// 					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
-// 					continue
-// 				}
+				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+				if err != nil {
+					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
+					continue
+				}
 
-// 				successCount++
-// 			}
-// 		}
-// 	}
+				successCount++
+			}
+		}
+	}
 
-// 	resp.Status = "Success"
-// 	resp.Response = fmt.Sprintf("MerchCoin daily reports sent to %d groups", successCount)
-// 	at.WriteJSON(respw, http.StatusOK, resp)
-// }
+	resp.Status = "Success"
+	resp.Response = fmt.Sprintf("MerchCoin daily reports sent to %d groups", successCount)
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
 
-// // GetMerchCoinWeeklyReport sends weekly MerchCoin transaction reports to all groups
-// func GetMerchCoinWeeklyReport(respw http.ResponseWriter, req *http.Request) {
-// 	var resp model.Response
+// GetMerchCoinWeeklyReport sends weekly MerchCoin transaction reports to all groups
+func GetMerchCoinWeeklyReport(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
 
-// 	// Get weekly summary
-// 	weeklySummary := report.GetMerchCoinWeeklySummary(config.Mongoconn)
-// 	if weeklySummary == "" {
-// 		resp.Status = "Error"
-// 		resp.Response = "No transactions found for weekly report"
-// 		at.WriteJSON(respw, http.StatusNotFound, resp)
-// 		return
-// 	}
+	// Get weekly summary
+	weeklySummary := report.GetMerchCoinWeeklySummary(config.Mongoconn)
+	if weeklySummary == "" {
+		resp.Status = "Error"
+		resp.Response = "No transactions found for weekly report"
+		at.WriteJSON(respw, http.StatusNotFound, resp)
+		return
+	}
 
-// 	// Get all active project groups
-// 	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
-// 	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
-// 	if err != nil {
-// 		resp.Status = "Error"
-// 		resp.Info = "Failed to retrieve projects"
-// 		resp.Response = err.Error()
-// 		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-// 		return
-// 	}
+	// Get all active project groups
+	projectFilter := bson.M{"closed": bson.M{"$ne": true}}
+	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", projectFilter)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to retrieve projects"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
 
-// 	// Send to all active groups
-// 	var successCount int = 0
-// 	for _, project := range projects {
-// 		if project.WAGroupID != "" {
-// 			dt := &whatsauth.TextMessage{
-// 				To:       project.WAGroupID,
-// 				IsGroup:  true,
-// 				Messages: weeklySummary,
-// 			}
+	// Send to all active groups
+	var successCount int = 0
+	for _, project := range projects {
+		if project.WAGroupID != "" {
+			dt := &whatsauth.TextMessage{
+				To:       project.WAGroupID,
+				IsGroup:  true,
+				Messages: weeklySummary,
+			}
 
-// 			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 			if err != nil {
-// 				// Log error but continue with other groups
-// 				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
-// 				continue
-// 			}
+			_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+			if err != nil {
+				// Log error but continue with other groups
+				fmt.Printf("Error sending to group %s: %v\n", project.WAGroupID, err)
+				continue
+			}
 
-// 			successCount++
-// 		}
-// 	}
+			successCount++
+		}
+	}
 
-// 	// Also send to a specific default group (like in GetReportHariIni)
-// 	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
-// 	dt := &whatsauth.TextMessage{
-// 		To:       defaultGroupID,
-// 		IsGroup:  true,
-// 		Messages: weeklySummary,
-// 	}
+	// Also send to a specific default group (like in GetReportHariIni)
+	defaultGroupID := "6281313112053-1492882006" // Same as in GetReportHariIni
+	dt := &whatsauth.TextMessage{
+		To:       defaultGroupID,
+		IsGroup:  true,
+		Messages: weeklySummary,
+	}
 
-// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 	if err != nil {
-// 		resp.Info = "Failed to send to default group"
-// 		resp.Response = err.Error()
-// 	} else {
-// 		successCount++
-// 	}
+	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Info = "Failed to send to default group"
+		resp.Response = err.Error()
+	} else {
+		successCount++
+	}
 
-// 	// Also send to all distinct WAGroupIDs from recent transactions
-// 	filter := bson.M{
-// 		"_id": bson.M{
-// 			"$gte": primitive.NewObjectIDFromTimestamp(report.GetDateSekarang().AddDate(0, 0, -7)),
-// 			"$lt":  primitive.NewObjectIDFromTimestamp(report.GetDateSekarang()),
-// 		},
-// 	}
-// 	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
-// 	if err == nil {
-// 		for _, wagroupid := range wagroupidlist {
-// 			// Type assertion to convert any to string
-// 			groupID, ok := wagroupid.(string)
-// 			if !ok || groupID == "" {
-// 				continue
-// 			}
+	// Also send to all distinct WAGroupIDs from recent transactions
+	filter := bson.M{
+		"_id": bson.M{
+			"$gte": primitive.NewObjectIDFromTimestamp(report.GetDateSekarang().AddDate(0, 0, -7)),
+			"$lt":  primitive.NewObjectIDFromTimestamp(report.GetDateSekarang()),
+		},
+	}
+	wagroupidlist, err := atdb.GetAllDistinctDoc(config.Mongoconn, filter, "project.wagroupid", "merchcoinorders")
+	if err == nil {
+		for _, wagroupid := range wagroupidlist {
+			// Type assertion to convert any to string
+			groupID, ok := wagroupid.(string)
+			if !ok || groupID == "" {
+				continue
+			}
 
-// 			// Check if we've already sent to this group
-// 			alreadySent := false
-// 			for _, project := range projects {
-// 				if project.WAGroupID == groupID {
-// 					alreadySent = true
-// 					break
-// 				}
-// 			}
+			// Check if we've already sent to this group
+			alreadySent := false
+			for _, project := range projects {
+				if project.WAGroupID == groupID {
+					alreadySent = true
+					break
+				}
+			}
 
-// 			if !alreadySent && groupID != defaultGroupID {
-// 				dt := &whatsauth.TextMessage{
-// 					To:       groupID,
-// 					IsGroup:  true,
-// 					Messages: weeklySummary,
-// 				}
+			if !alreadySent && groupID != defaultGroupID {
+				dt := &whatsauth.TextMessage{
+					To:       groupID,
+					IsGroup:  true,
+					Messages: weeklySummary,
+				}
 
-// 				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 				if err != nil {
-// 					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
-// 					continue
-// 				}
+				_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+				if err != nil {
+					fmt.Printf("Error sending to group %s: %v\n", groupID, err)
+					continue
+				}
 
-// 				successCount++
-// 			}
-// 		}
-// 	}
+				successCount++
+			}
+		}
+	}
 
-// 	resp.Status = "Success"
-// 	resp.Response = fmt.Sprintf("MerchCoin weekly reports sent to %d groups", successCount)
-// 	at.WriteJSON(respw, http.StatusOK, resp)
-// }
+	resp.Status = "Success"
+	resp.Response = fmt.Sprintf("MerchCoin weekly reports sent to %d groups", successCount)
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+// ProcessMerchCoinTransaction calculates points and stores in merchcointosend collection
+func ProcessMerchCoinTransaction(db *mongo.Database, order model.MerchCoinOrder) error {
+	// Find user by WonpayCode (which contains phone number)
+	userFilter := bson.M{"phonenumber": order.WonpayCode}
+	user, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", userFilter)
+	if err != nil {
+		return fmt.Errorf("error finding user: %v", err)
+	}
+
+	// Calculate average transaction amount for today
+	avgAmount, err := calculateAverageMerchCoinAmount(db)
+	if err != nil {
+		return fmt.Errorf("error calculating average amount: %v", err)
+	}
+
+	// Calculate points - 1 point is (amount / average) * 100
+	var points float64 = 0
+	if avgAmount > 0 {
+		points = (order.Amount / avgAmount) * 100
+	}
+
+	// Create the MerchCoinToSend record
+	merchCoinToSend := model.MerchCoinToSend{
+		ID:            primitive.NewObjectID(),
+		PhoneNumber:   user.PhoneNumber,
+		Name:          user.Name,
+		NPM:           user.NPM,
+		WonpayWallet:  user.Wonpaywallet,
+		OrderID:       order.OrderID,
+		TxID:          order.TxID,
+		Amount:        order.Amount,
+		Points:        points,
+		AverageAmount: avgAmount,
+		Timestamp:     time.Now(),
+		ProcessedDate: time.Now().Format("2006-01-02"),
+		Reported:      false,
+	}
+
+	// Insert into merchcointosend collection
+	_, err = atdb.InsertOneDoc(db, "merchcointosend", merchCoinToSend)
+	if err != nil {
+		return fmt.Errorf("error inserting MerchCoinToSend: %v", err)
+	}
+
+	// Log the point calculation
+	sendMerchCoinDiscordEmbed(
+		"💰 MerchCoin Points Calculated",
+		fmt.Sprintf("Points calculated for transaction %s", order.OrderID),
+		3447003, // ColorBlue
+		[]MerchCoinDiscordEmbedField{
+			{Name: "User", Value: user.Name + " (" + user.PhoneNumber + ")", Inline: true},
+			{Name: "NPM", Value: user.NPM, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("%.8f MBC", order.Amount), Inline: true},
+			{Name: "Points", Value: fmt.Sprintf("%.2f", points), Inline: true},
+			{Name: "Average Amount", Value: fmt.Sprintf("%.8f MBC", avgAmount), Inline: true},
+		},
+	)
+
+	return nil
+}
+
+// calculateAverageMerchCoinAmount calculates the average transaction amount for today
+func calculateAverageMerchCoinAmount(db *mongo.Database) (float64, error) {
+	// Get today's date
+	today := time.Now().Format("2006-01-02")
+	startOfDay, _ := time.Parse("2006-01-02", today)
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
+	// Create filter for today's successful transactions
+	filter := bson.M{
+		"timestamp": bson.M{
+			"$gte": startOfDay,
+			"$lt":  endOfDay,
+		},
+		"status": "success",
+		"amount": bson.M{"$gt": 0},
+	}
+
+	// Find all successful transactions for today
+	transactions, err := atdb.GetAllDoc[[]model.MerchCoinOrder](db, "merchcoinorders", filter)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(transactions) == 0 {
+		// If no transactions today, use the last 7 days average
+		lastWeek := startOfDay.Add(-7 * 24 * time.Hour)
+		weekFilter := bson.M{
+			"timestamp": bson.M{
+				"$gte": lastWeek,
+				"$lt":  endOfDay,
+			},
+			"status": "success",
+			"amount": bson.M{"$gt": 0},
+		}
+
+		transactions, err = atdb.GetAllDoc[[]model.MerchCoinOrder](db, "merchcoinorders", weekFilter)
+		if err != nil {
+			return 0, err
+		}
+
+		if len(transactions) == 0 {
+			// If still no transactions, use a default value
+			return 0.01, nil // Default average amount
+		}
+	}
+
+	// Calculate average
+	var totalAmount float64
+	for _, tx := range transactions {
+		totalAmount += tx.Amount
+	}
+
+	return totalAmount / float64(len(transactions)), nil
+}
+
+// CreatePointSummary stores a daily summary of point calculations
+func CreatePointSummary(db *mongo.Database) error {
+	// Get today's date
+	today := time.Now().Format("2006-01-02")
+
+	// Find all transactions from yesterday
+	filter := bson.M{
+		"_id":    report.YesterdayFilter(),
+		"status": "success",
+	}
+
+	transactions, err := atdb.GetAllDoc[[]model.MerchCoinOrder](db, "merchcoinorders", filter)
+	if err != nil {
+		return err
+	}
+
+	if len(transactions) == 0 {
+		return nil // No transactions, nothing to summarize
+	}
+
+	var totalAmount float64
+	for _, tx := range transactions {
+		totalAmount += tx.Amount
+	}
+
+	avgAmount := totalAmount / float64(len(transactions))
+
+	// Create summary
+	summary := model.MerchCoinPointSummary{
+		TotalTransactions: len(transactions),
+		TotalAmount:       totalAmount,
+		AverageAmount:     avgAmount,
+		Date:              today,
+		CalculatedAt:      time.Now(),
+	}
+
+	// Store in database
+	_, err = atdb.InsertOneDoc(db, "merchcoinpointsummary", summary)
+	return err
+}
+
+// Add these functions directly to conmicoin.go
+
+// GetMerchCoinPointsReport generates a report of MerchCoin points for specific groups
+func GetMerchCoinPointsReport(db *mongo.Database) string {
+	// Only send to specific group IDs
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+	groupIDStr := strings.Join(allowedGroupIDs, " and ")
+
+	// Get today's date for filtering
+	today := time.Now().Format("2006-01-02")
+
+	// Query processed points from merchcointosend collection
+	filter := bson.M{
+		"processedDate": today,
+		"reported":      false,
+	}
+
+	pointRecords, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", filter)
+	if err != nil || len(pointRecords) == 0 {
+		return fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n\nNo point calculations to report for today.", groupIDStr)
+	}
+
+	// Group points by user
+	userPoints := make(map[string]struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		TotalPoints float64
+		Wallet      string
+		TxCount     int
+	})
+
+	for _, record := range pointRecords {
+		user, exists := userPoints[record.PhoneNumber]
+		if !exists {
+			user = struct {
+				Name        string
+				PhoneNumber string
+				NPM         string
+				TotalPoints float64
+				Wallet      string
+				TxCount     int
+			}{
+				Name:        record.Name,
+				PhoneNumber: record.PhoneNumber,
+				NPM:         record.NPM,
+				TotalPoints: 0,
+				Wallet:      record.WonpayWallet,
+				TxCount:     0,
+			}
+		}
+
+		user.TotalPoints += record.Points
+		user.TxCount++
+		userPoints[record.PhoneNumber] = user
+	}
+
+	// Create sorted list of users by points
+	type UserRank struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		Points      float64
+		Wallet      string
+		TxCount     int
+	}
+
+	var rankings []UserRank
+	for _, info := range userPoints {
+		rankings = append(rankings, UserRank{
+			Name:        info.Name,
+			PhoneNumber: info.PhoneNumber,
+			NPM:         info.NPM,
+			Points:      info.TotalPoints,
+			Wallet:      info.Wallet,
+			TxCount:     info.TxCount,
+		})
+	}
+
+	// Sort by points (descending)
+	sort.Slice(rankings, func(i, j int) bool {
+		return rankings[i].Points > rankings[j].Points
+	})
+
+	// Build the message
+	message := fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n", groupIDStr)
+	message += fmt.Sprintf("Date: %s\n\n", time.Now().Format("Monday, January 2, 2006"))
+	message += "*Point Rankings:*\n"
+
+	for i, rank := range rankings {
+		var displayWallet string = "Not Set"
+		if rank.Wallet != "" {
+			if len(rank.Wallet) > 12 {
+				displayWallet = rank.Wallet[:6] + "..." + rank.Wallet[len(rank.Wallet)-6:]
+			} else {
+				displayWallet = rank.Wallet
+			}
+		}
+
+		npmDisplay := rank.NPM
+		if npmDisplay == "" {
+			npmDisplay = "N/A"
+		}
+
+		message += fmt.Sprintf("%d. %s (%s)\n   NPM: %s\n   Points: %.2f\n   Wallet: %s\n   Transactions: %d\n\n",
+			i+1,
+			rank.Name,
+			rank.PhoneNumber,
+			npmDisplay,
+			rank.Points,
+			displayWallet,
+			rank.TxCount)
+	}
+
+	message += "*Points are calculated as: (transaction amount / daily average) × 100*\n"
+	message += "*Higher points are awarded for transactions above the daily average.*"
+
+	// Update records to mark as reported
+	for _, record := range pointRecords {
+		_, err := db.Collection("merchcointosend").UpdateMany(
+			context.Background(),
+			bson.M{"phoneNumber": record.PhoneNumber, "processedDate": today},
+			bson.M{"$set": bson.M{"reported": true}},
+		)
+		if err != nil {
+			fmt.Printf("Error marking records as reported: %v\n", err)
+		}
+	}
+
+	return message
+}
+
+// SendMerchCoinPointsReportToGroups sends the points report to specified groups
+func SendMerchCoinPointsReportToGroups(db *mongo.Database) error {
+	// Generate the report
+	report := GetMerchCoinPointsReport(db)
+	if report == "" {
+		return errors.New("no report generated")
+	}
+
+	// Only send to specific group IDs
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+
+	// Send to each allowed group
+	for _, groupID := range allowedGroupIDs {
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: report,
+		}
+
+		_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			return fmt.Errorf("failed to send report to group %s: %v", groupID, err)
+		}
+	}
+
+	return nil
+}
+
+// RecalculateMerchCoinPoints recalculates all points for a given date range
+func RecalculateMerchCoinPoints(db *mongo.Database, startDate, endDate time.Time) error {
+	// Clear existing records for the date range
+	startDateStr := startDate.Format("2006-01-02")
+	endDateStr := endDate.Format("2006-01-02")
+
+	deleteFilter := bson.M{
+		"processedDate": bson.M{
+			"$gte": startDateStr,
+			"$lte": endDateStr,
+		},
+	}
+
+	_, err := db.Collection("merchcointosend").DeleteMany(context.Background(), deleteFilter)
+	if err != nil {
+		return fmt.Errorf("error clearing existing records: %v", err)
+	}
+
+	// Get all successful transactions in the date range
+	txFilter := bson.M{
+		"timestamp": bson.M{
+			"$gte": startDate,
+			"$lt":  endDate.Add(24 * time.Hour),
+		},
+		"status": "success",
+	}
+
+	transactions, err := atdb.GetAllDoc[[]model.MerchCoinOrder](db, "merchcoinorders", txFilter)
+	if err != nil {
+		return fmt.Errorf("error retrieving transactions: %v", err)
+	}
+
+	// Calculate daily averages
+	dailyAverages := make(map[string]float64)
+
+	for _, tx := range transactions {
+		dateStr := tx.Timestamp.Format("2006-01-02")
+
+		// If we haven't calculated average for this day yet
+		if _, exists := dailyAverages[dateStr]; !exists {
+			// Filter for this specific day
+			dayStart, _ := time.Parse("2006-01-02", dateStr)
+			dayEnd := dayStart.Add(24 * time.Hour)
+
+			dayFilter := bson.M{
+				"timestamp": bson.M{
+					"$gte": dayStart,
+					"$lt":  dayEnd,
+				},
+				"status": "success",
+			}
+
+			dayTxs, err := atdb.GetAllDoc[[]model.MerchCoinOrder](db, "merchcoinorders", dayFilter)
+			if err != nil {
+				return fmt.Errorf("error getting transactions for %s: %v", dateStr, err)
+			}
+
+			if len(dayTxs) == 0 {
+				dailyAverages[dateStr] = 0.01 // Default value
+				continue
+			}
+
+			// Calculate average
+			var total float64
+			for _, dayTx := range dayTxs {
+				total += dayTx.Amount
+			}
+
+			dailyAverages[dateStr] = total / float64(len(dayTxs))
+		}
+	}
+
+	// Process each transaction
+	for _, tx := range transactions {
+		dateStr := tx.Timestamp.Format("2006-01-02")
+		avgAmount := dailyAverages[dateStr]
+
+		// Find user
+		userFilter := bson.M{"phonenumber": tx.WonpayCode}
+		user, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", userFilter)
+		if err != nil {
+			// Skip if user not found
+			continue
+		}
+
+		// Calculate points
+		var points float64
+		if avgAmount > 0 {
+			points = (tx.Amount / avgAmount) * 100
+		}
+
+		// Create record
+		record := model.MerchCoinToSend{
+			ID:            primitive.NewObjectID(),
+			PhoneNumber:   user.PhoneNumber,
+			Name:          user.Name,
+			NPM:           user.NPM,
+			WonpayWallet:  user.Wonpaywallet,
+			OrderID:       tx.OrderID,
+			TxID:          tx.TxID,
+			Amount:        tx.Amount,
+			Points:        points,
+			AverageAmount: avgAmount,
+			Timestamp:     tx.Timestamp,
+			ProcessedDate: dateStr,
+			Reported:      true, // Mark as already reported since this is historical data
+		}
+
+		// Insert record
+		_, err = atdb.InsertOneDoc(db, "merchcointosend", record)
+		if err != nil {
+			return fmt.Errorf("error inserting record for tx %s: %v", tx.OrderID, err)
+		}
+	}
+
+	return nil
+}
+
+// GetMerchCoinPointsDailyReport generates a daily report of MerchCoin points
+func GetMerchCoinPointsDailyReport(db *mongo.Database) string {
+	// Generate the report focusing on the specific groups
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+	groupIDStr := strings.Join(allowedGroupIDs, " and ")
+
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+
+	// Query all points calculated for yesterday
+	filter := bson.M{
+		"processedDate": yesterday,
+	}
+
+	pointRecords, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", filter)
+	if err != nil || len(pointRecords) == 0 {
+		return fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n\nNo point calculations for yesterday.", groupIDStr)
+	}
+
+	// Group points by user
+	userPoints := make(map[string]struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		TotalPoints float64
+		TotalAmount float64
+		Wallet      string
+		TxCount     int
+	})
+
+	for _, record := range pointRecords {
+		user, exists := userPoints[record.PhoneNumber]
+		if !exists {
+			user = struct {
+				Name        string
+				PhoneNumber string
+				NPM         string
+				TotalPoints float64
+				TotalAmount float64
+				Wallet      string
+				TxCount     int
+			}{
+				Name:        record.Name,
+				PhoneNumber: record.PhoneNumber,
+				NPM:         record.NPM,
+				TotalPoints: 0,
+				TotalAmount: 0,
+				Wallet:      record.WonpayWallet,
+				TxCount:     0,
+			}
+		}
+
+		user.TotalPoints += record.Points
+		user.TotalAmount += record.Amount
+		user.TxCount++
+		userPoints[record.PhoneNumber] = user
+	}
+
+	// Create sorted list of users by points
+	type UserRank struct {
+		Name        string
+		PhoneNumber string
+		NPM         string
+		Points      float64
+		Amount      float64
+		Wallet      string
+		TxCount     int
+	}
+
+	var rankings []UserRank
+	for _, info := range userPoints {
+		rankings = append(rankings, UserRank{
+			Name:        info.Name,
+			PhoneNumber: info.PhoneNumber,
+			NPM:         info.NPM,
+			Points:      info.TotalPoints,
+			Amount:      info.TotalAmount,
+			Wallet:      info.Wallet,
+			TxCount:     info.TxCount,
+		})
+	}
+
+	// Sort by points (descending)
+	sort.Slice(rankings, func(i, j int) bool {
+		return rankings[i].Points > rankings[j].Points
+	})
+
+	// Build the message
+	message := fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n", groupIDStr)
+	message += fmt.Sprintf("Date: %s\n\n", time.Now().AddDate(0, 0, -1).Format("Monday, January 2, 2006"))
+
+	// Calculate overall statistics
+	var totalPoints, totalAmount float64
+	var totalTxCount int
+
+	for _, rank := range rankings {
+		totalPoints += rank.Points
+		totalAmount += rank.Amount
+		totalTxCount += rank.TxCount
+	}
+
+	message += fmt.Sprintf("Total Transactions: %d\n", totalTxCount)
+	message += fmt.Sprintf("Total Amount: %.8f MBC\n", totalAmount)
+	message += fmt.Sprintf("Total Points Awarded: %.2f\n\n", totalPoints)
+
+	message += "*Point Rankings:*\n"
+
+	for i, rank := range rankings {
+		// Format wallet address to be shorter
+		var displayWallet string = "Not Set"
+		if rank.Wallet != "" {
+			if len(rank.Wallet) > 12 {
+				displayWallet = rank.Wallet[:6] + "..." + rank.Wallet[len(rank.Wallet)-6:]
+			} else {
+				displayWallet = rank.Wallet
+			}
+		}
+
+		npmDisplay := rank.NPM
+		if npmDisplay == "" {
+			npmDisplay = "N/A"
+		}
+
+		message += fmt.Sprintf("%d. %s (%s)\n   NPM: %s\n   Points: %.2f\n   Amount: %.8f MBC\n   Wallet: %s\n   Transactions: %d\n\n",
+			i+1,
+			rank.Name,
+			rank.PhoneNumber,
+			npmDisplay,
+			rank.Points,
+			rank.Amount,
+			displayWallet,
+			rank.TxCount)
+	}
+
+	message += "*Points are calculated as: (transaction amount / daily average) × 100*\n"
+	message += "*Higher points are awarded for transactions above the daily average.*"
+
+	return message
+}
+
+// SendMerchCoinPointsDailyReportToGroups sends the daily points report to specified groups
+func SendMerchCoinPointsDailyReportToGroups(db *mongo.Database) error {
+	// Generate the report
+	report := GetMerchCoinPointsDailyReport(db)
+	if report == "" {
+		return errors.New("no daily report generated")
+	}
+
+	// Only send to specific group IDs
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+
+	// Send to each allowed group
+	for _, groupID := range allowedGroupIDs {
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: report,
+		}
+
+		_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			return fmt.Errorf("failed to send daily report to group %s: %v", groupID, err)
+		}
+	}
+
+	return nil
+}
+
+// CalculateMerchCoinUserStats calculates cumulative statistics for users based on their MerchCoin transactions
+func CalculateMerchCoinUserStats(db *mongo.Database) error {
+	// Get all records from merchcointosend
+	records, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", bson.M{})
+	if err != nil {
+		return fmt.Errorf("error retrieving point records: %v", err)
+	}
+
+	// Group by user
+	userStats := make(map[string]struct {
+		Name             string
+		PhoneNumber      string
+		NPM              string
+		WalletAddress    string
+		TotalPoints      float64
+		TotalAmount      float64
+		TransactionCount int
+		LastTransaction  time.Time
+	})
+
+	for _, record := range records {
+		stats, exists := userStats[record.PhoneNumber]
+		if !exists {
+			stats = struct {
+				Name             string
+				PhoneNumber      string
+				NPM              string
+				WalletAddress    string
+				TotalPoints      float64
+				TotalAmount      float64
+				TransactionCount int
+				LastTransaction  time.Time
+			}{
+				Name:             record.Name,
+				PhoneNumber:      record.PhoneNumber,
+				NPM:              record.NPM,
+				WalletAddress:    record.WonpayWallet,
+				TotalPoints:      0,
+				TotalAmount:      0,
+				TransactionCount: 0,
+				LastTransaction:  time.Time{},
+			}
+		}
+
+		stats.TotalPoints += record.Points
+		stats.TotalAmount += record.Amount
+		stats.TransactionCount++
+
+		if record.Timestamp.After(stats.LastTransaction) {
+			stats.LastTransaction = record.Timestamp
+		}
+
+		userStats[record.PhoneNumber] = stats
+	}
+
+	// Store user stats in database
+	for phoneNumber, stats := range userStats {
+		// Create document
+		statDoc := bson.M{
+			"phoneNumber":      phoneNumber,
+			"name":             stats.Name,
+			"npm":              stats.NPM,
+			"walletAddress":    stats.WalletAddress,
+			"totalPoints":      stats.TotalPoints,
+			"totalAmount":      stats.TotalAmount,
+			"transactionCount": stats.TransactionCount,
+			"lastTransaction":  stats.LastTransaction,
+			"lastUpdated":      time.Now(),
+		}
+
+		// Upsert to database
+		updateOpts := options.Update().SetUpsert(true)
+		_, err := db.Collection("merchcoinuserstats").UpdateOne(
+			context.Background(),
+			bson.M{"phoneNumber": phoneNumber},
+			bson.M{"$set": statDoc},
+			updateOpts,
+		)
+
+		if err != nil {
+			fmt.Printf("Error updating stats for user %s: %v\n", phoneNumber, err)
+			// Continue with other users even if one fails
+		}
+	}
+
+	return nil
+}
+
+// GetMerchCoinLeaderboard generates a leaderboard of users with the most MerchCoin points
+func GetMerchCoinLeaderboard(db *mongo.Database, limit int) (string, error) {
+	if limit <= 0 {
+		limit = 10 // Default to top 10
+	}
+
+	// Update user stats first
+	err := CalculateMerchCoinUserStats(db)
+	if err != nil {
+		return "", fmt.Errorf("error calculating user stats: %v", err)
+	}
+
+	// Query for top users by total points
+	findOptions := options.Find().SetSort(bson.M{"totalPoints": -1}).SetLimit(int64(limit))
+
+	cursor, err := db.Collection("merchcoinuserstats").Find(context.Background(), bson.M{}, findOptions)
+	if err != nil {
+		return "", fmt.Errorf("error querying leaderboard: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	// Decode results
+	type UserStats struct {
+		Name             string    `bson:"name"`
+		PhoneNumber      string    `bson:"phoneNumber"`
+		NPM              string    `bson:"npm"`
+		WalletAddress    string    `bson:"walletAddress"`
+		TotalPoints      float64   `bson:"totalPoints"`
+		TotalAmount      float64   `bson:"totalAmount"`
+		TransactionCount int       `bson:"transactionCount"`
+		LastTransaction  time.Time `bson:"lastTransaction"`
+	}
+
+	var topUsers []UserStats
+	if err := cursor.All(context.Background(), &topUsers); err != nil {
+		return "", fmt.Errorf("error decoding leaderboard results: %v", err)
+	}
+
+	if len(topUsers) == 0 {
+		return "*MerchCoin Leaderboard*\n\nNo data available yet.", nil
+	}
+
+	// Build message
+	message := "*MerchCoin Points Leaderboard*\n"
+	message += fmt.Sprintf("Top %d Users by Total Points\n\n", limit)
+
+	for i, user := range topUsers {
+		npmDisplay := user.NPM
+		if npmDisplay == "" {
+			npmDisplay = "N/A"
+		}
+
+		var displayWallet string = "Not Set"
+		if user.WalletAddress != "" {
+			if len(user.WalletAddress) > 12 {
+				displayWallet = user.WalletAddress[:6] + "..." + user.WalletAddress[len(user.WalletAddress)-6:]
+			} else {
+				displayWallet = user.WalletAddress
+			}
+		}
+
+		lastTxDate := "Never"
+		if !user.LastTransaction.IsZero() {
+			lastTxDate = user.LastTransaction.Format("2006-01-02")
+		}
+
+		message += fmt.Sprintf("%d. %s (%s)\n   NPM: %s\n   Total Points: %.2f\n   Total Amount: %.8f MBC\n   Wallet: %s\n   Transactions: %d\n   Last Transaction: %s\n\n",
+			i+1,
+			user.Name,
+			user.PhoneNumber,
+			npmDisplay,
+			user.TotalPoints,
+			user.TotalAmount,
+			displayWallet,
+			user.TransactionCount,
+			lastTxDate)
+	}
+
+	return message, nil
+}
+
+// SendMerchCoinLeaderboardToGroups sends the MerchCoin leaderboard to specified groups
+func SendMerchCoinLeaderboardToGroups(db *mongo.Database) error {
+	// Generate leaderboard
+	leaderboard, err := GetMerchCoinLeaderboard(db, 10) // Top 10 users
+	if err != nil {
+		return fmt.Errorf("error generating leaderboard: %v", err)
+	}
+
+	// Only send to specific group IDs
+	allowedGroupIDs := []string{"120363298977628161", "120363022595651310"}
+
+	// Send to each allowed group
+	for _, groupID := range allowedGroupIDs {
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: leaderboard,
+		}
+
+		_, _, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			return fmt.Errorf("failed to send leaderboard to group %s: %v", groupID, err)
+		}
+	}
+
+	return nil
+}
+
+// MerchCoinPointsReportHandler handles sending MerchCoin points reports
+func MerchCoinPointsReportHandler(w http.ResponseWriter, r *http.Request) {
+	var resp model.Response
+
+	err := SendMerchCoinPointsReportToGroups(config.Mongoconn)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to send MerchCoin points report"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	resp.Status = "Success"
+	resp.Info = "MerchCoin Points Report"
+	resp.Response = "MerchCoin points report has been sent to the specified groups"
+	at.WriteJSON(w, http.StatusOK, resp)
+}
+
+// MerchCoinPointsDailyReportHandler handles sending daily MerchCoin points reports
+func MerchCoinPointsDailyReportHandler(w http.ResponseWriter, r *http.Request) {
+	var resp model.Response
+
+	err := SendMerchCoinPointsDailyReportToGroups(config.Mongoconn)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to send MerchCoin points daily report"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	resp.Status = "Success"
+	resp.Info = "MerchCoin Daily Points Report"
+	resp.Response = "MerchCoin daily points report has been sent to the specified groups"
+	at.WriteJSON(w, http.StatusOK, resp)
+}
+
+// RecalculateMerchCoinPointsHandler handles recalculating MerchCoin points for a date range
+func RecalculateMerchCoinPointsHandler(w http.ResponseWriter, r *http.Request) {
+	var resp model.Response
+
+	// Parse start and end dates from query parameters
+	startDateStr := r.URL.Query().Get("startDate")
+	endDateStr := r.URL.Query().Get("endDate")
+
+	if startDateStr == "" || endDateStr == "" {
+		resp.Status = "Error"
+		resp.Info = "Missing required parameters"
+		resp.Response = "startDate and endDate are required query parameters (format: YYYY-MM-DD)"
+		at.WriteJSON(w, http.StatusBadRequest, resp)
+		return
+	}
+
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Invalid startDate format"
+		resp.Response = "startDate must be in YYYY-MM-DD format"
+		at.WriteJSON(w, http.StatusBadRequest, resp)
+		return
+	}
+
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Invalid endDate format"
+		resp.Response = "endDate must be in YYYY-MM-DD format"
+		at.WriteJSON(w, http.StatusBadRequest, resp)
+		return
+	}
+
+	// Ensure start date is before end date
+	if startDate.After(endDate) {
+		resp.Status = "Error"
+		resp.Info = "Invalid date range"
+		resp.Response = "startDate must be before endDate"
+		at.WriteJSON(w, http.StatusBadRequest, resp)
+		return
+	}
+
+	// Perform recalculation
+	err = RecalculateMerchCoinPoints(config.Mongoconn, startDate, endDate)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to recalculate MerchCoin points"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	resp.Status = "Success"
+	resp.Info = "MerchCoin Points Recalculation"
+	resp.Response = fmt.Sprintf("Successfully recalculated MerchCoin points for %s to %s", startDateStr, endDateStr)
+	at.WriteJSON(w, http.StatusOK, resp)
+}
+
+// MerchCoinLeaderboardHandler handles generating and sending the MerchCoin leaderboard
+func MerchCoinLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	var resp model.Response
+
+	// Get limit parameter (optional)
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10 // Default to top 10
+
+	if limitStr != "" {
+		var err error
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			resp.Status = "Error"
+			resp.Info = "Invalid limit parameter"
+			resp.Response = "limit must be a positive integer"
+			at.WriteJSON(w, http.StatusBadRequest, resp)
+			return
+		}
+	}
+
+	// Get the leaderboard content
+	leaderboard, err := GetMerchCoinLeaderboard(config.Mongoconn, limit)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to generate MerchCoin leaderboard"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Return the leaderboard content directly
+	resp.Status = "Success"
+	resp.Info = "MerchCoin Leaderboard"
+	resp.Response = leaderboard
+	at.WriteJSON(w, http.StatusOK, resp)
+}
+
+// SendMerchCoinLeaderboardHandler handles sending the MerchCoin leaderboard to groups
+func SendMerchCoinLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	var resp model.Response
+
+	err := SendMerchCoinLeaderboardToGroups(config.Mongoconn)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Info = "Failed to send MerchCoin leaderboard"
+		resp.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
+
+	resp.Status = "Success"
+	resp.Info = "MerchCoin Leaderboard"
+	resp.Response = "MerchCoin leaderboard has been sent to the specified groups"
+	at.WriteJSON(w, http.StatusOK, resp)
+}
