@@ -1522,7 +1522,8 @@ func GetMerchCoinPointsReport(db *mongo.Database) string {
 
 	pointRecords, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", filter)
 	if err != nil || len(pointRecords) == 0 {
-		return fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n\nNo point calculations to report for today.", groupIDStr)
+		return fmt.Sprintf("*MerchCoin Points Report*\n\nNo point calculations to report for today.", groupIDStr)
+		// return fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n\nNo point calculations to report for today.", groupIDStr)
 	}
 
 	// Group points by user
@@ -1588,7 +1589,8 @@ func GetMerchCoinPointsReport(db *mongo.Database) string {
 	})
 
 	// Build the message
-	message := fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n", groupIDStr)
+	// message := fmt.Sprintf("*MerchCoin Points Report (Groups %s)*\n", groupIDStr)
+	message := fmt.Sprintf("*MerchCoin Points Report*\n", groupIDStr)
 	message += fmt.Sprintf("Date: %s\n\n", time.Now().Format("Monday, January 2, 2006"))
 	message += "*Point Rankings:*\n"
 
@@ -1796,7 +1798,9 @@ func GetMerchCoinPointsDailyReport(db *mongo.Database) string {
 
 	pointRecords, err := atdb.GetAllDoc[[]model.MerchCoinToSend](db, "merchcointosend", filter)
 	if err != nil || len(pointRecords) == 0 {
-		return fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n\nNo point calculations for yesterday.", groupIDStr)
+		// return fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n\nNo point calculations for yesterday.", groupIDStr)
+		return fmt.Sprintf("*MerchCoin Points Daily Report*\n\nNo point calculations for yesterday.", groupIDStr)
+
 	}
 
 	// Group points by user
@@ -1868,7 +1872,8 @@ func GetMerchCoinPointsDailyReport(db *mongo.Database) string {
 	})
 
 	// Build the message
-	message := fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n", groupIDStr)
+	// message := fmt.Sprintf("*MerchCoin Points Daily Report (Groups %s)*\n", groupIDStr)
+	message := fmt.Sprintf("*MerchCoin Points Daily Report*\n", groupIDStr)
 	message += fmt.Sprintf("Date: %s\n\n", time.Now().AddDate(0, 0, -1).Format("Monday, January 2, 2006"))
 
 	// Calculate overall statistics
