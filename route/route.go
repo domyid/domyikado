@@ -139,24 +139,11 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/confirmByNotification":
 		controller.ConfirmByNotificationHandler(w, r)
 		// z
-		// MerchCoin Reports Routes
 	// MerchCoin Reports Routes
-	case method == "GET" && path == "/api/merchcoin/report/daily":
-		controller.GetMerchCoinDailyReport(w, r)
-	case method == "GET" && path == "/api/merchcoin/report/weekly":
-		controller.GetMerchCoinWeeklyReport(w, r)
-
-	// MerchCoin Points Routes
-	case method == "GET" && path == "/api/merchcoin/points/report":
-		controller.MerchCoinPointsReportHandler(w, r)
-	case method == "GET" && path == "/api/merchcoin/points/daily":
-		controller.MerchCoinPointsDailyReportHandler(w, r)
-	case method == "GET" && path == "/api/merchcoin/points/recalculate":
-		controller.RecalculateMerchCoinPointsHandler(w, r)
-	case method == "GET" && path == "/api/merchcoin/points/leaderboard":
-		controller.MerchCoinLeaderboardHandler(w, r)
-	case method == "GET" && path == "/api/merchcoin/points/sendleaderboard":
-		controller.SendMerchCoinLeaderboardHandler(w, r)
+	// case method == "GET" && path == "/api/merchcoin/report/daily":
+	// 	controller.GetMerchCoinDailyReport(w, r)
+	// case method == "GET" && path == "/api/merchcoin/report/weekly":
+	// 	controller.GetMerchCoinWeeklyReport(w, r)
 	// MerchCoin Payment Routes
 	case method == "POST" && path == "/api/merchcoin/createOrder":
 		controller.CreateMerchCoinOrder(w, r)

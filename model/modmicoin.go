@@ -161,29 +161,3 @@ type MerchCoinTransactionVout struct {
 	ScriptPubKey MerchCoinScriptPubKey `json:"scriptPubKey"`
 	Value        int64                 `json:"value"`
 }
-
-// MerchCoinToSend struct to store calculated point data for MerchCoin transactions
-type MerchCoinToSend struct {
-	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	PhoneNumber   string             `json:"phoneNumber" bson:"phoneNumber"`
-	Name          string             `json:"name" bson:"name"`
-	NPM           string             `json:"npm" bson:"npm"`
-	WonpayWallet  string             `json:"wonpayWallet" bson:"wonpayWallet"`
-	OrderID       string             `json:"orderId" bson:"orderId"`
-	TxID          string             `json:"txid" bson:"txid"`
-	Amount        float64            `json:"amount" bson:"amount"`
-	Points        float64            `json:"points" bson:"points"`
-	AverageAmount float64            `json:"averageAmount" bson:"averageAmount"`
-	Timestamp     time.Time          `json:"timestamp" bson:"timestamp"`
-	ProcessedDate string             `json:"processedDate" bson:"processedDate"`
-	Reported      bool               `json:"reported" bson:"reported"`
-}
-
-// MerchCoinPointSummary struct for storing point calculation summaries
-type MerchCoinPointSummary struct {
-	TotalTransactions int       `json:"totalTransactions" bson:"totalTransactions"`
-	TotalAmount       float64   `json:"totalAmount" bson:"totalAmount"`
-	AverageAmount     float64   `json:"averageAmount" bson:"averageAmount"`
-	Date              string    `json:"date" bson:"date"`
-	CalculatedAt      time.Time `json:"calculatedAt" bson:"calculatedAt"`
-}
