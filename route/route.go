@@ -126,43 +126,67 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/stats/feedback":
 		controller.CountFeedback(w, r)
 	// QRIS Payment Routes - with Basic Auth
-	case method == "POST" && path == "/api/createOrder":
-		controller.CreateOrderHandler(w, r)
-	case method == "GET" && at.URLParam(path, "/api/checkPayment/:orderId"):
-		controller.CheckPaymentHandler(w, r)
-	case method == "POST" && at.URLParam(path, "/api/confirmPayment/:orderId"):
-		controller.ConfirmPaymentHandler(w, r)
-	case method == "GET" && path == "/api/queueStatus":
-		controller.GetQueueStatusHandler(w, r)
-	case method == "GET" && path == "/api/totalPayments":
-		controller.GetTotalPaymentsHandler(w, r)
-	case method == "POST" && path == "/api/confirmByNotification":
-		controller.ConfirmByNotificationHandler(w, r)
-		// z
+	// case method == "POST" && path == "/api/createOrder":
+	// 	controller.CreateOrderHandler(w, r)
+	// case method == "GET" && at.URLParam(path, "/api/checkPayment/:orderId"):
+	// 	controller.CheckPaymentHandler(w, r)
+	// case method == "POST" && at.URLParam(path, "/api/confirmPayment/:orderId"):
+	// 	controller.ConfirmPaymentHandler(w, r)
+	// case method == "GET" && path == "/api/queueStatus":
+	// 	controller.GetQueueStatusHandler(w, r)
+	// case method == "GET" && path == "/api/totalPayments":
+	// 	controller.GetTotalPaymentsHandler(w, r)
+	// case method == "POST" && path == "/api/confirmByNotification":
+	// 	controller.ConfirmByNotificationHandler(w, r)
+	// z
 	// MerchCoin Reports Routes
 	// case method == "GET" && path == "/api/merchcoin/report/daily":
 	// 	controller.GetMerchCoinDailyReport(w, r)
 	// case method == "GET" && path == "/api/merchcoin/report/weekly":
 	// 	controller.GetMerchCoinWeeklyReport(w, r)
 	// MerchCoin Payment Routes
-	case method == "POST" && path == "/api/merchcoin/createOrder":
-		controller.CreateMerchCoinOrder(w, r)
-	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
-		controller.CheckMerchCoinPayment(w, r)
-	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkStep2/:orderId"):
+	// case method == "POST" && path == "/api/merchcoin/createOrder":
+	// 	controller.CreateMerchCoinOrder(w, r)
+	// case method == "GET" && at.URLParam(path, "/api/merchcoin/checkPayment/:orderId"):
+	// 	controller.CheckMerchCoinPayment(w, r)
+	// case method == "GET" && at.URLParam(path, "/api/merchcoin/checkStep2/:orderId"):
+	// 	controller.CheckStep2Handler(w, r)
+	// case method == "GET" && at.URLParam(path, "/api/merchcoin/checkStep3/:orderId"):
+	// 	controller.CheckStep3Handler(w, r)
+	// case method == "POST" && at.URLParam(path, "/api/merchcoin/confirmPayment/:orderId"):
+	// 	controller.ManuallyConfirmMerchCoinPayment(w, r)
+	// case method == "GET" && path == "/api/merchcoin/queueStatus":
+	// 	controller.GetMerchCoinQueueStatus(w, r)
+	// case method == "GET" && path == "/api/merchcoin/totalPayments":
+	// 	controller.GetMerchCoinTotalPayments(w, r)
+	// case method == "POST" && path == "/api/merchcoin/notification":
+	// 	controller.ConfirmMerchCoinNotification(w, r)
+	// case method == "POST" && path == "/api/merchcoin/simulate":
+	// 	controller.SimulateMerchCoinPayment(w, r)
+	case method == "GET" && path == "/api/crowdfunding/userinfo":
+		controller.GetUserInfo(w, r)
+	case method == "GET" && path == "/api/crowdfunding/queueStatus":
+		controller.CheckQueueStatus(w, r)
+	case method == "POST" && path == "/api/crowdfunding/qris/createOrder":
+		controller.CreateQRISOrder(w, r)
+	case method == "POST" && path == "/api/crowdfunding/microbitcoin/createOrder":
+		controller.CreateMicroBitcoinOrder(w, r)
+	case method == "GET" && at.URLParam(path, "/api/crowdfunding/checkPayment/:orderId"):
+		controller.CheckPayment(w, r)
+	case method == "GET" && at.URLParam(path, "/api/crowdfunding/microbitcoin/checkStep2/:orderId"):
 		controller.CheckStep2Handler(w, r)
-	case method == "GET" && at.URLParam(path, "/api/merchcoin/checkStep3/:orderId"):
+	case method == "GET" && at.URLParam(path, "/api/crowdfunding/microbitcoin/checkStep3/:orderId"):
 		controller.CheckStep3Handler(w, r)
-	case method == "POST" && at.URLParam(path, "/api/merchcoin/confirmPayment/:orderId"):
-		controller.ManuallyConfirmMerchCoinPayment(w, r)
-	case method == "GET" && path == "/api/merchcoin/queueStatus":
-		controller.GetMerchCoinQueueStatus(w, r)
-	case method == "GET" && path == "/api/merchcoin/totalPayments":
-		controller.GetMerchCoinTotalPayments(w, r)
-	case method == "POST" && path == "/api/merchcoin/notification":
-		controller.ConfirmMerchCoinNotification(w, r)
-	case method == "POST" && path == "/api/merchcoin/simulate":
-		controller.SimulateMerchCoinPayment(w, r)
+	case method == "POST" && at.URLParam(path, "/api/crowdfunding/qris/confirm/:orderId"):
+		controller.ConfirmQRISPayment(w, r)
+	case method == "POST" && at.URLParam(path, "/api/crowdfunding/microbitcoin/confirm/:orderId"):
+		controller.ConfirmMicroBitcoinPayment(w, r)
+	case method == "POST" && path == "/api/crowdfunding/qris/notification":
+		controller.ProcessQRISNotification(w, r)
+	case method == "GET" && path == "/api/crowdfunding/totals":
+		controller.GetCrowdfundingTotal(w, r)
+	case method == "GET" && path == "/api/crowdfunding/history":
+		controller.GetUserCrowdfundingHistory(w, r)
 	// IQ
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)
