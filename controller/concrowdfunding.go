@@ -266,13 +266,13 @@ func formatAmount(amount float64, paymentMethod model.PaymentMethod) string {
 
 // Extract user info from token
 func extractUserInfoFromToken(r *http.Request) (phoneNumber, name, npm string, err error) {
-	// Get login token from header
+	// Get login token from header - gunakan metode yang sama dengan kode IQ
 	token := at.GetLoginFromHeader(r)
 	if token == "" {
 		return "", "", "", errors.New("token not found in header")
 	}
 
-	// Decode token
+	// Decode token menggunakan metode yang sama dengan iqsoal.go
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
 	if err != nil {
 		return "", "", "", fmt.Errorf("invalid token: %v", err)
@@ -284,37 +284,72 @@ func extractUserInfoFromToken(r *http.Request) (phoneNumber, name, npm string, e
 		return "", "", "", errors.New("phone number not found in token")
 	}
 
-	// Extract name from payload alias
-	name = payload.Alias
+	// Debugging - tambahkan log seperti pada iqsoal.go
+	fmt.Println("✅ Phonenumber dari Token:", phoneNumber)
 
-	// Get user data from MongoDB to get NPM
+	// Cari data user di koleksi `user` berdasarkan `phonenumber`
+	userCollection := config.Mongoconn.Collection("user")
 	var user model.Userdomyikado
-	err = config.Mongoconn.Collection("user").FindOne(context.Background(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
+	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
 	if err != nil {
-		// User not found, but we still have phone number and name
-		return phoneNumber, name, "", nil
+		// User not found, tetapi kita masih punya phoneNumber dan menggunakan alias dari token
+		return phoneNumber, payload.Alias, "", nil
 	}
 
-	// If we found the user, get the NPM
-	return phoneNumber, user.Name, user.NPM, nil
+	// Jika user ditemukan, gunakan data dari database
+	return user.PhoneNumber, user.Name, user.NPM, nil
 }
 
 // GetUserInfo returns the user information extracted from the authentication token
 func GetUserInfo(w http.ResponseWriter, r *http.Request) {
-	phoneNumber, name, npm, err := extractUserInfoFromToken(r)
+	// Decode token menggunakan `at.GetLoginFromHeader(r)`
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
-		at.WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{
-			"success": false,
-			"message": "Authentication failed: " + err.Error(),
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
 		})
 		return
 	}
 
+	// Ambil `phonenumber` dari payload
+	phoneNumber := payload.Id
+	if phoneNumber == "" {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Status:   "Error: Missing Phonenumber",
+			Info:     "Nomor telepon tidak ditemukan dalam token",
+			Location: "Token Parsing",
+			Response: "Invalid Payload",
+		})
+		return
+	}
+
+	// Debugging
+	fmt.Println("✅ Phonenumber dari Token:", phoneNumber)
+
+	// Cari data user di koleksi `user` berdasarkan `phonenumber`
+	userCollection := config.Mongoconn.Collection("user")
+	var user model.Userdomyikado
+	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
+	if err != nil {
+		// Jika user tidak ditemukan, tetap beri respons dengan data minimal
+		at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     true,
+			"phoneNumber": phoneNumber,
+			"name":        payload.Alias,
+			"npm":         "",
+		})
+		return
+	}
+
+	// Jika user ditemukan, berikan data lengkap
 	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"success":     true,
-		"phoneNumber": phoneNumber,
-		"name":        name,
-		"npm":         npm,
+		"phoneNumber": user.PhoneNumber,
+		"name":        user.Name,
+		"npm":         user.NPM,
 	})
 }
 
