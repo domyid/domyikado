@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -266,7 +268,7 @@ func formatAmount(amount float64, paymentMethod model.PaymentMethod) string {
 
 // Extract user info from token
 func extractUserInfoFromToken(r *http.Request) (phoneNumber, name, npm string, err error) {
-	// Get login token from header - gunakan metode yang sama dengan kode IQ
+	// Get login token from header - gunakan 'login' bukan 'Authorization'
 	token := at.GetLoginFromHeader(r)
 	if token == "" {
 		return "", "", "", errors.New("token not found in header")
@@ -1790,4 +1792,88 @@ func GetUserCrowdfundingHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	at.WriteJSON(w, http.StatusOK, orders)
+}
+
+// newww
+// AuthCredentials stores basic auth credentials
+type AuthCredentials struct {
+	Username string    `bson:"username" json:"username"`
+	Password string    `bson:"password" json:"password"`
+	Created  time.Time `bson:"created" json:"created"`
+}
+
+// Basic Auth middleware yang mengambil kredensial dari MongoDB collection merchsecret
+func BasicAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Dapatkan header auth
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Authentication required",
+			})
+			return
+		}
+
+		// Parse header auth
+		authParts := strings.Split(authHeader, " ")
+		if len(authParts) != 2 || authParts[0] != "Basic" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication format",
+			})
+			return
+		}
+
+		// Decode kredensial
+		payload, err := base64.StdEncoding.DecodeString(authParts[1])
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication credentials",
+			})
+			return
+		}
+
+		// Split username dan password
+		pair := strings.SplitN(string(payload), ":", 2)
+		if len(pair) != 2 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication credentials",
+			})
+			return
+		}
+
+		// Dapatkan kredensial dari database collection merchsecret
+		var dbCreds AuthCredentials
+		err = config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
+		if err != nil {
+			log.Printf("Warning: Could not retrieve auth credentials from database: %v.", err)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Server error retrieving credentials",
+			})
+			return
+		}
+
+		// Verifikasi kredensial dengan data dari database
+		if subtle.ConstantTimeCompare([]byte(pair[0]), []byte(dbCreds.Username)) != 1 ||
+			subtle.ConstantTimeCompare([]byte(pair[1]), []byte(dbCreds.Password)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid username or password",
+			})
+			return
+		}
+
+		// Autentikasi berhasil, panggil handler berikutnya
+		next(w, r)
+	}
 }
