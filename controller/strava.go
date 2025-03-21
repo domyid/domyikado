@@ -10,9 +10,11 @@ import (
 )
 
 type StravaActivity struct {
+	AthleteId    string    `bson:"athlete_id" json:"athlete_id"`
 	ActivityId   string    `bson:"activity_id" json:"activity_id"`
 	Picture      string    `bson:"picture" json:"picture"`
 	Name         string    `bson:"name" json:"name"`
+	PhoneNumber  string    `bson:"phone_number" json:"phone_number"`
 	Title        string    `bson:"title" json:"title"`
 	DateTime     string    `bson:"date_time" json:"date_time"`
 	TypeSport    string    `bson:"type_sport" json:"type_sport"`
@@ -41,9 +43,11 @@ func GetStravaActivities(respw http.ResponseWriter, req *http.Request) {
 	for _, activity := range doc {
 		if activity.Status == "Valid" {
 			filteredActivities = append(filteredActivities, model.StravaActivity{
+				AthleteId:    activity.AthleteId,
 				ActivityId:   activity.ActivityId,
 				Picture:      activity.Picture,
 				Name:         activity.Name,
+				PhoneNumber:  activity.PhoneNumber,
 				Title:        activity.Title,
 				DateTime:     activity.DateTime,
 				TypeSport:    activity.TypeSport,
@@ -54,13 +58,17 @@ func GetStravaActivities(respw http.ResponseWriter, req *http.Request) {
 				Status:       activity.Status,
 				CreatedAt:    activity.CreatedAt,
 			})
-
 		}
+	}
+
+	response := map[string]interface{}{
+		"total_valid_activities": len(filteredActivities),
+		"activities":             filteredActivities,
 	}
 
 	if len(filteredActivities) == 0 {
 		at.WriteJSON(respw, http.StatusNotFound, model.Response{Response: "No valid activities found"})
 		return
 	}
-	at.WriteJSON(respw, http.StatusOK, filteredActivities)
+	at.WriteJSON(respw, http.StatusOK, response)
 }
