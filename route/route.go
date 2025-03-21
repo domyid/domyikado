@@ -240,8 +240,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetTotalPomokitPoin(w, r)
 
 	//strava coba
-	// case method == "GET" && path == "/refresh/report/stravamingguan":
-	// 	controller.GetStravaData(w, r)
+	case method == "GET" && path == "/data/strava":
+		controller.GetStravaActivities(w, r)
 
 	default:
 		controller.NotFound(w, r)

@@ -17,7 +17,7 @@ import (
 )
 
 type StravaInfo struct {
-	Count       float64
+	Count       int64
 	Name        string
 	PhoneNumber string
 	TotalKm     float64
@@ -117,9 +117,7 @@ func formatStravaData(data []StravaInfo) string {
 
 	var result string
 	for _, info := range data {
-		// result += fmt.Sprintf("✅ %s (%s): %.0f aktivitas (%.1f km)\n", info.Name, info.PhoneNumber, info.Count, info.TotalKm)
-		result += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatFloat(info.Count, 'f', -1, 64) + " aktivitas (" + strconv.FormatFloat(info.TotalKm, 'f', 1, 64) + " km)\n"
-
+		result += "✅ " + info.Name + " (" + info.PhoneNumber + "): " + strconv.FormatInt(info.Count, 10) + " aktivitas (" + strconv.FormatFloat(info.TotalKm, 'f', 1, 64) + " km)\n"
 	}
 
 	return result
