@@ -1509,6 +1509,10 @@ func ConfirmMicroBitcoinPayment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func ProcessQRISNotificationHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(ProcessQRISNotification)(w, r)
+}
+
 // ProcessQRISNotification processes QRIS payment notifications from payment gateway
 func ProcessQRISNotification(w http.ResponseWriter, r *http.Request) {
 	var request model.NotificationRequest

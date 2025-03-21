@@ -164,14 +164,16 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// case method == "POST" && path == "/api/merchcoin/simulate":
 		// 	controller.SimulateMerchCoinPayment(w, r)
 		// QRIS Payment Routes dengan Basic Auth
+	// QRIS Payment Routes
 	case method == "POST" && path == "/api/crowdfunding/qris/createOrder":
-		controller.BasicAuth(controller.CreateQRISOrder)(w, r)
+		controller.CreateQRISOrder(w, r) // Tanpa Basic Auth
 	case method == "GET" && at.URLParam(path, "/api/crowdfunding/qris/checkPayment/:orderId"):
-		controller.BasicAuth(controller.CheckPayment)(w, r)
+		controller.CheckPayment(w, r) // Tanpa Basic Auth
 	case method == "POST" && at.URLParam(path, "/api/crowdfunding/qris/confirm/:orderId"):
-		controller.BasicAuth(controller.ConfirmQRISPayment)(w, r)
+		controller.ConfirmQRISPayment(w, r) // Tanpa Basic Auth
+	// Hanya notification yang menggunakan Basic Auth
 	case method == "POST" && path == "/api/crowdfunding/qris/notification":
-		controller.BasicAuth(controller.ProcessQRISNotification)(w, r)
+		controller.ProcessQRISNotificationHandler(w, r) // Dengan Basic Auth
 
 	// MicroBitcoin Payment Routes tanpa Basic Auth (hanya menggunakan token)
 	case method == "POST" && path == "/api/crowdfunding/microbitcoin/createOrder":
