@@ -11,6 +11,7 @@ import (
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -34,7 +35,7 @@ type StravaActivity struct {
 	CreatedAt    time.Time `bson:"created_at" json:"created_at"`
 }
 
-// API untuk menghitung poin Strava dan menyimpannya ke database
+// API untuk menghitung poin Strava dan menyimpan Grup ID
 func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	api := "https://asia-southeast1-awangga.cloudfunctions.net/wamyid/strava/activities"
 	scode, activities, err := atapi.Get[[]StravaActivity](api)
@@ -43,23 +44,31 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Filter hanya aktivitas dengan status "Valid"
+	db := config.Mongoconn // Koneksi database
+	colPoin := db.Collection("stravapoin")
+
+	// Simpan daftar nomor telepon unik
+	phoneNumbers := make(map[string]bool)
 	userData := make(map[string]struct {
 		TotalKm       float64
 		ActivityCount int
 	})
+
+	// Proses aktivitas valid
 	for _, activity := range activities {
 		if activity.Status != "Valid" {
 			continue
 		}
 
-		// Konversi jarak dari string ke float64 (misal: "28.6 km" → 28.6)
+		// Konversi jarak dari string ke float64
 		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
 		distance, err := strconv.ParseFloat(distanceStr, 64)
 		if err != nil {
 			log.Println("Error converting distance:", err)
 			continue
 		}
+
+		phoneNumbers[activity.PhoneNumber] = true // Tambahkan ke daftar nomor telepon
 
 		// Tambahkan data ke map berdasarkan phone number
 		userData[activity.PhoneNumber] = struct {
@@ -71,16 +80,24 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// Simpan poin ke database
-	db := config.Mongoconn // Fungsi untuk mendapatkan koneksi database
-	colPoin := db.Collection("strava_poin")
+	// Ambil grup ID berdasarkan nomor telepon
+	phoneList := make([]string, 0, len(phoneNumbers))
+	for phone := range phoneNumbers {
+		phoneList = append(phoneList, phone)
+	}
+	groupMap, err := report.GetGrupIDFromProject(db, phoneList)
+	if err != nil {
+		log.Println("Error getting group IDs:", err)
+	}
 
+	// Simpan poin & grup ID ke database
 	for phone, data := range userData {
 		filter := bson.M{"phone_number": phone}
 
 		// Ambil data sebelumnya
 		var existing struct {
-			ActivityCount int `bson:"activity_count"`
+			ActivityCount int      `bson:"activity_count"`
+			WaGroupID     []string `bson:"wagroupid,omitempty"`
 		}
 		err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -91,8 +108,9 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		// Update atau insert ke `strava_poin`
 		update := bson.M{
 			"$set": bson.M{
-				"total_km": data.TotalKm,
-				"count":    existing.ActivityCount + data.ActivityCount,
+				"total_km":  data.TotalKm,
+				"count":     existing.ActivityCount + data.ActivityCount,
+				"wagroupid": groupMap[phone], // Simpan grup ID jika tersedia
 			},
 			"$inc": bson.M{
 				"poin": (data.TotalKm / 6) * 100, // Konversi km ke poin

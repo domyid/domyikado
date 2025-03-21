@@ -157,7 +157,7 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database, isTotal bool) (
 	}
 
 	// Ambil daftar grup WA unik berdasarkan nomor telepon
-	groupMap, err := getGrupIDFromProject(db, phoneNumbers)
+	groupMap, err := GetGrupIDFromProject(db, phoneNumbers)
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil grup WhatsApp: %v", err)
 	}
@@ -199,7 +199,7 @@ func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database, isTotal bool) (
 	return users, nil
 }
 
-func getGrupIDFromProject(db *mongo.Database, phoneNumbers []string) (map[string][]string, error) {
+func GetGrupIDFromProject(db *mongo.Database, phoneNumbers []string) (map[string][]string, error) {
 	// Filter mencari grup berdasarkan anggota dengan nomor telepon yang cocok
 	filter := bson.M{
 		"members": bson.M{
