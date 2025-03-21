@@ -1,12 +1,20 @@
 package controller
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/model"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type StravaActivity struct {
@@ -26,49 +34,77 @@ type StravaActivity struct {
 	CreatedAt    time.Time `bson:"created_at" json:"created_at"`
 }
 
-func GetStravaActivities(respw http.ResponseWriter, req *http.Request) {
+// API untuk menghitung poin Strava dan menyimpannya ke database
+func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	api := "https://asia-southeast1-awangga.cloudfunctions.net/wamyid/strava/activities"
-	scode, doc, err := atapi.Get[[]StravaActivity](api)
-	if err != nil {
-		at.WriteJSON(respw, scode, model.Response{Response: err.Error()})
+	scode, activities, err := atapi.Get[[]StravaActivity](api)
+	if err != nil || scode != http.StatusOK {
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch data"})
 		return
 	}
 
-	if scode != http.StatusOK {
-		at.WriteJSON(respw, scode, model.Response{Response: "Failed to fetch data"})
-		return
-	}
+	// Filter hanya aktivitas dengan status "Valid"
+	userData := make(map[string]struct {
+		TotalKm       float64
+		ActivityCount int
+	})
+	for _, activity := range activities {
+		if activity.Status != "Valid" {
+			continue
+		}
 
-	var filteredActivities []model.StravaActivity
-	for _, activity := range doc {
-		if activity.Status == "Valid" {
-			filteredActivities = append(filteredActivities, model.StravaActivity{
-				AthleteId:    activity.AthleteId,
-				ActivityId:   activity.ActivityId,
-				Picture:      activity.Picture,
-				Name:         activity.Name,
-				PhoneNumber:  activity.PhoneNumber,
-				Title:        activity.Title,
-				DateTime:     activity.DateTime,
-				TypeSport:    activity.TypeSport,
-				Distance:     activity.Distance,
-				MovingTime:   activity.MovingTime,
-				Elevation:    activity.Elevation,
-				LinkActivity: activity.LinkActivity,
-				Status:       activity.Status,
-				CreatedAt:    activity.CreatedAt,
-			})
+		// Konversi jarak dari string ke float64 (misal: "28.6 km" → 28.6)
+		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
+		distance, err := strconv.ParseFloat(distanceStr, 64)
+		if err != nil {
+			log.Println("Error converting distance:", err)
+			continue
+		}
+
+		// Tambahkan data ke map berdasarkan phone number
+		userData[activity.PhoneNumber] = struct {
+			TotalKm       float64
+			ActivityCount int
+		}{
+			TotalKm:       userData[activity.PhoneNumber].TotalKm + distance,
+			ActivityCount: userData[activity.PhoneNumber].ActivityCount + 1,
 		}
 	}
 
-	response := map[string]interface{}{
-		"total_valid_activities": len(filteredActivities),
-		"activities":             filteredActivities,
+	// Simpan poin ke database
+	db := config.Mongoconn // Fungsi untuk mendapatkan koneksi database
+	colPoin := db.Collection("strava_poin")
+
+	for phone, data := range userData {
+		filter := bson.M{"phone_number": phone}
+
+		// Ambil data sebelumnya
+		var existing struct {
+			ActivityCount int `bson:"activity_count"`
+		}
+		err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
+		if err != nil && err != mongo.ErrNoDocuments {
+			log.Println("Error fetching existing count:", err)
+			continue
+		}
+
+		// Update atau insert ke `strava_poin`
+		update := bson.M{
+			"$set": bson.M{
+				"total_km": data.TotalKm,
+				"count":    existing.ActivityCount + data.ActivityCount,
+			},
+			"$inc": bson.M{
+				"poin": (data.TotalKm / 6) * 100, // Konversi km ke poin
+			},
+		}
+		opts := options.Update().SetUpsert(true)
+
+		_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+		if err != nil {
+			log.Println("Error updating strava_poin:", err)
+		}
 	}
 
-	if len(filteredActivities) == 0 {
-		at.WriteJSON(respw, http.StatusNotFound, model.Response{Response: "No valid activities found"})
-		return
-	}
-	at.WriteJSON(respw, http.StatusOK, response)
+	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Proses poin Strava selesai"})
 }

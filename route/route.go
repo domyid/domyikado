@@ -241,7 +241,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	//strava coba
 	case method == "GET" && path == "/data/strava":
-		controller.GetStravaActivities(w, r)
+		controller.ProcessStravaPoints(w, r)
 
 	default:
 		controller.NotFound(w, r)
