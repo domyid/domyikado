@@ -35,6 +35,13 @@ type StravaActivity struct {
 	CreatedAt    time.Time `bson:"created_at" json:"created_at"`
 }
 
+// Daftar grup ID yang diperbolehkan
+var allowedGroups = map[string]bool{
+	"120363022595651310": true,
+	"120363298977628161": true,
+	"120363347214689840": true,
+}
+
 // API untuk menghitung poin Strava dan menyimpan Grup ID
 func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	api := "https://asia-southeast1-awangga.cloudfunctions.net/wamyid/strava/activities"
@@ -96,8 +103,8 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 		// Ambil data sebelumnya
 		var existing struct {
-			ActivityCount int      `bson:"activity_count"`
-			WaGroupID     []string `bson:"wagroupid,omitempty"`
+			ActivityCount int    `bson:"activity_count"`
+			WaGroupID     string `bson:"wagroupid,omitempty"`
 		}
 		err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -105,12 +112,23 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 			continue
 		}
 
+		// Pilih grup ID yang sesuai dengan allowedGroups
+		selectedGroup := ""
+		if groupIDs, exists := groupMap[phone]; exists {
+			for _, groupID := range groupIDs {
+				if allowedGroups[groupID] { // Cek apakah grup ID ada di daftar yang diperbolehkan
+					selectedGroup = groupID
+					break // Ambil satu saja yang valid
+				}
+			}
+		}
+
 		// Update atau insert ke `strava_poin`
 		update := bson.M{
 			"$set": bson.M{
 				"total_km":  data.TotalKm,
 				"count":     existing.ActivityCount + data.ActivityCount,
-				"wagroupid": groupMap[phone], // Simpan grup ID jika tersedia
+				"wagroupid": selectedGroup, // Simpan hanya satu grup ID
 			},
 			"$inc": bson.M{
 				"poin": (data.TotalKm / 6) * 100, // Konversi km ke poin
