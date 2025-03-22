@@ -28,7 +28,7 @@ type MasterEnrool struct {
 
 type Project struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	Enroll      string             `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
+	Enroll      MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
 	Secret      string             `bson:"secret" json:"secret"`
 	Name        string             `bson:"name" json:"name"`
 	Description string             `bson:"description" json:"description"`
@@ -70,7 +70,7 @@ type Userdomyikado struct {
 // skor asessment proyek1 dan lainnya
 type ActivityScore struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	Enroll     string             `bson:"enroll,omitempty" json:"enroll,omitempty"`   //kelas atau proyek atau bimbingan
+	Enroll     MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"`   //kelas atau proyek atau bimbingan
 	Sponsor    int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
 	Strava     int                `bson:"strava,omitempty" json:"strava,omitempty"`   //perminggu dibagi 6KM dikali 100
 	IQ         int                `bson:"iq,omitempty" json:"iq,omitempty"`
