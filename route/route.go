@@ -242,7 +242,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	//strava coba
 	case method == "GET" && path == "/data/strava":
 		controller.ProcessStravaPoints(w, r)
-	case method == "POST" && path == "/add-strava":
+	case method == "POST" && at.URLParam(path, "/data/strava-poin/wa/:nomorwa"):
 		controller.AddStravaPoints(w, r)
 
 	default:
