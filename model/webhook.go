@@ -19,6 +19,13 @@ type PushReport struct {
 	RemoteAddr  string        `bson:"remoteaddr,omitempty" json:"remoteaddr,omitempty"`
 }
 
+type MasterEnrool struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Kode      string             `bson:"kode,omitempty" json:"kode,omitempty"`
+	Nama      string             `bson:"nama,omitempty" json:"nama,omitempty"`
+	Deskripsi string             `bson:"deskripsi,omitempty" json:"deskripsi,omitempty"`
+}
+
 type Project struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Enroll      string             `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
