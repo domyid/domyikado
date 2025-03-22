@@ -13,10 +13,10 @@ import (
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
+	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
-	"github.com/whatsauth/itmodel"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -49,14 +49,20 @@ var allowedGroups = map[string]bool{
 
 // API untuk menghitung poin Strava dan menyimpan Grup ID
 func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
-	api := "https://asia-southeast1-awangga.cloudfunctions.net/wamyid/strava/activities"
-	scode, activities, err := atapi.Get[[]StravaActivity](api)
+	db := config.Mongoconn
+
+	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+	if err != nil {
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch config"})
+		return
+	}
+
+	scode, activities, err := atapi.Get[[]StravaActivity](conf.StravaUrl)
 	if err != nil || scode != http.StatusOK {
 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch data"})
 		return
 	}
 
-	db := config.Mongoconn
 	colPoin := db.Collection("stravapoin")
 	colUsers := db.Collection("user")
 
@@ -157,11 +163,10 @@ type AddPointsRequest struct {
 	ActivityID  string  `json:"activity_id"`
 	PhoneNumber string  `json:"phone_number"`
 	Distance    float64 `json:"distance"`
-	Points      float64 `json:"poin"`
 }
 
 func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
-	var resp itmodel.Response
+	var resp model.Response
 	prof, err := whatsauth.GetAppProfile(at.GetParam(req), config.Mongoconn)
 	if err != nil {
 		resp.Response = err.Error()
@@ -177,8 +182,8 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	var reqBody AddPointsRequest
 	err = json.NewDecoder(req.Body).Decode(&reqBody)
 	if err != nil {
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, model.Response{Response: "Invalid request"})
+		resp.Response = "Invalid request"
+		at.WriteJSON(respw, http.StatusBadRequest, resp)
 		return
 	}
 
@@ -186,7 +191,7 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	colPoin := db.Collection("stravapoin")
 	colUsers := db.Collection("user")
 
-	// Cari user_id berdasarkan phone_number
+	// Ambil data user_id berdasarkan phone_number
 	var user struct {
 		ID primitive.ObjectID `bson:"_id"`
 	}
@@ -197,13 +202,31 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Ambil data poin sebelumnya
+	var existingData struct {
+		TotalKm float64 `bson:"total_km"`
+		Poin    float64 `bson:"poin"`
+	}
 	filter := bson.M{"phone_number": reqBody.PhoneNumber}
+	err = colPoin.FindOne(context.TODO(), filter).Decode(&existingData)
+	if err != nil && err != mongo.ErrNoDocuments {
+		log.Println("Error fetching existing data:", err)
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to retrieve data"})
+		return
+	}
+
+	// Hitung poin berdasarkan jarak (distance) baru
+	newPoints := (reqBody.Distance / 6) * 100
+
+	// Update total km dan poin
+	newTotalKm := math.Round((existingData.TotalKm+reqBody.Distance)*10) / 10
+	newTotalPoin := math.Round((existingData.Poin+newPoints)*10) / 10
+
+	// Simpan perubahan ke database
 	update := bson.M{
-		"$inc": bson.M{
-			"poin": math.Round(reqBody.Points*10) / 10,
-		},
 		"$set": bson.M{
-			"total_km":   math.Round(reqBody.Distance*10) / 10,
+			"total_km":   newTotalKm,
+			"poin":       newTotalPoin,
 			"updated_at": time.Now(),
 			"user_id":    user.ID,
 		},
