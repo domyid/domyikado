@@ -72,7 +72,7 @@ func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, pe
 	msg += "\n\n*Total Keseluruhan:*\n"
 	msg += formatStravaData(filteredTotalData)
 
-	msg += "\n\nJika dirasa sudah melakukan aktivitas namun tidak tercatat, mungkin ada yang salah dengan link Strava profile picture. Silakan lakukan update Strava profile picture di do.my.id yang sesuai dengan link profile picture di Strava."
+	msg += "\n\nJika dirasa sudah melakukan aktivitas namun tidak tercatat, mungkin ada yang salah dengan link Strava profile picture. Silakan lakukan update Strava profile picture di do.my.id yang sesuai dengan link profile picture di Strava. Atau nomor hp yang digunakan untuk share link strava tidak sesuai dengan nomor hp yang terdaftar di do.my.id."
 
 	// Set perwakilan pertama sebagai nomor yang akan menerima pesan jika private
 	if len(filteredDailyData) > 0 {
