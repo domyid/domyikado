@@ -111,7 +111,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		var user struct {
 			UserID primitive.ObjectID `bson:"_id"`
 		}
-		err = colUsers.FindOne(context.TODO(), bson.M{"phone_number": phone}).Decode(&user)
+		err = colUsers.FindOne(context.TODO(), bson.M{"phonenumber": phone}).Decode(&user)
 		if err != nil && err != mongo.ErrNoDocuments {
 			log.Println("Error fetching user_id:", err)
 		}
