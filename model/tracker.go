@@ -4,7 +4,6 @@ import "go.mongodb.org/mongo-driver/bson/primitive"
 
 type UserInfo struct {
 	IPv4          string             `json:"ipv4"`
-	Author        string             `json:"author"`
 	Hostname      string             `json:"hostname"`
 	Url           string             `json:"url"`
 	Browser       string             `json:"browser"`
