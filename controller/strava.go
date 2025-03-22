@@ -205,6 +205,7 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	var existingData struct {
 		TotalKm float64 `bson:"total_km"`
 		Poin    float64 `bson:"poin"`
+		Count   int     `bson:"count"`
 	}
 	filter := bson.M{"phone_number": reqBody.PhoneNumber}
 	err = colPoin.FindOne(context.TODO(), filter).Decode(&existingData)
@@ -214,17 +215,16 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Hitung poin berdasarkan jarak (distance) baru
-	newPoints := (reqBody.Distance / 6) * 100
+	newPoints := math.Round((reqBody.Distance/6)*100*10) / 10
 
-	// Update total km dan poin
-	newTotalKm := math.Round((existingData.TotalKm+reqBody.Distance)*10) / 10
-	newTotalPoin := math.Round((existingData.Poin+newPoints)*10) / 10
-
-	// Simpan perubahan ke database
+	// Update total km, poin, dan count dengan menambah nilai lama dengan nilai baru
 	update := bson.M{
+		"$inc": bson.M{
+			"total_km": reqBody.Distance,
+			"poin":     newPoints,
+			"count":    1, // Menambahkan count aktivitas
+		},
 		"$set": bson.M{
-			"total_km":   newTotalKm,
-			"poin":       newTotalPoin,
 			"updated_at": time.Now(),
 			"user_id":    user.ID,
 		},
