@@ -60,17 +60,17 @@ type Userdomyikado struct {
 // skor asessment proyek1
 type SkorProyek1 struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	Sponsor    int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"`
-	Strava     int                `bson:"strava,omitempty" json:"strava,omitempty"`
+	Sponsor    int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
+	Strava     int                `bson:"strava,omitempty" json:"strava,omitempty"`   //perminggu dibagi 6KM dikali 100
 	IQ         int                `bson:"iq,omitempty" json:"iq,omitempty"`
-	Pomokit    int                `bson:"pomokit,omitempty" json:"pomokit,omitempty"`
-	BlockChain int                `bson:"blockchain,omitempty" json:"blockchain,omitempty"`
-	QRIS       int                `bson:"qris,omitempty" json:"qris,omitempty"`
-	Tracker    int                `bson:"tracker,omitempty" json:"tracker,omitempty"`
-	BukPed     int                `bson:"bukped,omitempty" json:"bukped,omitempty"`
-	GTMetrix   int                `bson:"gtmetrix,omitempty" json:"gtmetrix,omitempty"`
-	WebHook    int                `bson:"webhook,omitempty" json:"webhook,omitempty"`
-	Presensi   int                `bson:"presensi,omitempty" json:"presensi,omitempty"`
+	Pomokit    int                `bson:"pomokit,omitempty" json:"pomokit,omitempty"`       //20 per cycle
+	BlockChain int                `bson:"blockchain,omitempty" json:"blockchain,omitempty"` // dibagi rata2 kelas dikali 100
+	QRIS       int                `bson:"qris,omitempty" json:"qris,omitempty"`             // dibagi rata2 kelas dikali 100
+	Tracker    int                `bson:"tracker,omitempty" json:"tracker,omitempty"`       //rata2 10 unique visitor sehari 100
+	BukPed     int                `bson:"bukped,omitempty" json:"bukped,omitempty"`         //upload 25;approve 50;resi 75;deposit 100
+	GTMetrix   int                `bson:"gtmetrix,omitempty" json:"gtmetrix,omitempty"`     //A 100;B 75;C 50;D 25; E 0
+	WebHook    int                `bson:"webhook,omitempty" json:"webhook,omitempty"`       //maksimal 100 dari push github diambil dari seminggu terakhir
+	Presensi   int                `bson:"presensi,omitempty" json:"presensi,omitempty"`     //5*lengkap masuk dan pulang = 100
 }
 
 type Task struct {
