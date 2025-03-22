@@ -240,7 +240,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetTotalPomokitPoin(w, r)
 
 	//strava coba
-	case method == "GET" && path == "/data/strava":
+	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
 		controller.ProcessStravaPoints(w, r)
 	case method == "POST" && at.URLParam(path, "/data/strava-poin/wa/:nomorwa"):
 		controller.AddStravaPoints(w, r)
