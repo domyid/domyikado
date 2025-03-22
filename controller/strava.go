@@ -14,7 +14,9 @@ import (
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/report"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
+	"github.com/whatsauth/itmodel"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -159,11 +161,24 @@ type AddPointsRequest struct {
 }
 
 func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
-	var reqBody AddPointsRequest
-
-	err := parseJson(req, &reqBody)
+	var resp itmodel.Response
+	prof, err := whatsauth.GetAppProfile(at.GetParam(req), config.Mongoconn)
 	if err != nil {
-		http.Error(respw, "Invalid JSON", http.StatusBadRequest)
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, resp)
+		return
+	}
+	if at.GetSecretFromHeader(req) != prof.Secret {
+		resp.Response = "Salah secret: " + at.GetSecretFromHeader(req)
+		at.WriteJSON(respw, http.StatusUnauthorized, resp)
+		return
+	}
+
+	var reqBody AddPointsRequest
+	err = json.NewDecoder(req.Body).Decode(&reqBody)
+	if err != nil {
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, model.Response{Response: "Invalid request"})
 		return
 	}
 
@@ -203,9 +218,4 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil diperbarui"})
-}
-
-func parseJson(req *http.Request, target interface{}) error {
-	decoder := json.NewDecoder(req.Body)
-	return decoder.Decode(target)
 }
