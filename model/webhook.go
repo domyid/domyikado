@@ -30,6 +30,7 @@ type Project struct {
 	RepoLogName string             `bson:"repologname,omitempty" json:"repologname,omitempty"`
 	Members     []Userdomyikado    `bson:"members,omitempty" json:"members,omitempty"`
 	Closed      bool               `bson:"closed,omitempty" json:"closed,omitempty"`
+	Pembimbing  Userdomyikado      `bson:"pembimbing,omitempty" json:"pembimbing,omitempty"`
 }
 
 type Userdomyikado struct {
@@ -55,12 +56,13 @@ type Userdomyikado struct {
 	NPM                  string             `json:"npm,omitempty" bson:"npm,omitempty"`
 	Wonpaywallet         string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
 	RVNwallet            string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
-	WeeklyScore          string             `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"`
+	WeeklyScore          []ActivityScore    `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"`
 }
 
-// skor asessment proyek1
+// skor asessment proyek1 dan lainnya
 type ActivityScore struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Enroll     string             `bson:"enroll,omitempty" json:"enroll,omitempty"`   //kelas atau proyek atau bimbingan
 	Sponsor    int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
 	Strava     int                `bson:"strava,omitempty" json:"strava,omitempty"`   //perminggu dibagi 6KM dikali 100
 	IQ         int                `bson:"iq,omitempty" json:"iq,omitempty"`
