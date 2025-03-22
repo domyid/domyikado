@@ -54,6 +54,23 @@ type Userdomyikado struct {
 	AthleteId            string             `json:"athleteid,omitempty" bson:"athleteid,omitempty"`
 	NPM                  string             `json:"npm,omitempty" bson:"npm,omitempty"`
 	Wonpaywallet         string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
+	RVNwallet            string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
+}
+
+// skor asessment proyek1
+type SkorProyek1 struct {
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Sponsor    int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"`
+	Strava     int                `bson:"strava,omitempty" json:"strava,omitempty"`
+	IQ         int                `bson:"iq,omitempty" json:"iq,omitempty"`
+	Pomokit    int                `bson:"pomokit,omitempty" json:"pomokit,omitempty"`
+	BlockChain int                `bson:"blockchain,omitempty" json:"blockchain,omitempty"`
+	QRIS       int                `bson:"qris,omitempty" json:"qris,omitempty"`
+	Tracker    int                `bson:"tracker,omitempty" json:"tracker,omitempty"`
+	BukPed     int                `bson:"bukped,omitempty" json:"bukped,omitempty"`
+	GTMetrix   int                `bson:"gtmetrix,omitempty" json:"gtmetrix,omitempty"`
+	WebHook    int                `bson:"webhook,omitempty" json:"webhook,omitempty"`
+	Presensi   int                `bson:"presensi,omitempty" json:"presensi,omitempty"`
 }
 
 type Task struct {
