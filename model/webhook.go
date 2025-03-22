@@ -55,10 +55,11 @@ type Userdomyikado struct {
 	NPM                  string             `json:"npm,omitempty" bson:"npm,omitempty"`
 	Wonpaywallet         string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
 	RVNwallet            string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
+	WeeklyScore          string             `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"`
 }
 
 // skor asessment proyek1
-type SkorProyek1 struct {
+type ActivityScore struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Sponsor    int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
 	Strava     int                `bson:"strava,omitempty" json:"strava,omitempty"`   //perminggu dibagi 6KM dikali 100
