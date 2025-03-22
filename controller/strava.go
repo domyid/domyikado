@@ -169,7 +169,7 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 	prof, err := whatsauth.GetAppProfile(at.GetParam(req), config.Mongoconn)
 	if err != nil {
-		resp.Response = err.Error()
+		resp.Response = "1. " + err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, resp)
 		return
 	}
@@ -197,7 +197,6 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 	err = colUsers.FindOne(context.TODO(), bson.M{"phonenumber": reqBody.PhoneNumber}).Decode(&user)
 	if err != nil && err != mongo.ErrNoDocuments {
-		log.Println("Error fetching user_id:", err)
 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to process request"})
 		return
 	}
@@ -210,7 +209,6 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	filter := bson.M{"phone_number": reqBody.PhoneNumber}
 	err = colPoin.FindOne(context.TODO(), filter).Decode(&existingData)
 	if err != nil && err != mongo.ErrNoDocuments {
-		log.Println("Error fetching existing data:", err)
 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to retrieve data"})
 		return
 	}
@@ -235,7 +233,6 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 	_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
 	if err != nil {
-		log.Println("Error updating strava_poin:", err)
 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to update points"})
 		return
 	}
