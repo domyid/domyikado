@@ -64,10 +64,10 @@ type Userdomyikado struct {
 	NPM                  string             `json:"npm,omitempty" bson:"npm,omitempty"`
 	Wonpaywallet         string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
 	RVNwallet            string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
-	WeeklyScore          []ActivityScore    `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"`
+	WeeklyScore          []ActivityScore    `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"` // aktifitas mingguan
 }
 
-// skor asessment proyek1 dan lainnya
+// skor asessment proyek1 dan lainnya aktifitas mingguan
 type ActivityScore struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Enroll     MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"`   //kelas atau proyek atau bimbingan
@@ -82,6 +82,9 @@ type ActivityScore struct {
 	GTMetrix   int                `bson:"gtmetrix,omitempty" json:"gtmetrix,omitempty"`     //A 100;B 75;C 50;D 25; E 0
 	WebHook    int                `bson:"webhook,omitempty" json:"webhook,omitempty"`       //maksimal 100 dari push github diambil dari seminggu terakhir
 	Presensi   int                `bson:"presensi,omitempty" json:"presensi,omitempty"`     //5*lengkap masuk dan pulang = 100
+	TotalScore int                `bson:"total,omitempty" json:"total,omitempty"`
+	Approved   bool               `bson:"approved,omitempty" json:"approved,omitempty"`
+	Asesor     Userdomyikado      `bson:"asesor,omitempty" json:"asesor,omitempty"`
 }
 
 type Task struct {
