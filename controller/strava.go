@@ -2,8 +2,8 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -129,14 +129,14 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 		update := bson.M{
 			"$set": bson.M{
-				"total_km":   fmt.Sprintf("%.1f", data.TotalKm),
+				"total_km":   math.Round(data.TotalKm*10) / 10,
 				"count":      existing.ActivityCount + data.ActivityCount,
 				"wagroupid":  selectedGroup,
 				"user_id":    user.UserID, // Disimpan sebagai ObjectID
 				"updated_at": time.Now(),
 			},
 			"$inc": bson.M{
-				"poin": fmt.Sprintf("%.1f", (data.TotalKm/6)*100),
+				"poin": math.Round((data.TotalKm/6)*100*10) / 10,
 			},
 		}
 		opts := options.Update().SetUpsert(true)
