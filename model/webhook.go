@@ -21,6 +21,7 @@ type PushReport struct {
 
 type Project struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Enroll      string             `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
 	Secret      string             `bson:"secret" json:"secret"`
 	Name        string             `bson:"name" json:"name"`
 	Description string             `bson:"description" json:"description"`
@@ -30,7 +31,7 @@ type Project struct {
 	RepoLogName string             `bson:"repologname,omitempty" json:"repologname,omitempty"`
 	Members     []Userdomyikado    `bson:"members,omitempty" json:"members,omitempty"`
 	Closed      bool               `bson:"closed,omitempty" json:"closed,omitempty"`
-	Pembimbing  Userdomyikado      `bson:"pembimbing,omitempty" json:"pembimbing,omitempty"`
+	Pembimbing  []Userdomyikado    `bson:"pembimbing,omitempty" json:"pembimbing,omitempty"`
 }
 
 type Userdomyikado struct {
