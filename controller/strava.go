@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -54,7 +55,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 	db := config.Mongoconn
 	colPoin := db.Collection("stravapoin")
-	colUsers := db.Collection("users")
+	colUsers := db.Collection("user")
 
 	phoneNumbers := make(map[string]bool)
 	userData := make(map[string]struct {
@@ -128,14 +129,14 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 		update := bson.M{
 			"$set": bson.M{
-				"total_km":   data.TotalKm,
+				"total_km":   fmt.Sprintf("%.1f", data.TotalKm),
 				"count":      existing.ActivityCount + data.ActivityCount,
 				"wagroupid":  selectedGroup,
 				"user_id":    user.UserID, // Disimpan sebagai ObjectID
 				"updated_at": time.Now(),
 			},
 			"$inc": bson.M{
-				"poin": (data.TotalKm / 6) * 100,
+				"poin": fmt.Sprintf("%.1f", (data.TotalKm/6)*100),
 			},
 		}
 		opts := options.Update().SetUpsert(true)
