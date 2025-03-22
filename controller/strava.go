@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"math"
 	"net/http"
@@ -110,7 +111,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 		// Ambil user_id dari koleksi users berdasarkan phone_number
 		var user struct {
-			UserID primitive.ObjectID `bson:"_id"`
+			ID primitive.ObjectID `bson:"_id"`
 		}
 		err = colUsers.FindOne(context.TODO(), bson.M{"phonenumber": phone}).Decode(&user)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -132,7 +133,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 				"total_km":   math.Round(data.TotalKm*10) / 10,
 				"count":      existing.ActivityCount + data.ActivityCount,
 				"wagroupid":  selectedGroup,
-				"user_id":    user.UserID, // Disimpan sebagai ObjectID
+				"user_id":    user.ID, // Disimpan sebagai ObjectID
 				"updated_at": time.Now(),
 			},
 			"$inc": bson.M{
@@ -148,4 +149,63 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Proses poin Strava selesai"})
+}
+
+type AddPointsRequest struct {
+	ActivityID  string  `json:"activity_id"`
+	PhoneNumber string  `json:"phone_number"`
+	Distance    float64 `json:"distance"`
+	Points      float64 `json:"poin"`
+}
+
+func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
+	var reqBody AddPointsRequest
+
+	err := parseJson(req, &reqBody)
+	if err != nil {
+		http.Error(respw, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	db := config.Mongoconn
+	colPoin := db.Collection("stravapoin")
+	colUsers := db.Collection("user")
+
+	// Cari user_id berdasarkan phone_number
+	var user struct {
+		ID primitive.ObjectID `bson:"_id"`
+	}
+	err = colUsers.FindOne(context.TODO(), bson.M{"phonenumber": reqBody.PhoneNumber}).Decode(&user)
+	if err != nil && err != mongo.ErrNoDocuments {
+		log.Println("Error fetching user_id:", err)
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to process request"})
+		return
+	}
+
+	filter := bson.M{"phone_number": reqBody.PhoneNumber}
+	update := bson.M{
+		"$inc": bson.M{
+			"poin": math.Round(reqBody.Points*10) / 10,
+		},
+		"$set": bson.M{
+			"total_km":   math.Round(reqBody.Distance*10) / 10,
+			"updated_at": time.Now(),
+			"user_id":    user.ID,
+		},
+	}
+	opts := options.Update().SetUpsert(true)
+
+	_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+	if err != nil {
+		log.Println("Error updating strava_poin:", err)
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to update points"})
+		return
+	}
+
+	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil diperbarui"})
+}
+
+func parseJson(req *http.Request, target interface{}) error {
+	decoder := json.NewDecoder(req.Body)
+	return decoder.Decode(target)
 }
