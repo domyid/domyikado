@@ -113,7 +113,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if parsedURL.Host == "befous.github.io" {
+	if parsedURL.Host == "t.if.co.id" {
 		userInfo.Hostname = fmt.Sprintf("%s%s", parsedURL.Host, parsedURL.EscapedPath())
 	} else {
 		userInfo.Hostname = parsedURL.Host
