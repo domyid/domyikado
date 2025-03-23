@@ -2,7 +2,9 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -117,6 +119,31 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userInfo.IPv4 = ip
+	if urlUserInfo.Url == "" {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "URL tidak boleh kosong",
+		})
+		return
+	}
+	userInfo.Url = urlUserInfo.Url
+	parsedURL, err := url.Parse(userInfo.Url)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "URL tidak valid",
+		})
+		return
+	}
+	if parsedURL.Host == "" {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Hostname tidak boleh kosong",
+		})
+		return
+	}
+	if parsedURL.Host == "t.if.co.id" {
+		userInfo.Hostname = fmt.Sprintf("%s%s", parsedURL.Host, parsedURL.EscapedPath())
+	} else {
+		userInfo.Hostname = parsedURL.Host
+	}
 	userInfo.Browser = userAgent
 	userInfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
 	filter := primitive.M{
