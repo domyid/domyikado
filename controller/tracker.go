@@ -109,6 +109,14 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ip, err := getIPAdressIpify()
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: "Gagal mendapatkan IP: " + err.Error(),
+		})
+		return
+	}
+	userInfo.IPv4 = ip
 	userInfo.Browser = userAgent
 	userInfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
 	filter := primitive.M{
