@@ -18,7 +18,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	var method, path string = r.Method, r.URL.Path
 	//tracker website yang dipasang di masing2 web peserta
 	origin := r.Header.Get("Origin")
-	if method == http.MethodOptions && path == "/api/tracker" {
+	if method == http.MethodOptions && (path == "/api/tracker" || path == "/api/trackertesting") {
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
 			return
@@ -218,7 +218,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// case method == "GET" && path == "/api/pomokit/allreport":
 	// 	controller.GetPomokitAllDataUser(w, r)
 	// Google Auth
-	// Tracker
+	// Tracker start
 	case method == "POST" && path == "/api/tracker":
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
@@ -226,8 +226,16 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
+	case method == "POST" && path == "/api/trackertesting":
+		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		controller.SimpanInformasiUserTesting(w, r)
 	case method == "POST" && path == "/api/laporantracker":
 		controller.LaporanengunjungWeb(w, r)
+	// Tracker end
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
 
