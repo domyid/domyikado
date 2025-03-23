@@ -13,6 +13,25 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+type IpifyResponse struct {
+	IP string `json:"ip"`
+}
+
+func getIPAdressIpify() (string, error) {
+	resp, err := http.Get("https://api.ipify.org/?format=json")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var ipifyResp IpifyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&ipifyResp); err != nil {
+		return "", err
+	}
+
+	return ipifyResp.IP, nil
+}
+
 func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	var userinfo model.UserInfo
 	waktusekarang := time.Now()
