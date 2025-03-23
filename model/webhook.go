@@ -72,6 +72,7 @@ type Userdomyikado struct {
 // skor asessment proyek1 dan lainnya aktifitas mingguan. ini pengganti kartu bimbingan
 type ActivityScore struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	CreatedAt   time.Time          `bson:"createdAt"` //kalo lebih dari seminggu auto hapus
 	PhoneNumber string             `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
 	Enroll      MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"`   //kelas atau proyek atau bimbingan
 	Sponsor     int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
