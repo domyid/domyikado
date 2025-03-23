@@ -77,12 +77,22 @@ func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	var userinfo model.UserInfo
+	var urlUserInfo model.UserInfo
+	var userInfo model.UserInfo
 	waktusekarang := time.Now()
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	origin := r.Header.Get("Origin")
+	referer := r.Header.Get("Referer")
+	if origin == "" && referer == "" {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&urlUserInfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "Error parsing application/json: " + err.Error(),
@@ -90,10 +100,10 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
+	userInfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
 	filter := primitive.M{
-		"ipv4":          userinfo.IPv4,
-		"hostname":      userinfo.Hostname,
+		"ipv4":          userInfo.IPv4,
+		"hostname":      userInfo.Hostname,
 		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
@@ -103,7 +113,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userinfo)
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userInfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: "Gagal Insert Database: " + err.Error(),
