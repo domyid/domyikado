@@ -75,3 +75,7 @@ func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
 		Response: "Berhasil simpan data",
 	})
 }
+
+func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
+
+}
