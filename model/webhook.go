@@ -89,6 +89,8 @@ type ActivityScore struct {
 	TotalScore  int                `bson:"total,omitempty" json:"total,omitempty"`
 	Approved    bool               `bson:"approved,omitempty" json:"approved,omitempty"`
 	Asesor      Userdomyikado      `bson:"asesor,omitempty" json:"asesor,omitempty"`
+	Validasi    int                `bson:"validasi,omitempty" json:"validasi,omitempty"`
+	Komentar    string             `bson:"komentar,omitempty" json:"komentar,omitempty"`
 }
 
 type Task struct {
