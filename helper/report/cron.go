@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gocroot/config"
@@ -413,32 +414,46 @@ func KirimLaporanPengunjungWebKeGrup(db *mongo.Database) (err error) {
 	return nil
 }
 
-// // RekapPomokitMingguan menjalankan proses pembuatan dan pengiriman laporan Pomokit mingguan
-// func RekapPomokitMingguan(db *mongo.Database) error {
-// 	manualGroupID := "120363393689851748" // Ganti dengan WAGroupID sesuai kebutuhan
-
-// 	reports, err := GetPomokitReportWeekly(db)
-// 	if err != nil {
-// 		return errors.New("Gagal mengambil data Pomokit mingguan: " + err.Error())
-// 	}
-
-// 	weeklySummaries := CalculateWeeklyPomokitSummary(reports)
-
-// 	msg := GenerateWeeklyReportMessage(weeklySummaries)
-
-// 	dt := &whatsauth.TextMessage{
-// 		To:       manualGroupID,
-// 		IsGroup:  true,
-// 		Messages: msg,
-// 	}
-
-// 	_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-// 	if err != nil {
-// 		return errors.New("Gagal mengirim laporan mingguan Pomokit: " + err.Error())
-// 	}
-
-// 	return nil
-// }
+// KirimLaporanPomokitKeGrupTarget mengirimkan laporan total Pomokit dari sourceGroupID ke targetGroupID
+func RekapPomokitKeGrupTarget(db *mongo.Database, sourceGroupID string, targetGroupID string) (err error) {
+    // Generate laporan dari group ID sumber
+    msg, err := GenerateTotalPomokitReportByGroupID(db, sourceGroupID)
+    if err != nil {
+        return fmt.Errorf("gagal membuat laporan: %v", err)
+    }
+    
+    // Periksa validitas groupID tujuan
+    if targetGroupID == "" {
+        return errors.New("targetGroupID tidak boleh kosong")
+    }
+    
+    // Buat pesan WhatsApp dengan target group ID
+    dt := &whatsauth.TextMessage{
+        To:       targetGroupID,
+        IsGroup:  true,
+        Messages: msg,
+    }
+    
+    // Tangani kasus khusus jika grup tujuan ID mengandung tanda hubung (kirim ke owner)
+    if strings.Contains(targetGroupID, "-") {
+        // Dapatkan nomor telepon owner
+        ownerPhone, err := getGroupOwnerPhone(db, targetGroupID)
+        if err != nil {
+            return fmt.Errorf("gagal mendapatkan nomor owner: %v", err)
+        }
+        dt.To = ownerPhone
+        dt.IsGroup = false
+    }
+    
+    // Kirim pesan ke API WhatsApp
+    var resp model.Response
+    _, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+    if err != nil {
+        return fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
+    }
+    
+    return nil
+}
 
 // Fungsi utama untuk mengirim rekap IQ Score ke WhatsApp Group
 func RekapIqScoreHarian(db *mongo.Database) error {

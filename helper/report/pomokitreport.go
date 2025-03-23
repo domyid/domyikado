@@ -515,157 +515,157 @@ func TotalPomokitPoint(db *mongo.Database) (map[string]float64, error) {
     return totalPoints, nil
 }
 
-func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
-    allPomokitData, err := GetAllPomokitData(db)
-    if err != nil {
-        return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
-    }
+// func GenerateTotalPomokitReport(db *mongo.Database) (string, error) {
+//     allPomokitData, err := GetAllPomokitData(db)
+//     if err != nil {
+//         return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+//     }
     
-    if len(allPomokitData) == 0 {
-        return "Tidak ada data Pomokit yang tersedia", nil
-    }
+//     if len(allPomokitData) == 0 {
+//         return "Tidak ada data Pomokit yang tersedia", nil
+//     }
     
-    // Timezone Jakarta untuk konsistensi
-    location, _ := time.LoadLocation("Asia/Jakarta")
-    if location == nil {
-        location = time.Local
-    }
+//     // Timezone Jakarta untuk konsistensi
+//     location, _ := time.LoadLocation("Asia/Jakarta")
+//     if location == nil {
+//         location = time.Local
+//     }
     
-    // Count every individual activity
-    userActivityCounts := make(map[string]int)
-    userInfo := make(map[string]struct {
-        Name     string
-        GroupID  string
-    })
+//     // Count every individual activity
+//     userActivityCounts := make(map[string]int)
+//     userInfo := make(map[string]struct {
+//         Name     string
+//         GroupID  string
+//     })
     
-    dateSet := make(map[string]bool)
-    earliestDate := time.Now()
-    latestDate := time.Time{}
+//     dateSet := make(map[string]bool)
+//     earliestDate := time.Now()
+//     latestDate := time.Time{}
     
-    // Kumpulkan semua tanggal aktivitas
-    activityDates := make(map[string]map[string]bool) // phoneNumber -> dateStr -> bool
+//     // Kumpulkan semua tanggal aktivitas
+//     activityDates := make(map[string]map[string]bool) // phoneNumber -> dateStr -> bool
     
-    for _, report := range allPomokitData {
-        phoneNumber := report.PhoneNumber
-        groupID := report.WaGroupID
+//     for _, report := range allPomokitData {
+//         phoneNumber := report.PhoneNumber
+//         groupID := report.WaGroupID
         
-        if phoneNumber == "" || groupID == "" {
-            continue
-        }
+//         if phoneNumber == "" || groupID == "" {
+//             continue
+//         }
         
-        userInfo[phoneNumber] = struct {
-            Name     string
-            GroupID  string
-        }{
-            Name:     report.Name,
-            GroupID:  groupID,
-        }
+//         userInfo[phoneNumber] = struct {
+//             Name     string
+//             GroupID  string
+//         }{
+//             Name:     report.Name,
+//             GroupID:  groupID,
+//         }
         
-        // Count each activity individually
-        userActivityCounts[phoneNumber]++
+//         // Count each activity individually
+//         userActivityCounts[phoneNumber]++
         
-        // Proses informasi tanggal
-        activityTime := report.CreatedAt.In(location)
-        dateStr := activityTime.Format("2006-01-02")
+//         // Proses informasi tanggal
+//         activityTime := report.CreatedAt.In(location)
+//         dateStr := activityTime.Format("2006-01-02")
         
-        // Tambahkan ke activityDates
-        if _, exists := activityDates[phoneNumber]; !exists {
-            activityDates[phoneNumber] = make(map[string]bool)
-        }
-        activityDates[phoneNumber][dateStr] = true
+//         // Tambahkan ke activityDates
+//         if _, exists := activityDates[phoneNumber]; !exists {
+//             activityDates[phoneNumber] = make(map[string]bool)
+//         }
+//         activityDates[phoneNumber][dateStr] = true
         
-        if activityTime.Before(earliestDate) {
-            earliestDate = activityTime
-        }
-        if activityTime.After(latestDate) {
-            latestDate = activityTime
-        }
+//         if activityTime.Before(earliestDate) {
+//             earliestDate = activityTime
+//         }
+//         if activityTime.After(latestDate) {
+//             latestDate = activityTime
+//         }
         
-        dateSet[dateStr] = true
-    }
+//         dateSet[dateStr] = true
+//     }
     
-    // Convert date set to slice for iteration
-    var allDates []string
-    for dateStr := range dateSet {
-        allDates = append(allDates, dateStr)
-    }
+//     // Convert date set to slice for iteration
+//     var allDates []string
+//     for dateStr := range dateSet {
+//         allDates = append(allDates, dateStr)
+//     }
     
-    // Sort dates from oldest to newest
-    sort.Strings(allDates)
+//     // Sort dates from oldest to newest
+//     sort.Strings(allDates)
     
-    // Calculate penalties for days without activity
-    userPoints := make(map[string]float64)
+//     // Calculate penalties for days without activity
+//     userPoints := make(map[string]float64)
     
-    for phoneNumber := range userInfo {
-        // Start with the activity count
-        userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber])
+//     for phoneNumber := range userInfo {
+//         // Start with the activity count
+//         userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber])
         
-        // For each date in the dataset
-        for _, dateStr := range allDates {
-            date, _ := time.Parse("2006-01-02", dateStr)
-            isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
-            isHoliday := HariLibur(date)
+//         // For each date in the dataset
+//         for _, dateStr := range allDates {
+//             date, _ := time.Parse("2006-01-02", dateStr)
+//             isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
+//             isHoliday := HariLibur(date)
             
-            // Skip weekends and holidays for penalty calculation
-            if isWeekend || isHoliday {
-                continue
-            }
+//             // Skip weekends and holidays for penalty calculation
+//             if isWeekend || isHoliday {
+//                 continue
+//             }
             
-            // Periksa apakah pengguna memiliki aktivitas pada tanggal ini
-            if activityDates[phoneNumber] == nil || !activityDates[phoneNumber][dateStr] {
-                userPoints[phoneNumber] -= 1
-            }
-        }
-    }
+//             // Periksa apakah pengguna memiliki aktivitas pada tanggal ini
+//             if activityDates[phoneNumber] == nil || !activityDates[phoneNumber][dateStr] {
+//                 userPoints[phoneNumber] -= 1
+//             }
+//         }
+//     }
     
-    msg := "*Total Akumulasi Poin Pomokit Semua Waktu*\n\n"
+//     msg := "*Total Akumulasi Poin Pomokit Semua Waktu*\n\n"
     
-    type UserPoint struct {
-        Name         string
-        PhoneNumber  string
-        Points       float64
-        ActivityCount int
-    }
+//     type UserPoint struct {
+//         Name         string
+//         PhoneNumber  string
+//         Points       float64
+//         ActivityCount int
+//     }
     
-    var userPointsList []UserPoint
-    for phoneNumber, points := range userPoints {
-        info := userInfo[phoneNumber]
-        userPointsList = append(userPointsList, UserPoint{
-            Name:         info.Name,
-            PhoneNumber:  phoneNumber,
-            Points:       points,
-            ActivityCount: userActivityCounts[phoneNumber],
-        })
-    }
+//     var userPointsList []UserPoint
+//     for phoneNumber, points := range userPoints {
+//         info := userInfo[phoneNumber]
+//         userPointsList = append(userPointsList, UserPoint{
+//             Name:         info.Name,
+//             PhoneNumber:  phoneNumber,
+//             Points:       points,
+//             ActivityCount: userActivityCounts[phoneNumber],
+//         })
+//     }
     
-    sort.Slice(userPointsList, func(i, j int) bool {
-        return userPointsList[i].Points > userPointsList[j].Points
-    })
+//     sort.Slice(userPointsList, func(i, j int) bool {
+//         return userPointsList[i].Points > userPointsList[j].Points
+//     })
     
-    for _, up := range userPointsList {
-        displayName := up.Name
-        if displayName == "" {
-            displayName = "Pengguna " + up.PhoneNumber
-        }
+//     for _, up := range userPointsList {
+//         displayName := up.Name
+//         if displayName == "" {
+//             displayName = "Pengguna " + up.PhoneNumber
+//         }
         
-        // Format baru: menampilkan total poin dalam kurung, bukan jumlah aktivitas
-        if up.Points >= 0 {
-            msg += fmt.Sprintf("✅ %s (%s): +%.0f poin (total: %.0f)\n", 
-                displayName, up.PhoneNumber, up.Points, up.Points)
-        } else {
-            msg += fmt.Sprintf("⛔ %s (%s): %.0f poin (total: %.0f)\n", 
-                displayName, up.PhoneNumber, up.Points, up.Points)
-        }
-    }
+//         // Format baru: menampilkan total poin dalam kurung, bukan jumlah aktivitas
+//         if up.Points >= 0 {
+//             msg += fmt.Sprintf("✅ %s (%s): +%.0f poin (total: %.0f)\n", 
+//                 displayName, up.PhoneNumber, up.Points, up.Points)
+//         } else {
+//             msg += fmt.Sprintf("⛔ %s (%s): %.0f poin (total: %.0f)\n", 
+//                 displayName, up.PhoneNumber, up.Points, up.Points)
+//         }
+//     }
     
-    msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
-        earliestDate.Format("2006-01-02"), 
-        latestDate.Format("2006-01-02"))
+//     msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
+//         earliestDate.Format("2006-01-02"), 
+//         latestDate.Format("2006-01-02"))
     
-    msg += "\n*Catatan: +1 poin untuk setiap aktivitas Pomodoro, -1 poin untuk setiap hari kerja tanpa aktivitas*"
+//     msg += "\n*Catatan: +1 poin untuk setiap aktivitas Pomodoro, -1 poin untuk setiap hari kerja tanpa aktivitas*"
     
-    return msg, nil
-}
+//     return msg, nil
+// }
 
 
 func CountPomokitActivity(reports []model.PomodoroReport) map[string]PomokitInfo {
@@ -905,14 +905,6 @@ func getGroupOwnerPhone(db *mongo.Database, groupID string) (string, error) {
 	return project.Owner.PhoneNumber, nil
 }
 
-// // GeneratePomokitRekapMingguan membuat rekap aktivitas Pomokit mingguan
-// func GeneratePomokitRekapMingguan(db *mongo.Database) (msg string, err error) {
-// 	// Implementasi sama seperti harian tapi dengan filter WeeklyFilter()
-// 	// ...
-// 	return "Rekap Mingguan Pomokit", nil
-// }
-
-// Fungsi GenerateTotalPomokitReport tanpa penalti poin
 func GenerateTotalPomokitReportNoPenalty(db *mongo.Database) (string, error) {
     allPomokitData, err := GetAllPomokitData(db)
     if err != nil {
@@ -1027,6 +1019,144 @@ func GenerateTotalPomokitReportNoPenalty(db *mongo.Database) (string, error) {
         earliestDate.Format("2006-01-02"), 
         latestDate.Format("2006-01-02"))
     
+    msg += "\n*Catatan: +1 poin untuk setiap aktivitas Pomodoro*"
+    
+    return msg, nil
+}
+
+// GenerateTotalPomokitReportByGroupID menghasilkan laporan total aktivitas Pomokit untuk grup tertentu
+func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (string, error) {
+    // Ambil semua data Pomokit dari API
+    allPomokitData, err := GetAllPomokitData(db)
+    if err != nil {
+        return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+    }
+    
+    if len(allPomokitData) == 0 {
+        return "Tidak ada data Pomokit yang tersedia", nil
+    }
+    
+    // Timezone Jakarta untuk konsistensi
+    location, _ := time.LoadLocation("Asia/Jakarta")
+    if location == nil {
+        location = time.Local
+    }
+    
+    // Hitung jumlah aktivitas per pengguna
+    userActivityCounts := make(map[string]int)
+    userInfo := make(map[string]struct {
+        Name     string
+        GroupID  string
+    })
+    
+    dateSet := make(map[string]bool)
+    earliestDate := time.Now()
+    latestDate := time.Time{}
+    
+    // Filter data berdasarkan WAGroupID yang diminta
+    var filteredPomokitData []model.PomodoroReport
+    for _, report := range allPomokitData {
+        if report.WaGroupID == groupID {
+            filteredPomokitData = append(filteredPomokitData, report)
+        }
+    }
+    
+    if len(filteredPomokitData) == 0 {
+        return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk GroupID %s", groupID), nil
+    }
+    
+    // Proses data yang sudah difilter
+    for _, report := range filteredPomokitData {
+        phoneNumber := report.PhoneNumber
+        curGroupID := report.WaGroupID
+        
+        if phoneNumber == "" || curGroupID == "" {
+            continue
+        }
+        
+        userInfo[phoneNumber] = struct {
+            Name     string
+            GroupID  string
+        }{
+            Name:     report.Name,
+            GroupID:  curGroupID,
+        }
+        
+        // Hitung setiap aktivitas individual
+        userActivityCounts[phoneNumber]++
+        
+        activityTime := report.CreatedAt.In(location)
+        dateStr := activityTime.Format("2006-01-02")
+        
+        if activityTime.Before(earliestDate) {
+            earliestDate = activityTime
+        }
+        if activityTime.After(latestDate) {
+            latestDate = activityTime
+        }
+        
+        dateSet[dateStr] = true
+    }
+    
+    // Hitung poin (tanpa penalti)
+    userPoints := make(map[string]float64)
+    
+    for phoneNumber := range userInfo {
+        // Hanya menghitung aktivitas sebagai poin positif, tanpa penalti
+        userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber])
+    }
+    
+    // Coba dapatkan nama proyek dari database
+    var projectName string = "Grup " + groupID
+    project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
+    if err == nil {
+        projectName = project.Name
+    }
+    
+    // Format pesan laporan
+    msg := fmt.Sprintf("*Total Akumulasi Poin Pomokit untuk %s*\n\n", projectName)
+    
+    type UserPoint struct {
+        Name         string
+        PhoneNumber  string
+        Points       float64
+        ActivityCount int
+    }
+    
+    // Konversi map ke slice untuk pengurutan
+    var userPointsList []UserPoint
+    for phoneNumber, points := range userPoints {
+        info := userInfo[phoneNumber]
+        userPointsList = append(userPointsList, UserPoint{
+            Name:         info.Name,
+            PhoneNumber:  phoneNumber,
+            Points:       points,
+            ActivityCount: userActivityCounts[phoneNumber],
+        })
+    }
+    
+    // Urutkan berdasarkan poin (dari tertinggi ke terendah)
+    sort.Slice(userPointsList, func(i, j int) bool {
+        return userPointsList[i].Points > userPointsList[j].Points
+    })
+    
+    // Tambahkan detail user ke pesan
+    for _, up := range userPointsList {
+        displayName := up.Name
+        if displayName == "" {
+            displayName = "Pengguna " + up.PhoneNumber
+        }
+        
+        msg += fmt.Sprintf("✅ %s (%s): +%.0f poin (total: %.0f)\n", 
+            displayName, up.PhoneNumber, up.Points, up.Points)
+    }
+    
+    // Tambahkan informasi rentang waktu
+    msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
+        earliestDate.Format("2006-01-02"), 
+        latestDate.Format("2006-01-02"))
+    
+    // Tambahkan catatan
     msg += "\n*Catatan: +1 poin untuk setiap aktivitas Pomodoro*"
     
     return msg, nil

@@ -332,3 +332,73 @@ func GetTotalPomokitPoin(respw http.ResponseWriter, req *http.Request) {
 // 	resp.Response = msg
 // 	at.WriteJSON(respw, http.StatusOK, resp)
 // }
+
+// GetLaporanPomokitKeGrupTarget handler untuk endpoint laporan Pomokit dari satu grup ke grup lainnya
+func GetLaporanPomokitKeGrupTarget(respw http.ResponseWriter, req *http.Request) {
+    var resp model.Response
+    
+    // Ambil sourceGroupID dari parameter query
+    sourceGroupID := req.URL.Query().Get("sourcegroupid")
+    if sourceGroupID == "" {
+        resp.Status = "Error"
+        resp.Location = "Laporan Pomokit Ke Grup Target"
+        resp.Response = "Parameter 'sourcegroupid' tidak boleh kosong"
+        at.WriteJSON(respw, http.StatusBadRequest, resp)
+        return
+    }
+    
+    // Ambil targetGroupID dari parameter query
+    targetGroupID := req.URL.Query().Get("targetgroupid")
+    if targetGroupID == "" {
+        resp.Status = "Error"
+        resp.Location = "Laporan Pomokit Ke Grup Target"
+        resp.Response = "Parameter 'targetgroupid' tidak boleh kosong"
+        at.WriteJSON(respw, http.StatusBadRequest, resp)
+        return
+    }
+    
+    var wg sync.WaitGroup
+    var errChan = make(chan error, 1)
+    
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        if err := report.RekapPomokitKeGrupTarget(config.Mongoconn, sourceGroupID, targetGroupID); err != nil {
+            // Kirim error ke channel jika terjadi
+            select {
+            case errChan <- err:
+                // Error berhasil dikirim
+            default:
+                // Channel penuh, error tidak dikirim
+            }
+        }
+    }()
+    
+    // Tunggu dengan timeout 3 detik
+    done := make(chan struct{})
+    go func() {
+        wg.Wait()
+        close(done)
+    }()
+    
+    select {
+    case <-done:
+        // Proses selesai tepat waktu
+        resp.Status = "Sukses"
+        resp.Location = "Laporan Pomokit Ke Grup Target"
+        resp.Response = fmt.Sprintf("Proses pengiriman laporan Pomokit dari grup %s ke grup %s berhasil diselesaikan", sourceGroupID, targetGroupID)
+        at.WriteJSON(respw, http.StatusOK, resp)
+    case err := <-errChan:
+        // Terjadi error
+        resp.Status = "Error"
+        resp.Location = "Laporan Pomokit Ke Grup Target"
+        resp.Response = err.Error()
+        at.WriteJSON(respw, http.StatusInternalServerError, resp)
+    case <-time.After(3 * time.Second):
+        // Timeout tetapi proses tetap berjalan di background
+        resp.Status = "Sukses"
+        resp.Location = "Laporan Pomokit Ke Grup Target"
+        resp.Response = fmt.Sprintf("Proses pengiriman laporan Pomokit dari grup %s ke grup %s telah dimulai dan sedang berjalan di background", sourceGroupID, targetGroupID)
+        at.WriteJSON(respw, http.StatusOK, resp)
+    }
+}
