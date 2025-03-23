@@ -16,25 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type IpifyResponse struct {
-	IP string `json:"ip"`
-}
-
-func getIPAdressIpify() (string, error) {
-	resp, err := http.Get("https://api.ipify.org/?format=json")
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	var ipifyResp IpifyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ipifyResp); err != nil {
-		return "", err
-	}
-
-	return ipifyResp.IP, nil
-}
-
 func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	var userinfo model.UserInfo
 	waktusekarang := time.Now()
@@ -111,14 +92,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip, err := getIPAdressIpify()
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Response: "Gagal mendapatkan IP: " + err.Error(),
-		})
-		return
-	}
-	userInfo.IPv4 = ip
+	userInfo.IPv4 = urlUserInfo.IPv4
 	if urlUserInfo.Url == "" {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "URL tidak boleh kosong",
@@ -139,7 +113,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if parsedURL.Host == "t.if.co.id" {
+	if parsedURL.Host == "befous.github.io" {
 		userInfo.Hostname = fmt.Sprintf("%s%s", parsedURL.Host, parsedURL.EscapedPath())
 	} else {
 		userInfo.Hostname = parsedURL.Host
