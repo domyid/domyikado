@@ -209,6 +209,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// Endpoint untuk meng-refresh rekap IQ Score harian
 	case method == "GET" && path == "/refresh/report/iqscoreharian":
 		controller.GetIqScoreData(w, r)
+	// Pre Test
+	case method == "GET" && strings.HasPrefix(path, "/api/pretest/question/"):
+		controller.GetOnePreTestQuestion(w, r)
 	// Pomodoro
 	// case method == "GET" && path == ("/api/pomokit/report"):
 	// 	controller.GetPomokitDataUser(w, r)
