@@ -31,6 +31,7 @@ type Project struct {
 	Enroll       string             `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
 	MasterEnrool MasterEnrool       `bson:"masterenroll,omitempty" json:"masterenroll,omitempty"`
 	Secret       string             `bson:"secret" json:"secret"`
+	GithubToken  string             `bson:"githubtoken" json:"githubtoken"`
 	Name         string             `bson:"name" json:"name"`
 	Description  string             `bson:"description" json:"description"`
 	Owner        Userdomyikado      `bson:"owner" json:"owner"`
