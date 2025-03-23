@@ -1024,9 +1024,7 @@ func GenerateTotalPomokitReportNoPenalty(db *mongo.Database) (string, error) {
     return msg, nil
 }
 
-// GenerateTotalPomokitReportByGroupID menghasilkan laporan total aktivitas Pomokit untuk grup tertentu
 func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (string, error) {
-    // Ambil semua data Pomokit dari API
     allPomokitData, err := GetAllPomokitData(db)
     if err != nil {
         return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
@@ -1042,7 +1040,6 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
         location = time.Local
     }
     
-    // Hitung jumlah aktivitas per pengguna
     userActivityCounts := make(map[string]int)
     userInfo := make(map[string]struct {
         Name     string
@@ -1053,24 +1050,17 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
     earliestDate := time.Now()
     latestDate := time.Time{}
     
-    // Filter data berdasarkan WAGroupID yang diminta
-    var filteredPomokitData []model.PomodoroReport
+    // Filter dan hitung aktivitas berdasarkan WAGroupID
     for _, report := range allPomokitData {
-        if report.WaGroupID == groupID {
-            filteredPomokitData = append(filteredPomokitData, report)
-        }
-    }
-    
-    if len(filteredPomokitData) == 0 {
-        return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk GroupID %s", groupID), nil
-    }
-    
-    // Proses data yang sudah difilter
-    for _, report := range filteredPomokitData {
         phoneNumber := report.PhoneNumber
-        curGroupID := report.WaGroupID
+        reportGroupID := report.WaGroupID
         
-        if phoneNumber == "" || curGroupID == "" {
+        // Lewati record yang tidak cocok dengan groupID yang dicari
+        if reportGroupID != groupID {
+            continue
+        }
+        
+        if phoneNumber == "" {
             continue
         }
         
@@ -1079,7 +1069,7 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
             GroupID  string
         }{
             Name:     report.Name,
-            GroupID:  curGroupID,
+            GroupID:  reportGroupID,
         }
         
         // Hitung setiap aktivitas individual
@@ -1096,6 +1086,11 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
         }
         
         dateSet[dateStr] = true
+    }
+    
+    // Cek apakah ada data yang difilter
+    if len(userActivityCounts) == 0 {
+        return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk GroupID %s", groupID), nil
     }
     
     // Hitung poin (tanpa penalti)
@@ -1152,9 +1147,11 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
     }
     
     // Tambahkan informasi rentang waktu
-    msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
-        earliestDate.Format("2006-01-02"), 
-        latestDate.Format("2006-01-02"))
+    if !earliestDate.Equal(time.Now()) && !latestDate.IsZero() {
+        msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
+            earliestDate.Format("2006-01-02"), 
+            latestDate.Format("2006-01-02"))
+    }
     
     // Tambahkan catatan
     msg += "\n*Catatan: +1 poin untuk setiap aktivitas Pomodoro*"

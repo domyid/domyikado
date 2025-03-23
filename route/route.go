@@ -238,8 +238,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetPomokitRekapHarian(w, r)
 	case method == "GET" && path == "/report/pomokit/all":
 		controller.GetTotalPomokitPoin(w, r)
-	case method == "GET" && path == "/report/pomokit/grup/target":
-		controller.GetLaporanPomokitKeGrupTarget(w, r)
+	case method == "GET" && path == "/report/pomokit/grup": // Pastikan path ini sesuai dengan URL yang digunakan
+		controller.GetLaporanPomokitPerGrup(w, r)
 
 	//strava coba
 	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
