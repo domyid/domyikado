@@ -178,95 +178,6 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, pomodoroReports)
 }
 
-func GetPomokitRekapHarian(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
-	var wg sync.WaitGroup
-	var errChan = make(chan error, 1)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.RekapPomokitHarian(config.Mongoconn); err != nil {
-			// Mengirim error ke channel jika terjadi
-			select {
-			case errChan <- err:
-				// Error berhasil dikirim
-			default:
-				// Channel penuh, error tidak dikirim
-			}
-		}
-	}()
-
-	// Menunggu dengan timeout 10 detik
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Proses selesai tepat waktu
-	case err := <-errChan:
-		// Terjadi error
-		resp.Status = "Error"
-		resp.Location = "Pomokit Rekap Harian"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-		return
-	case <-time.After(10 * time.Second):
-		// Timeout, tetapi kita tetap melanjutkan karena goroutine berjalan di background
-		fmt.Println("GetPomokitRekapHarian: timeout occurred but process continues in background")
-	}
-
-	// Laporan masih diproses di background jika timeout
-	resp.Status = "Success"
-	resp.Location = "Pomokit Rekap Harian"
-	resp.Response = "Proses pengiriman rekap aktivitas Pomokit harian telah dimulai"
-	at.WriteJSON(respw, http.StatusOK, resp)
-}
-
-func TestPomokitRekapHarian(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
-
-	// Channel untuk menerima hasil rekap
-	resultChan := make(chan string, 1)
-	errChan := make(chan error, 1)
-
-	go func() {
-		msg, err := report.GeneratePomokitRekapHarian(config.Mongoconn)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		resultChan <- msg
-	}()
-
-	// Menunggu hasil dengan timeout 5 detik
-	select {
-	case msg := <-resultChan:
-		// Hasil diterima
-		resp.Status = "Success"
-		resp.Location = "Test Pomokit Rekap"
-		resp.Response = msg // Tampilkan rekap sebagai response
-		at.WriteJSON(respw, http.StatusOK, resp)
-
-	case err := <-errChan:
-		// Error diterima
-		resp.Status = "Error"
-		resp.Location = "Test Pomokit Rekap"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-
-	case <-time.After(5 * time.Second):
-		// Timeout setelah 5 detik
-		resp.Status = "Error"
-		resp.Location = "Test Pomokit Rekap"
-		resp.Response = "Timeout: Proses rekap membutuhkan waktu terlalu lama"
-		at.WriteJSON(respw, http.StatusRequestTimeout, resp)
-	}
-}
-
 func GetTotalPomokitPoin(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 	var wg sync.WaitGroup
@@ -315,28 +226,6 @@ func GetTotalPomokitPoin(respw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// // GetPomokitRekapMingguan endpoint untuk mengirim rekap pomokit mingguan
-// func GetPomokitRekapMingguan(respw http.ResponseWriter, req *http.Request) {
-// 	var resp model.Response
-
-// 	// Generate rekap mingguan
-// 	msg, err := report.GeneratePomokitRekapMingguan(config.Mongoconn)
-// 	if err != nil {
-// 		resp.Status = "Error"
-// 		resp.Location = "Pomokit Rekap Mingguan"
-// 		resp.Response = err.Error()
-// 		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-// 		return
-// 	}
-
-// 	// Tampilkan rekap di response
-// 	resp.Status = "Success"
-// 	resp.Location = "Pomokit Rekap Mingguan"
-// 	resp.Response = msg
-// 	at.WriteJSON(respw, http.StatusOK, resp)
-// }
-
-// GetLaporanPomokitPerGrup handler untuk endpoint laporan Pomokit per grup
 func GetLaporanPomokitPerGrup(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 

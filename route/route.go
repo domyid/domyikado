@@ -239,17 +239,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
 
-	case method == "GET" && path == "/api/pomokit/rekap/harian":
-		controller.GetPomokitRekapHarian(w, r)
-	case method == "GET" && path == "/api/pomokit/rekap/harian/test":
-		controller.TestPomokitRekapHarian(w, r)
-	// case method == "GET" && path == "/api/pomokit/rekap/mingguan":
-	// 	controller.GetPomokitRekapMingguan(w, r)
-	case method == "GET" && path == "/refresh/report/pomokit":
-		controller.GetPomokitRekapHarian(w, r)
+	// Pomodoro
 	case method == "GET" && path == "/report/pomokit/all":
 		controller.GetTotalPomokitPoin(w, r)
-	case method == "GET" && path == "/report/pomokit/grup": // Pastikan path ini sesuai dengan URL yang digunakan
+	case method == "GET" && path == "/report/pomokit/grup":
 		controller.GetLaporanPomokitPerGrup(w, r)
 
 	//strava coba
