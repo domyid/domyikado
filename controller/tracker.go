@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
@@ -92,6 +93,14 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userAgent := r.UserAgent()
+	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak sah",
+		})
+		return
+	}
+
 	err := json.NewDecoder(r.Body).Decode(&urlUserInfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
@@ -100,6 +109,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userInfo.Browser = userAgent
 	userInfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
 	filter := primitive.M{
 		"ipv4":          userInfo.IPv4,
