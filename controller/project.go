@@ -42,6 +42,17 @@ func PostDataProject(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
+	if prj.Enroll != "" {
+		docenroll, err := atdb.GetOneDoc[model.MasterEnrool](config.Mongoconn, "enroll", primitive.M{"kode": prj.Enroll})
+		if err != nil {
+			var respn model.Response
+			respn.Status = "Error : Data enroll tidak di temukan"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotImplemented, respn)
+			return
+		}
+		prj.MasterEnrool = docenroll
+	}
 	prj.Owner = docuser
 	prj.Secret = watoken.RandomString(48)
 	prj.Name = normalize.SetIntoID(prj.Name)
