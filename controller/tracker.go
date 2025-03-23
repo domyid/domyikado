@@ -77,5 +77,40 @@ func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
+	var userinfo model.UserInfo
+	waktusekarang := time.Now()
+	jam00 := waktusekarang.Truncate(24 * time.Hour)
+	jam24 := jam00.Add(24*time.Hour - time.Second)
 
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Error parsing application/json: " + err.Error(),
+		})
+		return
+	}
+
+	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
+	filter := primitive.M{
+		"ipv4":          userinfo.IPv4,
+		"hostname":      userinfo.Hostname,
+		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
+	}
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
+	if err == nil && exist.IPv4 != "" {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Hari ini sudah absen",
+		})
+		return
+	}
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: "Gagal Insert Database: " + err.Error(),
+		})
+		return
+	}
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: "Berhasil simpan data",
+	})
 }
