@@ -270,42 +270,6 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 	return nil
 }
 
-func RekapTotalPomokitPoin(db *mongo.Database) (err error) {
-	// Generate rekap
-	msg, err := GenerateTotalPomokitReportNoPenalty(db)
-	if err != nil {
-		return err
-	}
-
-	// Menggunakan manual group ID yang spesifik
-	manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
-
-	var lastErr error
-
-	for _, groupID := range manualGroupIDs {
-		// Kirim pesan ke grup WhatsApp
-		dt := &whatsauth.TextMessage{
-			To:       groupID,
-			IsGroup:  true,
-			Messages: msg,
-		}
-
-		// Kirim WA ke API
-		var resp model.Response
-		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-		if err != nil {
-			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
-			continue
-		}
-	}
-
-	if lastErr != nil {
-		return lastErr
-	}
-
-	return nil
-}
-
 // KirimLaporanPomokitKeGrupTarget mengirimkan laporan total Pomokit dari sourceGroupID ke targetGroupID
 func RekapPomokitKeGrupTarget(db *mongo.Database, sourceGroupID string, targetGroupID string) (err error) {
     // Generate laporan dari group ID sumber
