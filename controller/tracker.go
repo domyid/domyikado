@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -79,7 +80,7 @@ func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func GetUserIP(r *http.Request) string {
+func GetUserIPv6(r *http.Request) string {
 	// Cek X-Forwarded-For (jika API berada di balik proxy)
 	ip := r.Header.Get("X-Forwarded-For")
 	if ip != "" {
@@ -96,6 +97,33 @@ func GetUserIP(r *http.Request) string {
 	// Jika tidak ada, gunakan RemoteAddr
 	ip, _, _ = net.SplitHostPort(r.RemoteAddr)
 	return ip
+}
+
+var ipv4Regex = regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
+
+func GetUserIPv4(r *http.Request) string {
+	xForwardedFor := r.Header.Get("X-Forwarded-For")
+	if xForwardedFor != "" {
+		ips := strings.Split(xForwardedFor, ",")
+		for _, ip := range ips {
+			ip = strings.TrimSpace(ip)
+			if ipv4Regex.MatchString(ip) {
+				return ip
+			}
+		}
+	}
+
+	xRealIP := r.Header.Get("X-Real-IP")
+	if ipv4Regex.MatchString(xRealIP) {
+		return xRealIP
+	}
+
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && ipv4Regex.MatchString(ip) {
+		return ip
+	}
+
+	return ""
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +158,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userInfo.IPv4 = GetUserIP(r)
+	userInfo.IPv4 = GetUserIPv6(r)
 	if urlUserInfo.Url == "" {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "URL tidak boleh kosong",
@@ -156,7 +184,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 	} else {
 		userInfo.Hostname = parsedURL.Host
 	}
-	userInfo.Browser = userAgent
+	userInfo.Browser = GetUserIPv4(r)
 	userInfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
 	filter := primitive.M{
 		"ipv4":          userInfo.IPv4,
