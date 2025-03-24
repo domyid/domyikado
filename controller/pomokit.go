@@ -292,50 +292,41 @@ func GetLaporanPomokitPerGrup(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
 
-func GetPomokitReportKemarin(respw http.ResponseWriter, req *http.Request) {
+func GetPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
-	var wg sync.WaitGroup
-	var errChan = make(chan error, 1)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.RekapPomokitKemarin(config.Mongoconn); err != nil {
-			// Mengirim error ke channel jika terjadi
-			select {
-			case errChan <- err:
-				// Error berhasil dikirim
-			default:
-				// Channel penuh, error tidak dikirim
-			}
-		}
-	}()
-
-	// Menunggu dengan timeout 2 detik
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Proses selesai tepat waktu
-		resp.Status = "Success"
-		resp.Location = "Pomokit Report Kemarin"
-		resp.Response = "Proses pengiriman laporan Pomokit kemarin berhasil diselesaikan"
-		at.WriteJSON(respw, http.StatusOK, resp)
-	case err := <-errChan:
-		// Terjadi error
+	// Ambil groupID dari parameter query
+	groupID := req.URL.Query().Get("groupid")
+	if groupID == "" {
 		resp.Status = "Error"
-		resp.Location = "Pomokit Report Kemarin"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-	case <-time.After(2 * time.Second):
-		// Timeout, tetapi proses tetap berjalan di background
-		resp.Status = "Success"
-		resp.Location = "Pomokit Report Kemarin"
-		resp.Response = "Proses pengiriman laporan Pomokit kemarin telah dimulai dan sedang berjalan di background"
-		at.WriteJSON(respw, http.StatusOK, resp)
+		resp.Location = "Laporan Pomokit Kemarin Per Grup"
+		resp.Response = "Parameter 'groupid' tidak boleh kosong"
+		at.WriteJSON(respw, http.StatusBadRequest, resp)
+		return
 	}
+
+	// Generate laporan hanya untuk groupID tertentu
+	msg, err := report.GeneratePomokitReportKemarin(config.Mongoconn, groupID)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Laporan Pomokit Kemarin Per Grup"
+		resp.Response = "Gagal menghasilkan laporan: " + err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Cek apakah laporan kosong (tidak ada data untuk grup)
+	if strings.Contains(msg, "Tidak ada aktivitas") {
+		resp.Status = "Warning"
+		resp.Location = "Laporan Pomokit Kemarin Per Grup"
+		resp.Response = msg
+		at.WriteJSON(respw, http.StatusOK, resp)
+		return
+	}
+
+	// Mengembalikan laporan sebagai respons API tanpa mengirim ke WhatsApp
+	resp.Status = "Success"
+	resp.Location = "Laporan Pomokit Kemarin Per Grup"
+	resp.Response = msg
+	at.WriteJSON(respw, http.StatusOK, resp)
 }
