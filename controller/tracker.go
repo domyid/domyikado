@@ -21,6 +21,16 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	waktusekarang := time.Now()
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
+
+	origin := r.Header.Get("Origin")
+	referer := r.Header.Get("Referer")
+	if origin == "" && referer == "" {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return
+	}
+
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
