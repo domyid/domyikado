@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -78,6 +79,25 @@ func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func GetUserIP(r *http.Request) string {
+	// Cek X-Forwarded-For (jika API berada di balik proxy)
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip != "" {
+		ips := strings.Split(ip, ",")
+		return strings.TrimSpace(ips[0]) // Ambil IP pertama (IP user asli)
+	}
+
+	// Cek X-Real-IP (jika tersedia)
+	ip = r.Header.Get("X-Real-IP")
+	if ip != "" {
+		return ip
+	}
+
+	// Jika tidak ada, gunakan RemoteAddr
+	ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+	return ip
+}
+
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 	var urlUserInfo model.UserInfo
 	var userInfo model.UserInfo
@@ -110,7 +130,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userInfo.IPv4 = r.RemoteAddr
+	userInfo.IPv4 = GetUserIP(r)
 	if urlUserInfo.Url == "" {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "URL tidak boleh kosong",
