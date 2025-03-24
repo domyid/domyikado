@@ -4,7 +4,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type pretestquestion struct {
+type PreTestQuestion struct {
 	ID        string  `json:"id" bson:"id"`
 	Question  string  `json:"question" bson:"question"`
 	Image     string  `json:"image" bson:"image"`
@@ -14,7 +14,7 @@ type pretestquestion struct {
 	DeletedAt *string `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
 }
 
-type pretestscoring struct {
+type PreTestScoring struct {
 	ID        string  `json:"id" bson:"id"`
 	Pratest   string  `json:"pratest" bson:"pratest"`
 	Score     string  `json:"score" bson:"score"`
@@ -22,7 +22,7 @@ type pretestscoring struct {
 	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
 
-type pretestuser struct {
+type PreTestUser struct {
 	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
 	Name        string             `json:"name,omitempty"`
 	PhoneNumber string             `json:"phonenumber,omitempty"`
@@ -33,7 +33,7 @@ type pretestuser struct {
 	CreatedAt   string             `json:"created_at,omitempty"`
 }
 
-type pretestuseranswer struct {
+type PreTestUserAnswer struct {
 	Name    string   `json:"name"`
 	Answers []string `json:"answers"`
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -26,7 +27,7 @@ func GetOnePreTestQuestion(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	var PreTestQuestion SoalIQ
+	var PreTestQuestion model.PreTestQuestion
 	err := config.Mongoconn.Collection("pretestquestion").FindOne(context.Background(), filter).Decode(&PreTestQuestion)
 	if err != nil {
 		log.Printf("Error querying Pre Test question with ID %s: %v", id, err)
