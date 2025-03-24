@@ -292,6 +292,63 @@ func GetLaporanPomokitPerGrup(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
 
+func SendPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+
+	// Ambil groupID dari parameter query
+	groupID := req.URL.Query().Get("groupid")
+	if groupID == "" {
+		resp.Status = "Error"
+		resp.Location = "Kirim Laporan Pomokit Kemarin"
+		resp.Response = "Parameter 'groupid' tidak boleh kosong"
+		at.WriteJSON(respw, http.StatusBadRequest, resp)
+		return
+	}
+
+	// Generate laporan hanya untuk groupID tertentu
+	msg, err := report.GeneratePomokitReportKemarin(config.Mongoconn, groupID)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Kirim Laporan Pomokit Kemarin"
+		resp.Response = "Gagal menghasilkan laporan: " + err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Cek apakah laporan kosong (tidak ada data untuk grup)
+	if strings.Contains(msg, "Tidak ada aktivitas") {
+		resp.Status = "Warning"
+		resp.Location = "Kirim Laporan Pomokit Kemarin"
+		resp.Response = msg
+		at.WriteJSON(respw, http.StatusOK, resp)
+		return
+	}
+
+	// Siapkan pesan untuk dikirim ke WhatsApp
+	dt := &whatsauth.TextMessage{
+		To:       groupID,
+		IsGroup:  true,
+		Messages: msg,
+	}
+
+	// Kirim pesan ke API WhatsApp
+	_, sendResp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Kirim Laporan Pomokit Kemarin"
+		resp.Response = "Gagal mengirim pesan: " + err.Error() + ", info: " + sendResp.Info
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Berhasil mengirim laporan
+	resp.Status = "Success"
+	resp.Location = "Kirim Laporan Pomokit Kemarin"
+	resp.Response = "Laporan Pomokit kemarin untuk grup " + groupID + " berhasil dikirim"
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+// report di kirim melalui log
 func GetPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
