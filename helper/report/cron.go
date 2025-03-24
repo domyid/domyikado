@@ -290,18 +290,6 @@ func RekapTotalPomokitPoin(db *mongo.Database) (err error) {
 			Messages: msg,
 		}
 
-		// Protokol untuk wa group id mengandung hyphen
-		if strings.Contains(groupID, "-") {
-			// Dapatkan nomor perwakilan (owner)
-			ownerPhone, err := getGroupOwnerPhone(db, groupID)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			dt.To = ownerPhone
-			dt.IsGroup = false
-		}
-
 		// Kirim WA ke API
 		var resp model.Response
 		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
@@ -400,18 +388,6 @@ func KirimLaporanPengunjungWebKeGrup(db *mongo.Database) (err error) {
 			Messages: msg,
 		}
 
-		// Protokol untuk wa group id mengandung hyphen
-		if strings.Contains(groupID, "-") {
-			// Dapatkan nomor perwakilan (owner)
-			ownerPhone, err := getGroupOwnerPhone(db, groupID)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			dt.To = ownerPhone
-			dt.IsGroup = false
-		}
-
 		// Kirim WA ke API
 		var resp model.Response
 		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
@@ -446,17 +422,6 @@ func RekapPomokitKeGrupTarget(db *mongo.Database, sourceGroupID string, targetGr
         To:       targetGroupID,
         IsGroup:  true,
         Messages: msg,
-    }
-    
-    // Tangani kasus khusus jika grup tujuan ID mengandung tanda hubung (kirim ke owner)
-    if strings.Contains(targetGroupID, "-") {
-        // Dapatkan nomor telepon owner
-        ownerPhone, err := getGroupOwnerPhone(db, targetGroupID)
-        if err != nil {
-            return fmt.Errorf("gagal mendapatkan nomor owner: %v", err)
-        }
-        dt.To = ownerPhone
-        dt.IsGroup = false
     }
     
     // Kirim pesan ke API WhatsApp
