@@ -151,12 +151,10 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
         return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk GroupID %s", groupID), nil
     }
     
-    // Hitung poin (tanpa penalti)
     userPoints := make(map[string]float64)
-    
+
     for phoneNumber := range userInfo {
-        // Hanya menghitung aktivitas sebagai poin positif, tanpa penalti
-        userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber])
+        userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber] * 20)
     }
     
     // Coba dapatkan nama proyek dari database
@@ -188,32 +186,28 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
         })
     }
     
-    // Urutkan berdasarkan poin (dari tertinggi ke terendah)
     sort.Slice(userPointsList, func(i, j int) bool {
         return userPointsList[i].Points > userPointsList[j].Points
     })
     
-    // Tambahkan detail user ke pesan
     for _, up := range userPointsList {
         displayName := up.Name
         if displayName == "" {
             displayName = "Pengguna " + up.PhoneNumber
         }
         
-        msg += fmt.Sprintf("✅ %s (%s): +%.0f poin (total: %.0f)\n", 
-            displayName, up.PhoneNumber, up.Points, up.Points)
+        msg += fmt.Sprintf("✅ %s (%s): %d sesi (+%.0f poin)\n", 
+            displayName, up.PhoneNumber, up.ActivityCount, up.Points)
     }
     
-    // Tambahkan informasi rentang waktu
     if !earliestDate.Equal(time.Now()) && !latestDate.IsZero() {
         msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
             earliestDate.Format("2006-01-02"), 
             latestDate.Format("2006-01-02"))
     }
     
-    // Tambahkan catatan
-    msg += "\n*Catatan: +1 poin untuk setiap aktivitas Pomodoro*"
-    
+    msg += "\n*Catatan: Setiap sesi Pomodoro bernilai 20 poin*"
+        
     return msg, nil
 }
 
