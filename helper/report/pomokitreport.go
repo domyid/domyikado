@@ -463,7 +463,7 @@ func GeneratePomokitReportKemarin(db *mongo.Database, groupID string) (string, e
 	return msg, nil
 }
 
-func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string) (string, error) {
+func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string, phoneNumber string) (string, error) {
 	// Ambil semua data Pomokit
 	allPomokitData, err := GetAllPomokitData(db)
 	if err != nil {
@@ -484,7 +484,7 @@ func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string) (
 	nowJkt := time.Now().In(location)
 	weekAgoJkt := nowJkt.AddDate(0, 0, -7)
 	
-	// Filter dan hitung aktivitas berdasarkan WAGroupID dan waktu seminggu terakhir
+	// Filter dan hitung aktivitas berdasarkan WAGroupID/phoneNumber dan waktu seminggu terakhir
 	userActivityCounts := make(map[string]int)
 	userInfo := make(map[string]struct {
 		Name     string
@@ -494,10 +494,16 @@ func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string) (
 	totalAktivitasSeminggu := 0
 	
 	for _, report := range allPomokitData {
-		phoneNumber := report.PhoneNumber
+		userPhone := report.PhoneNumber
 		reportGroupID := report.WaGroupID
 		
-		if reportGroupID != groupID || phoneNumber == "" {
+		// Filter berdasarkan phoneNumber jika disediakan
+		if phoneNumber != "" {
+			if userPhone != phoneNumber {
+				continue
+			}
+		} else if reportGroupID != groupID || userPhone == "" {
+			// Filter berdasarkan groupID jika phoneNumber tidak disediakan
 			continue
 		}
 		
@@ -537,7 +543,24 @@ func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string) (
 	tanggalSelesai := nowJkt.Format("02-01-2006")
 	
 	// Format pesan laporan
-	msg := fmt.Sprintf("*Laporan Aktivitas Pomokit Seminggu Terakhir (%s s/d %s)*\n\n", tanggalMulai, tanggalSelesai)
+	var msg string
+	if phoneNumber != "" {
+		// Jika laporan untuk satu nomor telepon
+		userName := ""
+		for phone, info := range userInfo {
+			if phone == phoneNumber {
+				userName = info.Name
+				break
+			}
+		}
+		if userName == "" {
+			userName = "Pengguna " + phoneNumber
+		}
+		msg = fmt.Sprintf("*Laporan Aktivitas Pomokit %s - Seminggu Terakhir (%s s/d %s)*\n\n", userName, tanggalMulai, tanggalSelesai)
+	} else {
+		// Jika laporan untuk satu grup
+		msg = fmt.Sprintf("*Laporan Aktivitas Pomokit Seminggu Terakhir (%s s/d %s)*\n\n", tanggalMulai, tanggalSelesai)
+	}
 	
 	type UserPoint struct {
 		Name          string

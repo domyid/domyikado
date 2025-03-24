@@ -391,18 +391,21 @@ func GetPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request
 func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
-	// Ambil groupID dari parameter query
+	// Ambil groupID dan phoneNumber dari parameter query
 	groupID := req.URL.Query().Get("groupid")
-	if groupID == "" {
+	phoneNumber := req.URL.Query().Get("phonenumber")
+	
+	// Setidaknya satu dari groupID atau phoneNumber harus diisi
+	if groupID == "" && phoneNumber == "" {
 		resp.Status = "Error"
 		resp.Location = "Kirim Laporan Pomokit Mingguan"
-		resp.Response = "Parameter 'groupid' tidak boleh kosong"
+		resp.Response = "Parameter 'groupid' atau 'phonenumber' harus diisi"
 		at.WriteJSON(respw, http.StatusBadRequest, resp)
 		return
 	}
 
-	// Generate laporan untuk groupID seminggu terakhir
-	msg, err := report.GeneratePomokitReportSemingguTerakhir(config.Mongoconn, groupID)
+	// Generate laporan untuk groupID/phoneNumber seminggu terakhir
+	msg, err := report.GeneratePomokitReportSemingguTerakhir(config.Mongoconn, groupID, phoneNumber)
 	if err != nil {
 		resp.Status = "Error"
 		resp.Location = "Kirim Laporan Pomokit Mingguan"
@@ -422,9 +425,18 @@ func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Reque
 
 	// Siapkan pesan untuk dikirim ke WhatsApp
 	dt := &whatsauth.TextMessage{
-		To:       groupID,
-		IsGroup:  true,
 		Messages: msg,
+	}
+	
+	// Tentukan tujuan pengiriman berdasarkan parameter yang tersedia
+	if phoneNumber != "" {
+		// Jika ada phoneNumber, kirim ke user tersebut
+		dt.To = phoneNumber
+		dt.IsGroup = false
+	} else {
+		// Jika hanya ada groupID, kirim ke grup
+		dt.To = groupID
+		dt.IsGroup = true
 	}
 
 	// Kirim pesan ke API WhatsApp
@@ -444,22 +456,25 @@ func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Reque
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
 
-// Fungsi untuk hanya mengambil laporan tanpa mengirimkannya ke WhatsApp
+// via log
 func GetPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
-	// Ambil groupID dari parameter query
+	// Ambil groupID dan phoneNumber dari parameter query
 	groupID := req.URL.Query().Get("groupid")
-	if groupID == "" {
+	phoneNumber := req.URL.Query().Get("phonenumber")
+	
+	// Setidaknya satu dari groupID atau phoneNumber harus diisi
+	if groupID == "" && phoneNumber == "" {
 		resp.Status = "Error"
 		resp.Location = "Laporan Pomokit Mingguan Per Grup"
-		resp.Response = "Parameter 'groupid' tidak boleh kosong"
+		resp.Response = "Parameter 'groupid' atau 'phonenumber' harus diisi"
 		at.WriteJSON(respw, http.StatusBadRequest, resp)
 		return
 	}
 
-	// Generate laporan untuk groupID tertentu
-	msg, err := report.GeneratePomokitReportSemingguTerakhir(config.Mongoconn, groupID)
+	// Generate laporan untuk groupID atau phoneNumber tertentu
+	msg, err := report.GeneratePomokitReportSemingguTerakhir(config.Mongoconn, groupID, phoneNumber)
 	if err != nil {
 		resp.Status = "Error"
 		resp.Location = "Laporan Pomokit Mingguan Per Grup"

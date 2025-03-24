@@ -429,7 +429,8 @@ func RekapPomokitSemingguTerakhir(db *mongo.Database) (err error) {
 	// Proses hanya grup-grup yang memiliki aktivitas
 	for groupID := range groupIDSet {
 		// Generate laporan untuk grup dengan filter waktu seminggu terakhir
-		msg, err := GeneratePomokitReportSemingguTerakhir(db, groupID)
+		// Parameter phoneNumber kosong karena kita ingin laporan untuk seluruh grup
+		msg, err := GeneratePomokitReportSemingguTerakhir(db, groupID, "")
 		if err != nil {
 			lastErr = err
 			continue
