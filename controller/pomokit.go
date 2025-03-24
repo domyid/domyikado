@@ -181,40 +181,45 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
 func GetPomokitReportPerGrupSemuaHari(respw http.ResponseWriter, req *http.Request) {
     var resp model.Response
 
-    // Ambil groupID dari parameter query
+    // Ambil parameter dari query
     groupID := req.URL.Query().Get("groupid")
-    if groupID == "" {
-        resp.Status = "Error"
-        resp.Location = "Laporan Pomokit Per Grup"
-        resp.Response = "Parameter 'groupid' tidak boleh kosong"
-        at.WriteJSON(respw, http.StatusBadRequest, resp)
-        return
+    phoneNumber := req.URL.Query().Get("phonenumber")
+    sendMessage := req.URL.Query().Get("send") == "true" // Parameter opsional untuk mengirim pesan
+    
+    // Buat laporan
+    var msg string
+    var err error
+    
+    if sendMessage && groupID != "" {
+        // Gunakan fungsi dari cron.go untuk mengirim pesan WhatsApp
+        msg, err = report.RekapPomokitTotal(config.Mongoconn, groupID)
+    } else {
+        // Gunakan fungsi yang hanya menghasilkan laporan tanpa mengirim pesan
+        msg, err = report.GetPomokitReportMsg(config.Mongoconn, groupID, phoneNumber)
     }
-
-    // Gunakan fungsi dari cron.go untuk konsistensi
-    msg, err := report.RekapPomokitTotalByGroupID(config.Mongoconn, groupID)
+    
     if err != nil {
         resp.Status = "Error"
-        resp.Location = "Laporan Pomokit Per Grup"
+        resp.Location = "Laporan Pomokit"
         resp.Response = "Gagal memproses laporan: " + err.Error()
         at.WriteJSON(respw, http.StatusInternalServerError, resp)
         return
     }
-
-    // Jika pesan berhasil dikirim atau disiapkan
+    
+    // Siapkan respons berdasarkan hasil
     if strings.Contains(msg, "Tidak ada data Pomokit") {
         resp.Status = "Warning"
     } else {
         resp.Status = "Success"
     }
     
-    resp.Location = "Laporan Pomokit Per Grup"
+    resp.Location = "Laporan Pomokit"
     
-    // Jika pesan berisi tanda hubung, beritahu user
-    if strings.Contains(groupID, "-") {
-        resp.Response = "Laporan untuk ID " + groupID + ":\n\n" + msg
+    // Beri tahu user jika pesan berhasil dikirim atau hanya dibuat
+    if sendMessage && groupID != "" && !strings.Contains(groupID, "-") {
+        resp.Response = "Laporan Pomokit berhasil dikirim ke grup " + groupID
     } else {
-        resp.Response = "Laporan Pomokit untuk grup " + groupID + " berhasil diproses"
+        resp.Response = msg
     }
     
     at.WriteJSON(respw, http.StatusOK, resp)

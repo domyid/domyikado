@@ -270,23 +270,31 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 	return nil
 }
 
-func RekapPomokitTotalByGroupID(db *mongo.Database, groupID string) (string, error) {
-    msg, err := GenerateTotalPomokitReportByGroupID(db, groupID)
+func RekapPomokitTotal(db *mongo.Database, groupID string) (string, error) {
+    // Generate laporan untuk groupID
+    msg, err := GenerateTotalPomokitReport(db, groupID, "")
     if err != nil {
         return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
     }
     
-    // Cek laporan kosong
+    // Cek apakah laporan kosong
     if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
         return msg, nil
     }
     
+    // Jika grup ID mengandung tanda hubung, tidak kirim pesan
+    if strings.Contains(groupID, "-") {
+        return msg, nil
+    }
+    
+    // Siapkan pesan
     dt := &whatsauth.TextMessage{
         To:       groupID,
         IsGroup:  true,
         Messages: msg,
     }
     
+    // Kirim pesan ke API WhatsApp
     _, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
     if err != nil {
         return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)

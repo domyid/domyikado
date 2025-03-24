@@ -82,7 +82,7 @@ func GetAllPomokitData(db *mongo.Database) ([]model.PomodoroReport, error) {
     return pomodoroReports, nil
 }
 
-func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (string, error) {
+func GenerateTotalPomokitReport(db *mongo.Database, groupID string, phoneNumber string) (string, error) {
     allPomokitData, err := GetAllPomokitData(db)
     if err != nil {
         return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
@@ -108,21 +108,26 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
     earliestDate := time.Now()
     latestDate := time.Time{}
     
-    // Filter dan hitung aktivitas berdasarkan WAGroupID
+    // Filter dan hitung aktivitas berdasarkan kriteria
     for _, report := range allPomokitData {
-        phoneNumber := report.PhoneNumber
+        phone := report.PhoneNumber
         reportGroupID := report.WaGroupID
         
-        // Lewati record yang tidak cocok dengan groupID yang dicari
-        if reportGroupID != groupID {
+        // Filter berdasarkan phoneNumber jika disediakan
+        if phoneNumber != "" && phone != phoneNumber {
             continue
         }
         
-        if phoneNumber == "" {
+        // Filter berdasarkan groupID jika disediakan dan phoneNumber tidak disediakan
+        if phoneNumber == "" && groupID != "" && reportGroupID != groupID {
             continue
         }
         
-        userInfo[phoneNumber] = struct {
+        if phone == "" {
+            continue
+        }
+        
+        userInfo[phone] = struct {
             Name     string
             GroupID  string
         }{
@@ -131,7 +136,7 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
         }
         
         // Hitung setiap aktivitas individual
-        userActivityCounts[phoneNumber]++
+        userActivityCounts[phone]++
         
         activityTime := report.CreatedAt.In(location)
         dateStr := activityTime.Format("2006-01-02")
@@ -148,24 +153,46 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
     
     // Cek apakah ada data yang difilter
     if len(userActivityCounts) == 0 {
-        return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk GroupID %s", groupID), nil
+        if phoneNumber != "" {
+            return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk nomor %s", phoneNumber), nil
+        } else if groupID != "" {
+            return fmt.Sprintf("Tidak ada data Pomokit yang tersedia untuk GroupID %s", groupID), nil
+        } else {
+            return "Tidak ada data Pomokit yang tersedia", nil
+        }
     }
     
+    // Hitung poin (setiap sesi 20 poin)
     userPoints := make(map[string]float64)
-
-    for phoneNumber := range userInfo {
-        userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber] * 20)
+    
+    for phone := range userInfo {
+        // Setiap sesi bernilai 20 poin
+        userPoints[phone] = float64(userActivityCounts[phone] * 20)
     }
     
-    // Coba dapatkan nama proyek dari database
-    var projectName string = "Grup " + groupID
-    project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
-    if err == nil {
-        projectName = project.Name
+    // Buat judul laporan berdasarkan filter yang digunakan
+    var judul string
+    if phoneNumber != "" {
+        userInfoDetail := userInfo[phoneNumber]
+        displayName := userInfoDetail.Name
+        if displayName == "" {
+            displayName = "Pengguna " + phoneNumber
+        }
+        judul = fmt.Sprintf("*Total Akumulasi Poin Pomokit untuk %s*", displayName)
+    } else if groupID != "" {
+        // Coba dapatkan nama proyek dari database
+        var projectName string = "Grup " + groupID
+        project, err := atdb.GetOneDoc[model.Project](db, "project", bson.M{"wagroupid": groupID})
+        if err == nil {
+            projectName = project.Name
+        }
+        judul = fmt.Sprintf("*Total Akumulasi Poin Pomokit untuk %s*", projectName)
+    } else {
+        judul = "*Total Akumulasi Poin Pomokit untuk Semua Pengguna*"
     }
     
     // Format pesan laporan
-    msg := fmt.Sprintf("*Total Akumulasi Poin Pomokit untuk %s*\n\n", projectName)
+    msg := judul + "\n\n"
     
     type UserPoint struct {
         Name         string
@@ -176,20 +203,22 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
     
     // Konversi map ke slice untuk pengurutan
     var userPointsList []UserPoint
-    for phoneNumber, points := range userPoints {
-        info := userInfo[phoneNumber]
+    for phone, points := range userPoints {
+        info := userInfo[phone]
         userPointsList = append(userPointsList, UserPoint{
             Name:         info.Name,
-            PhoneNumber:  phoneNumber,
+            PhoneNumber:  phone,
             Points:       points,
-            ActivityCount: userActivityCounts[phoneNumber],
+            ActivityCount: userActivityCounts[phone],
         })
     }
     
+    // Urutkan berdasarkan poin (dari tertinggi ke terendah)
     sort.Slice(userPointsList, func(i, j int) bool {
         return userPointsList[i].Points > userPointsList[j].Points
     })
     
+    // Tambahkan detail user ke pesan
     for _, up := range userPointsList {
         displayName := up.Name
         if displayName == "" {
@@ -200,14 +229,16 @@ func GenerateTotalPomokitReportByGroupID(db *mongo.Database, groupID string) (st
             displayName, up.PhoneNumber, up.ActivityCount, up.Points)
     }
     
+    // Tambahkan informasi rentang waktu
     if !earliestDate.Equal(time.Now()) && !latestDate.IsZero() {
         msg += fmt.Sprintf("\n*Rentang data: %s s/d %s*\n", 
             earliestDate.Format("2006-01-02"), 
             latestDate.Format("2006-01-02"))
     }
     
+    // Tambahkan catatan
     msg += "\n*Catatan: Setiap sesi Pomodoro bernilai 20 poin*"
-        
+    
     return msg, nil
 }
 
@@ -487,4 +518,14 @@ func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string, p
 	msg += "\n\n*Catatan: Setiap sesi Pomodoro bernilai 20 poin*"
 	
 	return msg, nil
+}
+
+func GetPomokitReportMsg(db *mongo.Database, groupID string, phoneNumber string) (string, error) {
+    // Generate laporan berdasarkan parameter yang diberikan
+    msg, err := GenerateTotalPomokitReport(db, groupID, phoneNumber)
+    if err != nil {
+        return "", fmt.Errorf("gagal menghasilkan laporan Pomokit: %v", err)
+    }
+    
+    return msg, nil
 }
