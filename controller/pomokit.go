@@ -178,55 +178,7 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, pomodoroReports)
 }
 
-func GetTotalPomokitPoin(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
-	var wg sync.WaitGroup
-	var errChan = make(chan error, 1)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.RekapTotalPomokitPoin(config.Mongoconn); err != nil {
-			// Mengirim error ke channel jika terjadi
-			select {
-			case errChan <- err:
-				// Error berhasil dikirim
-			default:
-				// Channel penuh, error tidak dikirim
-			}
-		}
-	}()
-
-	// Menunggu dengan timeout 2 detik
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Proses selesai tepat waktu
-		resp.Status = "Success"
-		resp.Location = "Total Pomokit Poin"
-		resp.Response = "Proses pengiriman laporan total poin Pomokit berhasil diselesaikan"
-		at.WriteJSON(respw, http.StatusOK, resp)
-	case err := <-errChan:
-		// Terjadi error
-		resp.Status = "Error"
-		resp.Location = "Total Pomokit Poin"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-	case <-time.After(2 * time.Second):
-		// Timeout, tetapi proses tetap berjalan di background
-		resp.Status = "Success"
-		resp.Location = "Total Pomokit Poin"
-		resp.Response = "Proses pengiriman laporan total poin Pomokit telah dimulai dan sedang berjalan di background"
-		at.WriteJSON(respw, http.StatusOK, resp)
-	}
-}
-
-func GetLaporanPomokitPerGrup(respw http.ResponseWriter, req *http.Request) {
+func GetPomokitReportPerGrupSemuaHari(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
 	// Ambil groupID dari parameter query
