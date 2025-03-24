@@ -179,69 +179,45 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
 }
 
 func GetPomokitReportPerGrupSemuaHari(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
+    var resp model.Response
 
-	// Ambil groupID dari parameter query
-	groupID := req.URL.Query().Get("groupid")
-	if groupID == "" {
-		resp.Status = "Error"
-		resp.Location = "Laporan Pomokit Per Grup"
-		resp.Response = "Parameter 'groupid' tidak boleh kosong"
-		at.WriteJSON(respw, http.StatusBadRequest, resp)
-		return
-	}
+    // Ambil groupID dari parameter query
+    groupID := req.URL.Query().Get("groupid")
+    if groupID == "" {
+        resp.Status = "Error"
+        resp.Location = "Laporan Pomokit Per Grup"
+        resp.Response = "Parameter 'groupid' tidak boleh kosong"
+        at.WriteJSON(respw, http.StatusBadRequest, resp)
+        return
+    }
 
-	// Generate laporan untuk groupID
-	msg, err := report.GenerateTotalPomokitReportByGroupID(config.Mongoconn, groupID)
-	if err != nil {
-		resp.Status = "Error"
-		resp.Location = "Laporan Pomokit Per Grup"
-		resp.Response = "Gagal menghasilkan laporan: " + err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-		return
-	}
+    // Gunakan fungsi dari cron.go untuk konsistensi
+    msg, err := report.RekapPomokitTotalByGroupID(config.Mongoconn, groupID)
+    if err != nil {
+        resp.Status = "Error"
+        resp.Location = "Laporan Pomokit Per Grup"
+        resp.Response = "Gagal memproses laporan: " + err.Error()
+        at.WriteJSON(respw, http.StatusInternalServerError, resp)
+        return
+    }
 
-	// Cek apakah laporan kosong (tidak ada data untuk grup)
-	if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
-		resp.Status = "Warning"
-		resp.Location = "Laporan Pomokit Per Grup"
-		resp.Response = msg
-		at.WriteJSON(respw, http.StatusOK, resp)
-		return
-	}
-
-	// Jika ada data, kirimkan laporan ke grup WhatsApp
-	dt := &whatsauth.TextMessage{
-		To:       groupID,
-		IsGroup:  true,
-		Messages: msg,
-	}
-
-	// Tangani kasus khusus jika grup ID mengandung tanda hubung
-	if strings.Contains(groupID, "-") {
-		// Untuk grup dengan ID yang mengandung tanda hubung, kita tidak dapat mengirim pesan
-		resp.Status = "Warning"
-		resp.Location = "Laporan Pomokit Per Grup"
-		resp.Response = "Tidak dapat mengirim pesan ke grup dengan ID yang mengandung tanda hubung. Berikut laporannya:\n\n" + msg
-		at.WriteJSON(respw, http.StatusOK, resp)
-		return
-	}
-
-	// Kirim pesan ke API WhatsApp
-	_, sendResp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-	if err != nil {
-		resp.Status = "Error"
-		resp.Location = "Laporan Pomokit Per Grup"
-		resp.Response = "Gagal mengirim pesan: " + err.Error() + ", info: " + sendResp.Info
-		at.WriteJSON(respw, http.StatusInternalServerError, resp)
-		return
-	}
-
-	// Berhasil mengirim laporan
-	resp.Status = "Success"
-	resp.Location = "Laporan Pomokit Per Grup"
-	resp.Response = "Laporan Pomokit untuk grup " + groupID + " berhasil dikirim"
-	at.WriteJSON(respw, http.StatusOK, resp)
+    // Jika pesan berhasil dikirim atau disiapkan
+    if strings.Contains(msg, "Tidak ada data Pomokit") {
+        resp.Status = "Warning"
+    } else {
+        resp.Status = "Success"
+    }
+    
+    resp.Location = "Laporan Pomokit Per Grup"
+    
+    // Jika pesan berisi tanda hubung, beritahu user
+    if strings.Contains(groupID, "-") {
+        resp.Response = "Laporan untuk ID " + groupID + ":\n\n" + msg
+    } else {
+        resp.Response = "Laporan Pomokit untuk grup " + groupID + " berhasil diproses"
+    }
+    
+    at.WriteJSON(respw, http.StatusOK, resp)
 }
 
 func SendPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request) {
