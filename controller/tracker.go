@@ -110,7 +110,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userInfo.IPv4 = urlUserInfo.IPv4
+	userInfo.IPv4 = r.RemoteAddr
 	if urlUserInfo.Url == "" {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "URL tidak boleh kosong",
