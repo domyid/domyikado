@@ -291,3 +291,51 @@ func GetLaporanPomokitPerGrup(respw http.ResponseWriter, req *http.Request) {
 	resp.Response = "Laporan Pomokit untuk grup " + groupID + " berhasil dikirim"
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
+
+func GetPomokitReportKemarin(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	var wg sync.WaitGroup
+	var errChan = make(chan error, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.RekapPomokitKemarin(config.Mongoconn); err != nil {
+			// Mengirim error ke channel jika terjadi
+			select {
+			case errChan <- err:
+				// Error berhasil dikirim
+			default:
+				// Channel penuh, error tidak dikirim
+			}
+		}
+	}()
+
+	// Menunggu dengan timeout 2 detik
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Proses selesai tepat waktu
+		resp.Status = "Success"
+		resp.Location = "Pomokit Report Kemarin"
+		resp.Response = "Proses pengiriman laporan Pomokit kemarin berhasil diselesaikan"
+		at.WriteJSON(respw, http.StatusOK, resp)
+	case err := <-errChan:
+		// Terjadi error
+		resp.Status = "Error"
+		resp.Location = "Pomokit Report Kemarin"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+	case <-time.After(2 * time.Second):
+		// Timeout, tetapi proses tetap berjalan di background
+		resp.Status = "Success"
+		resp.Location = "Pomokit Report Kemarin"
+		resp.Response = "Proses pengiriman laporan Pomokit kemarin telah dimulai dan sedang berjalan di background"
+		at.WriteJSON(respw, http.StatusOK, resp)
+	}
+}

@@ -244,6 +244,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetTotalPomokitPoin(w, r)
 	case method == "GET" && path == "/report/pomokit/grup":
 		controller.GetLaporanPomokitPerGrup(w, r)
+	case method == "GET" && path == "/report/pomokit/kemarin":
+		controller.GetPomokitReportKemarin(w, r)
 
 	//strava coba
 	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
