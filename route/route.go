@@ -212,11 +212,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Pre Test
 	case method == "GET" && strings.HasPrefix(path, "/api/pretest/question/"):
 		controller.GetOnePreTestQuestion(w, r)
-	// Pomodoro
-	// case method == "GET" && path == ("/api/pomokit/report"):
-	// 	controller.GetPomokitDataUser(w, r)
-	// case method == "GET" && path == "/api/pomokit/allreport":
-	// 	controller.GetPomokitAllDataUser(w, r)
 	// Google Auth
 	// Tracker start
 	case method == "POST" && path == "/api/tracker":
@@ -240,10 +235,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetNewCode(w, r)
 
 	// Pomodoro
-	case method == "GET" && path == "/report/pomokit/all":
-		controller.GetTotalPomokitPoin(w, r)
 	case method == "GET" && path == "/report/pomokit/grup":
-		controller.GetLaporanPomokitPerGrup(w, r)
+		controller.GetPomokitReportPerGrupSemuaHari(w, r)
 		// hanya melalui log
 	case method == "GET" && path == "/report/pomokit/grup/kemarin/log":
 		controller.GetPomokitReportKemarinPerGrup(w, r)
