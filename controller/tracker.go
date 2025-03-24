@@ -31,6 +31,14 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userAgent := r.UserAgent()
+	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak sah",
+		})
+		return
+	}
+
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
