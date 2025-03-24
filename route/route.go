@@ -249,6 +249,15 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetPomokitReportKemarinPerGrup(w, r)
 	case method == "GET" && path == "/report/pomokit/grup/kemarin":
 		controller.SendPomokitReportKemarinPerGrup(w, r)
+	// Menjalankan laporan mingguan secara manual dan mengirimnya ke grup
+	case method == "GET" && path == "/report/pomokit/grup/mingguan":
+		controller.SendPomokitReportMingguanPerGrup(w, r)
+		// hanya melalui log
+	case method == "GET" && path == "/report/pomokit/grup/mingguan/log":
+		controller.GetPomokitReportMingguanPerGrup(w, r)
+	// Menjalankan laporan mingguan untuk semua grup secara otomatis
+	case method == "GET" && path == "/refresh/report/pomokitmingguan":
+		controller.RefreshPomokitMingguanReport(w, r)
 
 	//strava coba
 	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama

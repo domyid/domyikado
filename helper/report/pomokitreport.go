@@ -462,3 +462,131 @@ func GeneratePomokitReportKemarin(db *mongo.Database, groupID string) (string, e
 	
 	return msg, nil
 }
+
+func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string) (string, error) {
+	// Ambil semua data Pomokit
+	allPomokitData, err := GetAllPomokitData(db)
+	if err != nil {
+		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
+	}
+	
+	if len(allPomokitData) == 0 {
+		return "Tidak ada data Pomokit yang tersedia", nil
+	}
+	
+	// Timezone Jakarta untuk konsistensi
+	location, _ := time.LoadLocation("Asia/Jakarta")
+	if location == nil {
+		location = time.Local
+	}
+	
+	// Mendapatkan waktu sekarang dan seminggu yang lalu di zona waktu Jakarta
+	nowJkt := time.Now().In(location)
+	weekAgoJkt := nowJkt.AddDate(0, 0, -7)
+	
+	// Filter dan hitung aktivitas berdasarkan WAGroupID dan waktu seminggu terakhir
+	userActivityCounts := make(map[string]int)
+	userInfo := make(map[string]struct {
+		Name     string
+		GroupID  string
+	})
+	
+	totalAktivitasSeminggu := 0
+	
+	for _, report := range allPomokitData {
+		phoneNumber := report.PhoneNumber
+		reportGroupID := report.WaGroupID
+		
+		if reportGroupID != groupID || phoneNumber == "" {
+			continue
+		}
+		
+		activityTime := report.CreatedAt.In(location)
+		
+		// Cek apakah aktivitas terjadi dalam seminggu terakhir
+		if activityTime.After(weekAgoJkt) && activityTime.Before(nowJkt) {
+			userInfo[phoneNumber] = struct {
+				Name     string
+				GroupID  string
+			}{
+				Name:     report.Name,
+				GroupID:  reportGroupID,
+			}
+			
+			// Hitung setiap sesi individual
+			userActivityCounts[phoneNumber]++
+			totalAktivitasSeminggu++
+		}
+	}
+	
+	// Cek apakah ada data yang difilter
+	if len(userActivityCounts) == 0 {
+		return fmt.Sprintf("Tidak ada aktivitas Pomokit seminggu terakhir untuk GroupID %s", groupID), nil
+	}
+	
+	// Hitung poin
+	userPoints := make(map[string]float64)
+	
+	for phoneNumber := range userInfo {
+		// Setiap sesi bernilai 20 poin
+		userPoints[phoneNumber] = float64(userActivityCounts[phoneNumber] * 20)
+	}
+	
+	// Format tanggal seminggu terakhir
+	tanggalMulai := weekAgoJkt.Format("02-01-2006")
+	tanggalSelesai := nowJkt.Format("02-01-2006")
+	
+	// Format pesan laporan
+	msg := fmt.Sprintf("*Laporan Aktivitas Pomokit Seminggu Terakhir (%s s/d %s)*\n\n", tanggalMulai, tanggalSelesai)
+	
+	type UserPoint struct {
+		Name          string
+		PhoneNumber   string
+		Points        float64
+		ActivityCount int
+	}
+	
+	// Konversi map ke slice untuk pengurutan
+	var userPointsList []UserPoint
+	for phoneNumber, points := range userPoints {
+		info := userInfo[phoneNumber]
+		userPointsList = append(userPointsList, UserPoint{
+			Name:          info.Name,
+			PhoneNumber:   phoneNumber,
+			Points:        points,
+			ActivityCount: userActivityCounts[phoneNumber],
+		})
+	}
+	
+	// Urutkan berdasarkan poin (dari tertinggi ke terendah)
+	sort.Slice(userPointsList, func(i, j int) bool {
+		return userPointsList[i].Points > userPointsList[j].Points
+	})
+	
+	// Tambahkan detail user ke pesan
+	for _, up := range userPointsList {
+		displayName := up.Name
+		if displayName == "" {
+			displayName = "Pengguna " + up.PhoneNumber
+		}
+		
+		// Tampilkan data tanpa emoji peringkat
+		msg += fmt.Sprintf("✅ %s (%s): %d sesi (+%.0f poin)\n", 
+			displayName, up.PhoneNumber, up.ActivityCount, up.Points)
+	}
+	
+	// Tambahkan motivasi berdasarkan total sesi
+	msg += "\n"
+	if totalAktivitasSeminggu > 30 {
+		msg += "🔥 *Kerja hebat tim! Seminggu yang sangat produktif dengan Pomodoro!*"
+	} else if totalAktivitasSeminggu > 15 {
+		msg += "👍 *Semangat terus tim! Rutinitas Pomodoro menunjukkan konsistensi kalian.*"
+	} else {
+		msg += "🚀 *Mari tingkatkan sesi Pomodoro di minggu depan!*"
+	}
+	
+	// Tambahkan catatan poin
+	msg += "\n\n*Catatan: Setiap sesi Pomodoro bernilai 20 poin*"
+	
+	return msg, nil
+}

@@ -387,3 +387,147 @@ func GetPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request
 	resp.Response = msg
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
+
+func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+
+	// Ambil groupID dari parameter query
+	groupID := req.URL.Query().Get("groupid")
+	if groupID == "" {
+		resp.Status = "Error"
+		resp.Location = "Kirim Laporan Pomokit Mingguan"
+		resp.Response = "Parameter 'groupid' tidak boleh kosong"
+		at.WriteJSON(respw, http.StatusBadRequest, resp)
+		return
+	}
+
+	// Generate laporan untuk groupID seminggu terakhir
+	msg, err := report.GeneratePomokitReportSemingguTerakhir(config.Mongoconn, groupID)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Kirim Laporan Pomokit Mingguan"
+		resp.Response = "Gagal menghasilkan laporan: " + err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Cek apakah laporan kosong (tidak ada data untuk grup)
+	if strings.Contains(msg, "Tidak ada aktivitas") {
+		resp.Status = "Warning"
+		resp.Location = "Kirim Laporan Pomokit Mingguan"
+		resp.Response = msg
+		at.WriteJSON(respw, http.StatusOK, resp)
+		return
+	}
+
+	// Siapkan pesan untuk dikirim ke WhatsApp
+	dt := &whatsauth.TextMessage{
+		To:       groupID,
+		IsGroup:  true,
+		Messages: msg,
+	}
+
+	// Kirim pesan ke API WhatsApp
+	_, sendResp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Kirim Laporan Pomokit Mingguan"
+		resp.Response = "Gagal mengirim pesan: " + err.Error() + ", info: " + sendResp.Info
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Berhasil mengirim laporan
+	resp.Status = "Success"
+	resp.Location = "Kirim Laporan Pomokit Mingguan"
+	resp.Response = "Laporan Pomokit seminggu terakhir untuk grup " + groupID + " berhasil dikirim"
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+// Fungsi untuk hanya mengambil laporan tanpa mengirimkannya ke WhatsApp
+func GetPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+
+	// Ambil groupID dari parameter query
+	groupID := req.URL.Query().Get("groupid")
+	if groupID == "" {
+		resp.Status = "Error"
+		resp.Location = "Laporan Pomokit Mingguan Per Grup"
+		resp.Response = "Parameter 'groupid' tidak boleh kosong"
+		at.WriteJSON(respw, http.StatusBadRequest, resp)
+		return
+	}
+
+	// Generate laporan untuk groupID tertentu
+	msg, err := report.GeneratePomokitReportSemingguTerakhir(config.Mongoconn, groupID)
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Laporan Pomokit Mingguan Per Grup"
+		resp.Response = "Gagal menghasilkan laporan: " + err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Cek apakah laporan kosong
+	if strings.Contains(msg, "Tidak ada aktivitas") {
+		resp.Status = "Warning"
+		resp.Location = "Laporan Pomokit Mingguan Per Grup"
+		resp.Response = msg
+		at.WriteJSON(respw, http.StatusOK, resp)
+		return
+	}
+
+	// Mengembalikan laporan sebagai respons API tanpa mengirim ke WhatsApp
+	resp.Status = "Success"
+	resp.Location = "Laporan Pomokit Mingguan Per Grup"
+	resp.Response = msg
+	at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+func RefreshPomokitMingguanReport(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	var wg sync.WaitGroup
+	var errChan = make(chan error, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.RekapPomokitSemingguTerakhir(config.Mongoconn); err != nil {
+			// Mengirim error ke channel jika terjadi
+			select {
+			case errChan <- err:
+				// Error berhasil dikirim
+			default:
+				// Channel penuh, error tidak dikirim
+			}
+		}
+	}()
+
+	// Menunggu dengan timeout 2 detik
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Proses selesai tepat waktu
+		resp.Status = "Success"
+		resp.Location = "Laporan Pomokit Mingguan"
+		resp.Response = "Proses pengiriman laporan Pomokit mingguan berhasil diselesaikan"
+		at.WriteJSON(respw, http.StatusOK, resp)
+	case err := <-errChan:
+		// Terjadi error
+		resp.Status = "Error"
+		resp.Location = "Laporan Pomokit Mingguan"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+	case <-time.After(2 * time.Second):
+		// Timeout, tetapi proses tetap berjalan di background
+		resp.Status = "Success"
+		resp.Location = "Laporan Pomokit Mingguan"
+		resp.Response = "Proses pengiriman laporan Pomokit mingguan telah dimulai dan sedang berjalan di background"
+		at.WriteJSON(respw, http.StatusOK, resp)
+	}
+}
