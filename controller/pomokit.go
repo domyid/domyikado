@@ -21,7 +21,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
+func GetPomokitDataUserAPI(respw http.ResponseWriter, req *http.Request) {
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
 		at.WriteJSON(respw, http.StatusForbidden, model.Response{
@@ -93,7 +93,7 @@ func GetPomokitDataUser(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, matchingReports)
 }
 
-func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
+func GetPomokitDataAllUserAPI(respw http.ResponseWriter, req *http.Request) {
 	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
 		at.WriteJSON(respw, http.StatusForbidden, model.Response{
@@ -178,7 +178,7 @@ func GetPomokitAllDataUser(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, pomodoroReports)
 }
 
-func GetPomokitReportPerGrupSemuaHari(respw http.ResponseWriter, req *http.Request) {
+func GetPomokitReportTotalSemuaHari(respw http.ResponseWriter, req *http.Request) {
     var resp model.Response
 
     // Ambil parameter dari query
