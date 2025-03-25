@@ -238,7 +238,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// case method == "GET" && path == ("/report/pomokit/user"):
 	// 	controller.GetPomokitDataUserAPI(w, r)
 	// parameter groupid, phonenumber, send(true/false)
-	case method == "GET" && path == "/report/pomokit/all":
+	case method == "GET" && path == "/report/pomokit/total":
 		controller.GetPomokitReportTotalSemuaHari(w, r)
 		// hanya melalui log
 	case method == "GET" && path == "/report/pomokit/grup/kemarin/log":
