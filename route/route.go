@@ -230,6 +230,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.SimpanInformasiUserTesting(w, r)
 	case method == "POST" && path == "/api/laporantracker":
 		controller.LaporanengunjungWeb(w, r)
+	case method == "GET" && path == "/api/ambildatatracker":
+		controller.LaporanengunjungWeb(w, r)
 	// Tracker end
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
