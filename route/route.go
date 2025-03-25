@@ -211,6 +211,11 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetIqScoreData(w, r)
 	// Pre Test
 	case method == "GET" && strings.HasPrefix(path, "/api/pretest/question/"):
+		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.GetOnePreTestQuestion(w, r)
 	// Google Auth
 	// Tracker start
