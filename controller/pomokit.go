@@ -184,17 +184,48 @@ func GetPomokitReportPerGrupSemuaHari(respw http.ResponseWriter, req *http.Reque
     // Ambil parameter dari query
     groupID := req.URL.Query().Get("groupid")
     phoneNumber := req.URL.Query().Get("phonenumber")
-    sendMessage := req.URL.Query().Get("send") == "true" // Parameter opsional untuk mengirim pesan
+    
+    // Ubah logika send: default true kecuali send=false
+    sendParam := req.URL.Query().Get("send")
+    sendMessage := sendParam != "false" // Default true kecuali ada send=false
     
     // Buat laporan
     var msg string
     var err error
     
-    if sendMessage && groupID != "" {
-        // Gunakan fungsi dari cron.go untuk mengirim pesan WhatsApp
-        msg, err = report.RekapPomokitTotal(config.Mongoconn, groupID)
+    // Proses laporan dan optionally kirim pesan
+    if sendMessage {
+        if groupID != "" {
+            // Kirim ke grup WhatsApp jika groupID ada
+            msg, err = report.RekapPomokitTotal(config.Mongoconn, groupID)
+        } else if phoneNumber != "" {
+            // Jika hanya phonenumber yang ada, kirim pesan ke nomor tersebut
+            // Pertama, dapatkan laporan
+            msg, err = report.GetPomokitReportMsg(config.Mongoconn, "", phoneNumber)
+            
+            if err == nil && !strings.Contains(msg, "Tidak ada data Pomokit") {
+                // Kirim pesan ke nomor telepon
+                dt := &whatsauth.TextMessage{
+                    To:       phoneNumber,
+                    IsGroup:  false,
+                    Messages: msg,
+                }
+                
+                _, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+                if err != nil {
+                    resp.Status = "Error"
+                    resp.Location = "Laporan Pomokit"
+                    resp.Response = "Berhasil membuat laporan, tetapi gagal mengirim pesan: " + err.Error()
+                    at.WriteJSON(respw, http.StatusInternalServerError, resp)
+                    return
+                }
+            }
+        } else {
+            // Jika tidak ada groupID atau phoneNumber, hanya buat laporan
+            msg, err = report.GetPomokitReportMsg(config.Mongoconn, "", "")
+        }
     } else {
-        // Gunakan fungsi yang hanya menghasilkan laporan tanpa mengirim pesan
+        // Jika send=false, hanya buat laporan tanpa mengirim
         msg, err = report.GetPomokitReportMsg(config.Mongoconn, groupID, phoneNumber)
     }
     
@@ -216,8 +247,14 @@ func GetPomokitReportPerGrupSemuaHari(respw http.ResponseWriter, req *http.Reque
     resp.Location = "Laporan Pomokit"
     
     // Beri tahu user jika pesan berhasil dikirim atau hanya dibuat
-    if sendMessage && groupID != "" && !strings.Contains(groupID, "-") {
-        resp.Response = "Laporan Pomokit berhasil dikirim ke grup " + groupID
+    if sendMessage {
+        if groupID != "" && !strings.Contains(groupID, "-") {
+            resp.Response = "Laporan Pomokit berhasil dikirim ke grup " + groupID
+        } else if phoneNumber != "" && !strings.Contains(msg, "Tidak ada data Pomokit") {
+            resp.Response = "Laporan Pomokit berhasil dikirim ke nomor " + phoneNumber
+        } else {
+            resp.Response = msg
+        }
     } else {
         resp.Response = msg
     }

@@ -303,6 +303,34 @@ func RekapPomokitTotal(db *mongo.Database, groupID string) (string, error) {
     return msg, nil
 }
 
+func RekapPomokitTotalToPhone(db *mongo.Database, phoneNumber string) (string, error) {
+    // Generate laporan untuk phoneNumber
+    msg, err := GenerateTotalPomokitReport(db, "", phoneNumber)
+    if err != nil {
+        return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
+    }
+    
+    // Cek apakah laporan kosong
+    if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
+        return msg, nil
+    }
+    
+    // Siapkan pesan
+    dt := &whatsauth.TextMessage{
+        To:       phoneNumber,
+        IsGroup:  false,
+        Messages: msg,
+    }
+    
+    // Kirim pesan ke API WhatsApp
+    _, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+    if err != nil {
+        return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
+    }
+    
+    return msg, nil
+}
+
 func RekapPomokitKemarin(db *mongo.Database) (err error) {
 	// Ambil semua data Pomokit
 	allPomokitData, err := GetAllPomokitData(db)
