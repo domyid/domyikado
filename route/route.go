@@ -242,9 +242,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetNewCode(w, r)
 
 	// Pomodoro
-	// case method == "GET" && path == ("/report/pomokit/user"):
-	// 	controller.GetPomokitDataUserAPI(w, r)
-	// parameter groupid, phonenumber, send(true/false)
+		// dengan token header 'login'
+	case method == "GET" && path == ("/report/pomokit/user"):
+		controller.GetPomokitDataUserAPI(w, r)
+	// parameter groupid=, phonenumber=, send=true/false(default nya true)
 	case method == "GET" && path == "/report/pomokit/total":
 		controller.GetPomokitReportTotalSemuaHari(w, r)
 		// hanya melalui log
