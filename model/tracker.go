@@ -9,3 +9,8 @@ type UserInfo struct {
 	Browser       string             `json:"browser"`
 	Tanggal_Ambil primitive.DateTime `json:"tanggal_ambil"`
 }
+
+type PhoneDomain struct {
+	PhoneNumber      string
+	Project_Hostname string
+}
