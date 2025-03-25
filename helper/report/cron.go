@@ -271,64 +271,64 @@ func RekapPagiHari(db *mongo.Database) (err error) {
 }
 
 func RekapPomokitTotal(db *mongo.Database, groupID string) (string, error) {
-    // Generate laporan untuk groupID
-    msg, err := GenerateTotalPomokitReport(db, groupID, "")
-    if err != nil {
-        return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
-    }
-    
-    // Cek apakah laporan kosong
-    if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
-        return msg, nil
-    }
-    
-    // Jika grup ID mengandung tanda hubung, tidak kirim pesan
-    if strings.Contains(groupID, "-") {
-        return msg, nil
-    }
-    
-    // Siapkan pesan
-    dt := &whatsauth.TextMessage{
-        To:       groupID,
-        IsGroup:  true,
-        Messages: msg,
-    }
-    
-    // Kirim pesan ke API WhatsApp
-    _, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-    if err != nil {
-        return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
-    }
-    
-    return msg, nil
+	// Generate laporan untuk groupID
+	msg, err := GenerateTotalPomokitReport(db, groupID, "")
+	if err != nil {
+		return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
+	}
+
+	// Cek apakah laporan kosong
+	if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
+		return msg, nil
+	}
+
+	// Jika grup ID mengandung tanda hubung, tidak kirim pesan
+	if strings.Contains(groupID, "-") {
+		return msg, nil
+	}
+
+	// Siapkan pesan
+	dt := &whatsauth.TextMessage{
+		To:       groupID,
+		IsGroup:  true,
+		Messages: msg,
+	}
+
+	// Kirim pesan ke API WhatsApp
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
+	}
+
+	return msg, nil
 }
 
 func RekapPomokitTotalToPhone(db *mongo.Database, phoneNumber string) (string, error) {
-    // Generate laporan untuk phoneNumber
-    msg, err := GenerateTotalPomokitReport(db, "", phoneNumber)
-    if err != nil {
-        return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
-    }
-    
-    // Cek apakah laporan kosong
-    if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
-        return msg, nil
-    }
-    
-    // Siapkan pesan
-    dt := &whatsauth.TextMessage{
-        To:       phoneNumber,
-        IsGroup:  false,
-        Messages: msg,
-    }
-    
-    // Kirim pesan ke API WhatsApp
-    _, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-    if err != nil {
-        return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
-    }
-    
-    return msg, nil
+	// Generate laporan untuk phoneNumber
+	msg, err := GenerateTotalPomokitReport(db, "", phoneNumber)
+	if err != nil {
+		return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
+	}
+
+	// Cek apakah laporan kosong
+	if strings.Contains(msg, "Tidak ada data Pomokit yang tersedia") {
+		return msg, nil
+	}
+
+	// Siapkan pesan
+	dt := &whatsauth.TextMessage{
+		To:       phoneNumber,
+		IsGroup:  false,
+		Messages: msg,
+	}
+
+	// Kirim pesan ke API WhatsApp
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
+	}
+
+	return msg, nil
 }
 
 func RekapPomokitKemarin(db *mongo.Database) (err error) {
@@ -337,27 +337,27 @@ func RekapPomokitKemarin(db *mongo.Database) (err error) {
 	if err != nil {
 		return fmt.Errorf("gagal mengambil data Pomokit: %v", err)
 	}
-	
+
 	if len(allPomokitData) == 0 {
 		return fmt.Errorf("tidak ada data Pomokit yang tersedia")
 	}
-	
+
 	// Kumpulkan semua group ID unik yang ada di data Pomokit
 	groupIDSet := make(map[string]bool)
-	
+
 	for _, report := range allPomokitData {
 		if report.WaGroupID != "" {
 			groupIDSet[report.WaGroupID] = true
 		}
 	}
-	
+
 	// Jika tidak ada grup yang memiliki aktivitas
 	if len(groupIDSet) == 0 {
 		return fmt.Errorf("tidak ada grup dengan aktivitas Pomokit")
 	}
-	
+
 	var lastErr error
-	
+
 	// Proses hanya grup-grup yang memiliki aktivitas
 	for groupID := range groupIDSet {
 		// Generate laporan untuk grup dengan filter waktu kemarin
@@ -366,19 +366,19 @@ func RekapPomokitKemarin(db *mongo.Database) (err error) {
 			lastErr = err
 			continue
 		}
-		
+
 		// Lewati jika tidak ada aktivitas
 		if strings.Contains(msg, "Tidak ada aktivitas") {
 			continue
 		}
-		
+
 		// Siapkan pesan
 		dt := &whatsauth.TextMessage{
 			To:       groupID,
 			IsGroup:  true,
 			Messages: msg,
 		}
-		
+
 		// Kirim pesan ke API WhatsApp
 		_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 		if err != nil {
@@ -386,11 +386,11 @@ func RekapPomokitKemarin(db *mongo.Database) (err error) {
 			continue
 		}
 	}
-	
+
 	if lastErr != nil {
 		return lastErr
 	}
-	
+
 	return nil
 }
 
@@ -400,27 +400,27 @@ func RekapPomokitSemingguTerakhir(db *mongo.Database) (err error) {
 	if err != nil {
 		return fmt.Errorf("gagal mengambil data Pomokit: %v", err)
 	}
-	
+
 	if len(allPomokitData) == 0 {
 		return fmt.Errorf("tidak ada data Pomokit yang tersedia")
 	}
-	
+
 	// Kumpulkan semua group ID unik yang ada di data Pomokit
 	groupIDSet := make(map[string]bool)
-	
+
 	for _, report := range allPomokitData {
 		if report.WaGroupID != "" {
 			groupIDSet[report.WaGroupID] = true
 		}
 	}
-	
+
 	// Jika tidak ada grup yang memiliki aktivitas
 	if len(groupIDSet) == 0 {
 		return fmt.Errorf("tidak ada grup dengan aktivitas Pomokit")
 	}
-	
+
 	var lastErr error
-	
+
 	// Proses hanya grup-grup yang memiliki aktivitas
 	for groupID := range groupIDSet {
 		// Generate laporan untuk grup dengan filter waktu seminggu terakhir
@@ -430,19 +430,19 @@ func RekapPomokitSemingguTerakhir(db *mongo.Database) (err error) {
 			lastErr = err
 			continue
 		}
-		
+
 		// Lewati jika tidak ada aktivitas
 		if strings.Contains(msg, "Tidak ada aktivitas") {
 			continue
 		}
-		
+
 		// Siapkan pesan
 		dt := &whatsauth.TextMessage{
 			To:       groupID,
 			IsGroup:  true,
 			Messages: msg,
 		}
-		
+
 		// Kirim pesan ke API WhatsApp
 		_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 		if err != nil {
@@ -450,11 +450,11 @@ func RekapPomokitSemingguTerakhir(db *mongo.Database) (err error) {
 			continue
 		}
 	}
-	
+
 	if lastErr != nil {
 		return lastErr
 	}
-	
+
 	return nil
 }
 
@@ -465,7 +465,7 @@ func KirimLaporanPengunjungWebKeGrup(db *mongo.Database) (err error) {
 	}
 
 	// Menggunakan manual group ID yang spesifik
-	manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
+	manualGroupIDs := []string{"120363022595651310"} // Ganti dengan WAGroupID yang ingin digunakan
 
 	var lastErr error
 
