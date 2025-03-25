@@ -118,7 +118,7 @@ func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (ph
 
 func getValidHostnames() []string {
 	var validHostnames []string
-	for _, domain := range domainProyek1 {
+	for _, domain := range DomainProyek1 {
 		validHostnames = append(validHostnames, domain.Project_Hostname)
 	}
 	return validHostnames
@@ -126,7 +126,7 @@ func getValidHostnames() []string {
 
 func GetVisitorReportForWhatsApp(db *mongo.Database) (string, error) {
 	hostnameToPhone := make(map[string]string)
-	for _, domain := range domainProyek1 {
+	for _, domain := range DomainProyek1 {
 		hostnameToPhone[domain.Project_Hostname] = domain.PhoneNumber
 	}
 	filter := bson.M{
