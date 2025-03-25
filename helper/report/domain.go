@@ -1,11 +1,8 @@
 package report
 
-type PhoneDomain struct {
-	PhoneNumber      string
-	Project_Hostname string
-}
+import "github.com/gocroot/model"
 
-var domainProyek1 = []PhoneDomain{
+var DomainProyek1 = []model.PhoneDomain{
 	{
 		PhoneNumber:      "62895619421397",
 		Project_Hostname: "iyannn03.github.io",
@@ -245,5 +242,9 @@ var domainProyek1 = []PhoneDomain{
 	{
 		PhoneNumber:      "62895351788818",
 		Project_Hostname: "azitriyadi.github.io",
+	},
+	{
+		PhoneNumber:      "6281271720763",
+		Project_Hostname: "befous.github.io",
 	},
 }
