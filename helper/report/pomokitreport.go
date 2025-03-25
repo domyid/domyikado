@@ -18,7 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func GetAllPomokitData(db *mongo.Database) ([]model.PomodoroReport, error) {
+func GetAllPomokitDataAPI(db *mongo.Database) ([]model.PomodoroReport, error) {
     // Ambil konfigurasi
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -83,7 +83,7 @@ func GetAllPomokitData(db *mongo.Database) ([]model.PomodoroReport, error) {
 }
 
 func GenerateTotalPomokitReport(db *mongo.Database, groupID string, phoneNumber string) (string, error) {
-    allPomokitData, err := GetAllPomokitData(db)
+    allPomokitData, err := GetAllPomokitDataAPI(db)
     if err != nil {
         return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
     }
@@ -244,7 +244,7 @@ func GenerateTotalPomokitReport(db *mongo.Database, groupID string, phoneNumber 
 
 func GeneratePomokitReportKemarin(db *mongo.Database, groupID string) (string, error) {
 	// Ambil semua data Pomokit
-	allPomokitData, err := GetAllPomokitData(db)
+	allPomokitData, err := GetAllPomokitDataAPI(db)
 	if err != nil {
 		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
 	}
@@ -371,7 +371,7 @@ func GeneratePomokitReportKemarin(db *mongo.Database, groupID string) (string, e
 
 func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string, phoneNumber string) (string, error) {
 	// Ambil semua data Pomokit
-	allPomokitData, err := GetAllPomokitData(db)
+	allPomokitData, err := GetAllPomokitDataAPI(db)
 	if err != nil {
 		return "", fmt.Errorf("gagal mengambil data Pomokit: %v", err)
 	}

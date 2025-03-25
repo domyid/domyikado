@@ -333,7 +333,7 @@ func RekapPomokitTotalToPhone(db *mongo.Database, phoneNumber string) (string, e
 
 func RekapPomokitKemarin(db *mongo.Database) (err error) {
 	// Ambil semua data Pomokit
-	allPomokitData, err := GetAllPomokitData(db)
+	allPomokitData, err := GetAllPomokitDataAPI(db)
 	if err != nil {
 		return fmt.Errorf("gagal mengambil data Pomokit: %v", err)
 	}
@@ -396,7 +396,7 @@ func RekapPomokitKemarin(db *mongo.Database) (err error) {
 
 func RekapPomokitSemingguTerakhir(db *mongo.Database) (err error) {
 	// Ambil semua data Pomokit
-	allPomokitData, err := GetAllPomokitData(db)
+	allPomokitData, err := GetAllPomokitDataAPI(db)
 	if err != nil {
 		return fmt.Errorf("gagal mengambil data Pomokit: %v", err)
 	}
