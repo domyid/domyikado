@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -95,7 +94,6 @@ func GetAllDataTracker(w http.ResponseWriter, r *http.Request) {
 	}
 	userinfo := model.UserInfo{Hostname: getHostname(authorization.Id, report.DomainProyek1)}
 	filter := primitive.M{
-		"ipv4":     userinfo.IPv4,
 		"hostname": userinfo.Hostname,
 	}
 	datatracker, err := atdb.GetAllDoc[[]model.UserInfo](config.Mongoconn, "trackerip", filter)
@@ -107,7 +105,9 @@ func GetAllDataTracker(w http.ResponseWriter, r *http.Request) {
 	}
 	count := len(datatracker)
 	at.WriteJSON(w, http.StatusOK, model.Response{
-		Response: strconv.Itoa(count),
+		Status:   "Hostname: " + userinfo.Hostname,
+		Info:     "Nomor telephone" + authorization.Id,
+		Response: fmt.Sprintf("%d", count),
 	})
 }
 
