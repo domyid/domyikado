@@ -35,7 +35,7 @@ func gradeToPoints(grade string) float64 {
 }
 
 func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) ([]model.GTMetrixInfo, error) {
-    // Get configuration for the API URL
+    // Ambil konfigurasi
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -44,52 +44,40 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
     if err != nil {
         return nil, fmt.Errorf("Config Not Found: %v", err)
     }
-    
-    // Pastikan URL tersedia
-    if conf.PomokitUrl == "" {
-        return nil, fmt.Errorf("PomokitUrl not configured")
-    }
-    
-    fmt.Printf("DEBUG: Fetching GTMetrix data from %s\n", conf.PomokitUrl)
-    
-    // Make HTTP request to the API
+
+    fmt.Printf("DEBUG: Mengambil data GTMetrix dari %s\n", conf.PomokitUrl)
+
+    // HTTP Client request ke API Pomokit
     client := &http.Client{Timeout: 15 * time.Second}
     resp, err := client.Get(conf.PomokitUrl)
     if err != nil {
         return nil, fmt.Errorf("API Connection Failed: %v", err)
     }
     defer resp.Body.Close()
-    
+
     // Handle non-200 status
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("API Returned Status %d", resp.StatusCode)
     }
-    
-    // Read response body
+
+    // Read entire response for debugging
     responseBody, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("Error reading response: %v", err)
     }
     
-    // Create new reader for JSON decoding
+    // Create a new reader from the response body for JSON decoding
+    resp.Body.Close()
     resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
-    
-    // Struktur data dari API Pomokit
-    type PomokitData struct {
-        ID                 struct {
-            Oid string     `json:"$oid"`
+
+    // Struktur untuk data awal dari Pomokit API
+    type PomokitItem struct {
+        ID struct {
+            Oid string `json:"$oid"`
         } `json:"_id"`
         Name               string `json:"name"`
         PhoneNumber        string `json:"phonenumber"`
-        Cycle              int    `json:"cycle"`
-        Hostname           string `json:"hostname"`
-        IP                 string `json:"ip"`
-        Screenshots        int    `json:"screenshots"`
-        Pekerjaan          string `json:"pekerjaan"`
-        Token              string `json:"token"`
-        URLPekerjaan       string `json:"urlpekerjaan"`
         WaGroupID          string `json:"wagroupid"`
-        GTMetrixURLTarget  string `json:"gtmetrix_url_target"`
         GTMetrixGrade      string `json:"gtmetrix_grade"`
         GTMetrixPerf       string `json:"gtmetrix_performance"`
         GTMetrixStruct     string `json:"gtmetrix_structure"`
@@ -97,98 +85,89 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
         TBT                string `json:"tbt"`
         CLS                string `json:"cls"`
         CreatedAt          struct {
-            Date string     `json:"$date"`
+            Date string `json:"$date"`
         } `json:"createdAt"`
     }
-    
-    // Decode ke struktur yang sesuai dengan API
-    var pomokitData []PomokitData
-    if err := json.NewDecoder(resp.Body).Decode(&pomokitData); err != nil {
-        // Coba format alternatif jika gagal
+
+    // Coba decode sebagai array langsung
+    var pomokitItems []PomokitItem
+    if err := json.NewDecoder(resp.Body).Decode(&pomokitItems); err != nil {
+        // Reset reader dan coba decode sebagai response yang dibungkus
+        resp.Body.Close()
         resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
-        var wrappedData struct {
+        
+        var wrappedResponse struct {
             Success bool         `json:"success"`
-            Data    []PomokitData `json:"data"`
+            Data    []PomokitItem `json:"data"`
             Message string       `json:"message,omitempty"`
         }
         
-        if err := json.NewDecoder(resp.Body).Decode(&wrappedData); err != nil {
-            fmt.Printf("ERROR: Failed to parse API response. Raw response: %s\n", string(responseBody))
+        if err := json.NewDecoder(resp.Body).Decode(&wrappedResponse); err != nil {
+            fmt.Printf("ERROR: Failed to parse API response. Raw response: %s\n", string(responseBody[:min(200, len(responseBody))]))
             return nil, fmt.Errorf("Invalid API Response: %v", err)
         }
         
-        pomokitData = wrappedData.Data
-        fmt.Printf("DEBUG: Decoded as wrapped response struct with %d reports\n", len(pomokitData))
+        pomokitItems = wrappedResponse.Data
+        fmt.Printf("DEBUG: Decoded as wrapped response with %d items\n", len(pomokitItems))
     } else {
-        fmt.Printf("DEBUG: Decoded as direct array with %d reports\n", len(pomokitData))
+        fmt.Printf("DEBUG: Decoded as direct array with %d items\n", len(pomokitItems))
     }
-    
-    if len(pomokitData) == 0 {
-        fmt.Printf("WARNING: No reports found in API response\n")
-        return nil, nil
-    }
-    
-    // Konversi dan filter data yang memiliki GTMetrix grade
-    var gtMetrixInfos []model.GTMetrixInfo
-    for _, data := range pomokitData {
-        // Skip jika tidak ada grade GTMetrix
-        if data.GTMetrixGrade == "" {
+
+    // Filter dan konversi ke GTMetrixInfo
+    var results []model.GTMetrixInfo
+    for _, item := range pomokitItems {
+        // Hanya gunakan item yang memiliki grade GTMetrix
+        if item.GTMetrixGrade == "" {
             continue
         }
         
-        // Parse created date
+        // Parse tanggal
         var createdAt time.Time
-        var parseErr error
-        
-        if data.CreatedAt.Date != "" {
+        if item.CreatedAt.Date != "" {
             // Coba beberapa format tanggal yang mungkin
-            formats := []string{
-                time.RFC3339,
-                time.RFC3339Nano,
-                "2006-01-02T15:04:05.999Z",
-                "2006-01-02T15:04:05Z",
-            }
-            
-            for _, format := range formats {
-                createdAt, parseErr = time.Parse(format, data.CreatedAt.Date)
-                if parseErr == nil {
+            for _, format := range []string{
+                time.RFC3339, time.RFC3339Nano, 
+                "2006-01-02T15:04:05.999Z", "2006-01-02T15:04:05Z",
+            } {
+                parsedTime, err := time.Parse(format, item.CreatedAt.Date)
+                if err == nil {
+                    createdAt = parsedTime
                     break
                 }
             }
             
-            if parseErr != nil {
-                fmt.Printf("WARNING: Failed to parse date %s, using current time\n", data.CreatedAt.Date)
+            // Jika masih gagal parse, gunakan waktu sekarang
+            if createdAt.IsZero() {
+                fmt.Printf("WARNING: Failed to parse date '%s', using current time\n", item.CreatedAt.Date)
                 createdAt = time.Now()
             }
         } else {
-            // Jika tanggal tidak ada, gunakan waktu sekarang
             createdAt = time.Now()
         }
         
-        // Konversi ke model GTMetrixInfo
+        // Buat objek GTMetrixInfo
         info := model.GTMetrixInfo{
-            Name:             data.Name,
-            PhoneNumber:      data.PhoneNumber,
-            Grade:            data.GTMetrixGrade,
-            Points:           gradeToPoints(data.GTMetrixGrade),
-            WaGroupID:        data.WaGroupID,
+            Name:             item.Name,
+            PhoneNumber:      item.PhoneNumber,
+            Grade:            item.GTMetrixGrade,
+            Points:           gradeToPoints(item.GTMetrixGrade),
+            WaGroupID:        item.WaGroupID,
             CreatedAt:        createdAt,
-            PerformanceScore: data.GTMetrixPerf,
-            StructureScore:   data.GTMetrixStruct,
-            LCP:              data.LCP,
-            TBT:              data.TBT,
-            CLS:              data.CLS,
+            PerformanceScore: item.GTMetrixPerf,
+            StructureScore:   item.GTMetrixStruct,
+            LCP:              item.LCP,
+            TBT:              item.TBT,
+            CLS:              item.CLS,
         }
         
-        // Tambahkan ke hasil
-        gtMetrixInfos = append(gtMetrixInfos, info)
+        results = append(results, info)
     }
     
-    fmt.Printf("DEBUG: Found %d records with GTMetrix data\n", len(gtMetrixInfos))
+    fmt.Printf("DEBUG: Found %d records with GTMetrix data\n", len(results))
     
-    // Jika tidak ada data GTMetrix valid, fallback ke database
-    if len(gtMetrixInfos) == 0 {
-        fmt.Printf("DEBUG: No valid GTMetrix data from API, falling back to database\n")
+    // Jika tidak menemukan data GTMetrix, gunakan fallback ke database
+    if len(results) == 0 {
+        fmt.Printf("DEBUG: No GTMetrix data found in API response, falling back to database\n")
         return getGTMetrixDataFromDB(db, onlyYesterday, onlyLastWeek)
     }
     
@@ -196,7 +175,7 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
     if onlyYesterday || onlyLastWeek {
         var filteredResults []model.GTMetrixInfo
         
-        for _, info := range gtMetrixInfos {
+        for _, info := range results {
             if shouldIncludeGTMetrixResult(info, onlyYesterday, onlyLastWeek) {
                 filteredResults = append(filteredResults, info)
             }
@@ -204,7 +183,7 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
         
         fmt.Printf("DEBUG: After time filtering: %d records\n", len(filteredResults))
         
-        // Jika hasil filter kosong, coba dari database
+        // Jika hasil filter kosong, gunakan fallback ke database
         if len(filteredResults) == 0 {
             fmt.Printf("DEBUG: No data after time filtering, falling back to database\n")
             return getGTMetrixDataFromDB(db, onlyYesterday, onlyLastWeek)
@@ -213,7 +192,15 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
         return filteredResults, nil
     }
     
-    return gtMetrixInfos, nil
+    return results, nil
+}
+
+// Helper function untuk min
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
 }
 
 
