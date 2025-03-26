@@ -549,3 +549,54 @@ func RekapIqScoreHarian(db *mongo.Database) error {
 
 	return nil
 }
+
+func RekapGTMetrixPagiHari(db *mongo.Database) (err error) {
+	err = RekapGTMetrixHarian(db, config.WAAPIToken, config.WAAPIMessage)
+	if err != nil {
+		return errors.New("Gagal menjalankan rekap GTMetrix harian: " + err.Error())
+	}
+	return nil
+}
+
+// RekapGTMetrixSemingguTerakhir menjalankan rekap otomatis GTMetrix mingguan
+func RekapGTMetrixSemingguTerakhir(db *mongo.Database) (err error) {
+	err = RekapGTMetrixMingguan(db, config.WAAPIToken, config.WAAPIMessage)
+	if err != nil {
+		return errors.New("Gagal menjalankan rekap GTMetrix mingguan: " + err.Error())
+	}
+	return nil
+}
+
+// RekapGTMetrixTotalToGroup mengirim rekap GTMetrix total ke grup tertentu
+func RekapGTMetrixTotalToGroup(db *mongo.Database, groupID string) (string, error) {
+	// Generate laporan untuk groupID
+	msg, err := GenerateGTMetrixReportTotal(db, groupID)
+	if err != nil {
+		return "", fmt.Errorf("gagal menghasilkan laporan: %v", err)
+	}
+
+	// Cek apakah laporan kosong
+	if strings.Contains(msg, "Tidak ada data GTMetrix") {
+		return msg, nil
+	}
+
+	// Jika grup ID mengandung tanda hubung, tidak kirim pesan
+	if strings.Contains(groupID, "-") {
+		return msg, nil
+	}
+
+	// Siapkan pesan
+	dt := &whatsauth.TextMessage{
+		To:       groupID,
+		IsGroup:  true,
+		Messages: msg,
+	}
+
+	// Kirim pesan ke API WhatsApp
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		return "", fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
+	}
+
+	return msg, nil
+}

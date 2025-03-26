@@ -90,7 +90,16 @@ func GetPomokitDataUserAPI(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	at.WriteJSON(respw, http.StatusOK, matchingReports)
+	// Create response with data and count
+	response := struct {
+		Data  []model.PomodoroReport `json:"data"`
+		Count int                     `json:"count"`
+	}{
+		Data:  matchingReports,
+		Count: len(matchingReports),
+	}
+
+	at.WriteJSON(respw, http.StatusOK, response)
 }
 
 func GetPomokitDataAllUserAPI(respw http.ResponseWriter, req *http.Request) {
