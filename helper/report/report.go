@@ -112,7 +112,7 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 		"hostname": hostname,
 	}
 
-	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackeriptest", filter)
+	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
 	if err != nil {
 		return activityscore, err
 	}
