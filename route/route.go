@@ -280,16 +280,17 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Endpoint GTMetrix Report
 	case method == "GET" && path == "/report/gtmetrix/yesterday":
 		controller.GetGTMetrixReportYesterday(w, r)
-	// case method == "GET" && path == "/report/gtmetrix/lastweek":
-	// 	controller.GetGTMetrixReportLastWeek(w, r)
-	// case method == "GET" && path == "/report/gtmetrix/total":
-	// 	controller.GetGTMetrixReportTotal(w, r)
+	case method == "GET" && path == "/report/gtmetrix/lastweek":
+		controller.GetGTMetrixReportLastWeek(w, r)
+	case method == "GET" && path == "/report/gtmetrix/total":
+		controller.GetGTMetrixReportTotal(w, r)
 
-	// Endpoint untuk refresh report secara otomatis
+	// Endpoint untuk cron job
 	case method == "GET" && path == "/refresh/report/gtmetrixharian":
 		controller.RefreshGTMetrixHarianReport(w, r)
-	// case method == "GET" && path == "/refresh/report/gtmetrixmingguan":
-	// 	controller.RefreshGTMetrixMingguanReport(w, r)
+	case method == "GET" && path == "/refresh/report/gtmetrixmingguan":
+		controller.RefreshGTMetrixMingguanReport(w, r)
+
 	// Endpoint activity score
 	case method == "GET" && path == "/api/activityscore":
 		controller.GetAllActivityScore(w, r)

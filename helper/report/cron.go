@@ -550,7 +550,7 @@ func RekapIqScoreHarian(db *mongo.Database) error {
 	return nil
 }
 
-func RekapGTMetrixPagiHari(db *mongo.Database) (err error) {
+func RekapGTMetrixKemarin(db *mongo.Database) (err error) {
 	err = RekapGTMetrixHarian(db, config.WAAPIToken, config.WAAPIMessage)
 	if err != nil {
 		return errors.New("Gagal menjalankan rekap GTMetrix harian: " + err.Error())
