@@ -356,11 +356,11 @@ func GeneratePomokitReportKemarin(db *mongo.Database, groupID string) (string, e
 	// Tambahkan motivasi berdasarkan total sesi
 	msg += "\n"
 	if totalAktivitasKemarin > 10 {
-		msg += "💪 *Kerja bagus tim! Pertahankan semangat Pomodoro!*"
+		msg += "💪 *Kerja bagus ! Pertahankan semangat !*"
 	} else if totalAktivitasKemarin > 5 {
-		msg += "👍 *Semangat terus tim! Teknik Pomodoro membantu produktivitas.*"
+		msg += "👍 *Semangat terus !*"
 	} else {
-		msg += "🚀 *Mari tingkatkan sesi Pomodoro hari ini!*"
+		msg += "🚀 *Mari tingkatkan Semanget hari ini!*"
 	}
 	
 	// Tambahkan catatan poin
@@ -507,11 +507,11 @@ func GeneratePomokitReportSemingguTerakhir(db *mongo.Database, groupID string, p
 	// Tambahkan motivasi berdasarkan total sesi
 	msg += "\n"
 	if totalAktivitasSeminggu > 30 {
-		msg += "🔥 *Kerja hebat tim! Seminggu yang sangat produktif dengan Pomodoro!*"
+		msg += "🔥 *Kerja hebat! Seminggu yang sangat produktif!*"
 	} else if totalAktivitasSeminggu > 15 {
-		msg += "👍 *Semangat terus tim! Rutinitas Pomodoro menunjukkan konsistensi kalian.*"
+		msg += "👍 *Semangat terus! Rutinitas menunjukkan konsistensi kalian.*"
 	} else {
-		msg += "🚀 *Mari tingkatkan sesi Pomodoro di minggu depan!*"
+		msg += "🚀 *Mari tingkatkan semangat di minggu depan!*"
 	}
 	
 	// Tambahkan catatan poin
