@@ -35,7 +35,6 @@ func gradeToPoints(grade string) float64 {
 	}
 }
 
-// Fungsi untuk mengambil data GTMetrix dari API
 func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) ([]model.GTMetrixInfo, error) {
     // Ambil konfigurasi
     var conf model.Config
@@ -49,7 +48,7 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
 
     fmt.Printf("DEBUG: Mengambil data GTMetrix dari %s\n", conf.PomokitUrl)
 
-    // HTTP Client request ke API GTMetrix
+    // HTTP Client request ke API
     client := &http.Client{Timeout: 15 * time.Second}
     resp, err := client.Get(conf.PomokitUrl)
     if err != nil {
@@ -72,55 +71,93 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
     resp.Body.Close()
     resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
 
-    // Try to decode as direct array first
-    var gtmetrixInfo []model.GTMetrixInfo
-    if err := json.NewDecoder(resp.Body).Decode(&gtmetrixInfo); err != nil {
+    // Decode directly into GTMetrixInfo objects
+    var allReports []model.GTMetrixInfo
+    if err := json.NewDecoder(resp.Body).Decode(&allReports); err != nil {
         // Reset reader and try as wrapped response
         resp.Body.Close()
         resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
         
         var apiResponse struct {
-            Success bool                `json:"success"`
+            Success bool               `json:"success"`
             Data    []model.GTMetrixInfo `json:"data"`
-            Message string              `json:"message,omitempty"`
+            Message string             `json:"message,omitempty"`
         }
         
         if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
             fmt.Printf("ERROR: Failed to parse API response. Raw response: %s\n", string(responseBody))
             return nil, errors.New("Invalid API Response: " + err.Error())
         }
-        
-        gtmetrixInfo = apiResponse.Data
-        fmt.Printf("DEBUG: Decoded as wrapped response with %d GTMetrix reports\n", len(gtmetrixInfo))
+        allReports = apiResponse.Data
+        fmt.Printf("DEBUG: Decoded as wrapped response with %d reports\n", len(allReports))
     } else {
-        fmt.Printf("DEBUG: Decoded as direct array with %d GTMetrix reports\n", len(gtmetrixInfo))
+        fmt.Printf("DEBUG: Decoded as direct array with %d reports\n", len(allReports))
     }
 
-    if len(gtmetrixInfo) == 0 {
-        fmt.Printf("WARNING: No GTMetrix reports found in API response\n")
+    if len(allReports) == 0 {
+        fmt.Printf("WARNING: No reports found in API response\n")
         return nil, nil
     }
 
-    // Apply time filters if specified
+    // Filter for reports with GTMetrix data
+    var filteredReports []model.GTMetrixInfo
+    for _, report := range allReports {
+        if report.GTMetrixGrade != "" {
+            // Add points calculation
+            report.Points = gradeToPoints(report.GTMetrixGrade)
+            filteredReports = append(filteredReports, report)
+        }
+    }
+
+    // Apply time filters and prepare results
     var results []model.GTMetrixInfo
-    
+    var phoneToLatestData = make(map[string]model.GTMetrixInfo)
+
+    // Timezone Jakarta untuk konsistensi
+    location, _ := time.LoadLocation("Asia/Jakarta")
+    if location == nil {
+        location = time.Local
+    }
+
+    // Calculate time bounds if needed
+    var startOfYesterday, endOfYesterday time.Time
+    var weekAgo time.Time
     if onlyYesterday {
-        startOfYesterday, endOfYesterday := getStartAndEndOfYesterday(time.Now())
-        for _, info := range gtmetrixInfo {
-            if (info.CreatedAt.After(startOfYesterday) || info.CreatedAt.Equal(startOfYesterday)) && 
-               info.CreatedAt.Before(endOfYesterday) {
-                results = append(results, info)
-            }
-        }
+        startOfYesterday, endOfYesterday = getStartAndEndOfYesterday(time.Now())
     } else if onlyLastWeek {
-        weekAgo := time.Now().AddDate(0, 0, -7)
-        for _, info := range gtmetrixInfo {
-            if info.CreatedAt.After(weekAgo) {
-                results = append(results, info)
+        weekAgo = time.Now().AddDate(0, 0, -7)
+    }
+
+    for _, report := range filteredReports {
+        // Apply time filters
+        activityTime := report.CreatedAt.In(location)
+        
+        if onlyYesterday {
+            // Only include if it's from yesterday
+            if !(activityTime.After(startOfYesterday) && activityTime.Before(endOfYesterday)) {
+                continue
+            }
+            results = append(results, report)
+        } else if onlyLastWeek {
+            // Only include if it's from the last week
+            if !activityTime.After(weekAgo) {
+                continue
+            }
+            results = append(results, report)
+        } else {
+            // For total data, keep only latest per phone number
+            existing, exists := phoneToLatestData[report.PhoneNumber]
+            if !exists || report.CreatedAt.After(existing.CreatedAt) {
+                phoneToLatestData[report.PhoneNumber] = report
             }
         }
-    } else {
-        results = gtmetrixInfo
+    }
+
+    // If getting total data, convert map to slice
+    if !onlyYesterday && !onlyLastWeek {
+        for _, report := range phoneToLatestData {
+            results = append(results, report)
+        }
     }
 
     fmt.Printf("DEBUG: Retrieved %d GTMetrix reports after filtering\n", len(results))
@@ -160,7 +197,7 @@ func GenerateGTMetrixReportYesterday(db *mongo.Database, groupID string) (string
 
 	for _, info := range filteredData {
 		msg += fmt.Sprintf("✅ *%s* (%s): Grade %s (+%.0f poin)\n", 
-			info.Name, info.PhoneNumber, info.Grade, info.Points)
+			info.Name, info.PhoneNumber, info.GTMetrixGrade, info.Points)
 	}
 
 	return msg, nil
@@ -208,7 +245,7 @@ func GenerateGTMetrixReportLastWeek(db *mongo.Database, groupID string) (string,
 
 	for _, info := range filteredData {
 		msg += fmt.Sprintf("✅ *%s* (%s): Grade %s (+%.0f poin)\n", 
-			info.Name, info.PhoneNumber, info.Grade, info.Points)
+			info.Name, info.PhoneNumber, info.GTMetrixGrade, info.Points)
 	}
 
 	return msg, nil
@@ -245,13 +282,13 @@ func GenerateGTMetrixReportTotal(db *mongo.Database, groupID string) (string, er
 
 	for _, info := range filteredData {
 		performanceInfo := ""
-		if info.PerformanceScore != "" && info.StructureScore != "" {
+		if info.GTMetrixPerformance != "" && info.GTMetrixStructure != "" {
 			performanceInfo = fmt.Sprintf(" | Perf: %s, Struct: %s", 
-				info.PerformanceScore, info.StructureScore)
+				info.GTMetrixPerformance, info.GTMetrixStructure)
 		}
 		
 		msg += fmt.Sprintf("✅ *%s* (%s): Grade %s (+%.0f poin)%s\n", 
-			info.Name, info.PhoneNumber, info.Grade, info.Points, performanceInfo)
+			info.Name, info.PhoneNumber, info.GTMetrixGrade, info.Points, performanceInfo)
 	}
 
 	// Tambahkan tabel konversi grade ke poin
