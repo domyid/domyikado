@@ -1,5 +1,7 @@
 package model
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 type PreTestQuestion struct {
 	ID        string   `json:"id" bson:"id"`
 	Question  string   `json:"question" bson:"question"`
@@ -16,18 +18,33 @@ type PreTestScoring struct {
 	Score   string `json:"score" bson:"score"`
 }
 
-type PreTestUser struct {
-	ID          string  `json:"id,omitempty" bson:"_id,omitempty"`
-	Name        string  `json:"name,omitempty"`
-	PhoneNumber string  `json:"phonenumber,omitempty"`
-	Email       string  `json:"email,omitempty"`
-	Poin        float64 `json:"poin,omitempty"`
-	Score       string  `json:"score,omitempty"`
-	IQ          string  `json:"iq,omitempty"`
-	CreatedAt   string  `json:"created_at,omitempty"`
+type PreTestAnswerScore struct {
+	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	Name        string             `json:"name,omitempty" bson:"name,omitempty"`
+	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
+	Score       string             `json:"score" bson:"score"`
+	Pretest     string             `json:"pretest" bson:"pretest"`
+	CreatedAt   string             `json:"created_at" bson:"created_at"`
 }
 
-type PreTestUserAnswer struct {
-	Name    string   `json:"name"`
-	Answers []string `json:"answers"`
+type UserWithPretestScore struct {
+	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	Name        string             `json:"name,omitempty"`
+	PhoneNumber string             `json:"phonenumber,omitempty"`
+	Email       string             `json:"email,omitempty"`
+	Poin        float64            `json:"poin,omitempty"`
+	Score       string             `json:"score,omitempty"`
+	Pretest     string             `json:"pretest,omitempty"`
+	CreatedAt   string             `json:"created_at,omitempty"`
+}
+
+type PreTestAnswerItem struct {
+	QuestionID string `json:"question_id" bson:"question_id"`
+	AnswerKey  string `json:"answer_key" bson:"answer_key"`
+	AnswerText string `json:"answer_text" bson:"answer_text"`
+}
+
+type PreTestAnswerPayload struct {
+	Name    string              `json:"name"`
+	Answers []PreTestAnswerItem `json:"answers"`
 }
