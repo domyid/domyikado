@@ -93,7 +93,7 @@ func RekapMeetingKemarin(db *mongo.Database) (err error) {
 
 func RekapStravaYesterday(db *mongo.Database) error {
 	// Ambil data Strava yang sudah termasuk grup WA
-	phoneNumberCount, err := GetTotalDataStravaMasuk(db, false)
+	phoneNumberCount, err := GetTotalDataStravaMasuk(db)
 	if err != nil {
 		return errors.New("gagal mengambil data Strava: " + err.Error())
 	}

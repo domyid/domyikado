@@ -26,14 +26,14 @@ type StravaInfo struct {
 
 func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, perwakilanphone string, err error) {
 	// Ambil data Strava
-	dailyData, err := GetTotalDataStravaMasuk(db, false)
+	dailyData, err := GetTotalDataStravaMasuk(db)
 	if err != nil {
 		return "", "", fmt.Errorf("gagal mengambil data Strava harian: %v", err)
 	}
-	totalData, err := GetTotalDataStravaMasuk(db, true)
-	if err != nil {
-		return "", "", fmt.Errorf("gagal mengambil data Strava total: %v", err)
-	}
+	// totalData, err := GetTotalDataStravaMasuk(db, true)
+	// if err != nil {
+	// 	return "", "", fmt.Errorf("gagal mengambil data Strava total: %v", err)
+	// }
 
 	// Buat list untuk menyimpan user yang termasuk dalam groupId
 	var filteredDailyData []StravaInfo
@@ -50,14 +50,14 @@ func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, pe
 	}
 
 	// Filter totalData yang termasuk dalam groupId
-	for _, info := range totalData {
-		for _, gid := range info.WaGroupID {
-			if gid == groupId {
-				filteredTotalData = append(filteredTotalData, info)
-				break
-			}
-		}
-	}
+	// for _, info := range totalData {
+	// 	for _, gid := range info.WaGroupID {
+	// 		if gid == groupId {
+	// 			filteredTotalData = append(filteredTotalData, info)
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	// Jika grup tidak memiliki anggota, jangan kirim pesan
 	if len(filteredDailyData) == 0 && len(filteredTotalData) == 0 {
@@ -72,7 +72,7 @@ func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, pe
 	msg += "\n\n*Total Keseluruhan:*\n"
 	msg += formatStravaData(filteredTotalData)
 
-	msg += "\n\nJika dirasa sudah melakukan aktivitas namun tidak tercatat, mungkin ada yang salah dengan link Strava profile picture. Silakan lakukan update Strava profile picture di do.my.id yang sesuai dengan link profile picture di Strava. Atau nomor hp yang digunakan untuk share link strava tidak sesuai dengan nomor hp yang terdaftar di do.my.id."
+	msg += "\n\nJika dirasa sudah melakukan aktivitas namun tidak tercatat, mungkin ada yang salah dengan link Strava profile picture. Silakan lakukan update Strava profile picture di do.my.id yang sesuai dengan link profile picture di Strava. Atau nomor wa yang digunakan untuk share link strava tidak sesuai dengan nomor wa yang terdaftar di do.my.id. Silahkan gunakan nomor wa yang sesuai."
 
 	// Set perwakilan pertama sebagai nomor yang akan menerima pesan jika private
 	if len(filteredDailyData) > 0 {
@@ -84,8 +84,8 @@ func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, pe
 	return msg, perwakilanphone, nil
 }
 
-func GetTotalDataStravaMasuk(db *mongo.Database, isTotal bool) (map[string]StravaInfo, error) {
-	users, err := getPhoneNumberAndNameFromStravaActivity(db, isTotal)
+func GetTotalDataStravaMasuk(db *mongo.Database) (map[string]StravaInfo, error) {
+	users, err := getPhoneNumberAndNameFromStravaActivity(db)
 	if err != nil {
 		return nil, err
 	}
@@ -123,16 +123,18 @@ func formatStravaData(data []StravaInfo) string {
 	return result
 }
 
-func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database, isTotal bool) ([]StravaInfo, error) {
+func getPhoneNumberAndNameFromStravaActivity(db *mongo.Database) ([]StravaInfo, error) {
 	// Ambil semua aktivitas Strava
 	var activities []model.StravaActivity
 	var err error
 
-	if isTotal {
-		activities, err = getStravaActivitiesTotal(db)
-	} else {
-		activities, err = getStravaActivitiesPerDay(db)
-	}
+	// if isTotal {
+	// 	activities, err = getStravaActivitiesTotal(db)
+	// } else {
+	// 	activities, err = getStravaActivitiesPerDay(db)
+	// }
+
+	activities, err = getStravaActivitiesPerDay(db)
 
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil data aktivitas Strava: %v", err)
@@ -282,26 +284,26 @@ func getStravaActivitiesPerDay(db *mongo.Database) ([]model.StravaActivity, erro
 	return filteredActivities, nil
 }
 
-func getStravaActivitiesTotal(db *mongo.Database) ([]model.StravaActivity, error) {
-	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
-	if err != nil {
-		return nil, fmt.Errorf("gagal mengambil config url: %v", err)
-	}
+// func getStravaActivitiesTotal(db *mongo.Database) ([]model.StravaActivity, error) {
+// 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+// 	if err != nil {
+// 		return nil, fmt.Errorf("gagal mengambil config url: %v", err)
+// 	}
 
-	_, doc, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
-	if err != nil {
-		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
-	}
+// 	_, doc, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("gagal mengambil aktivitas Strava: %v", err)
+// 	}
 
-	var filteredActivities []model.StravaActivity
-	for _, activity := range doc {
-		if activity.Status == "Valid" {
-			filteredActivities = append(filteredActivities, activity)
-		}
-	}
+// 	var filteredActivities []model.StravaActivity
+// 	for _, activity := range doc {
+// 		if activity.Status == "Valid" {
+// 			filteredActivities = append(filteredActivities, activity)
+// 		}
+// 	}
 
-	return filteredActivities, nil
-}
+// 	return filteredActivities, nil
+// }
 
 func duplicatePhoneNumbersCount(users []StravaInfo) map[string]StravaInfo {
 	phoneNumberCount := make(map[string]StravaInfo)
