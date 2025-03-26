@@ -212,9 +212,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Pre Test
 	case method == "GET" && strings.HasPrefix(path, "/api/pretest/question/"):
 		controller.GetOnePreTestQuestion(w, r)
-	case method == "GET" && path == "/api/iq/new":
+	case method == "GET" && path == "/api/pretest/user":
 		controller.GetUserAndPreTestScore(w, r)
-	case method == "POST" && path == "/api/iq/answer":
+	case method == "POST" && path == "/api/pretest/answer":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostPretestAnswer(w, r)
 	// Google Auth
