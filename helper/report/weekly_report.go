@@ -2,6 +2,7 @@ package report
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"time"
 
@@ -19,7 +20,7 @@ func WeeklyFilter() bson.M {
 	return bson.M{
 		"$gte": primitive.NewObjectIDFromTimestamp(weekAgo),
 		"$lt":  primitive.NewObjectIDFromTimestamp(time.Now()),
-	} 
+	}
 }
 
 // Get laporan mingguan dari satu grup wa
@@ -66,4 +67,39 @@ func GenerateRekapMessageMingguIniPerWAGroupID(db *mongo.Database, groupId strin
 	}
 
 	return
+}
+
+func GetScoreTrackerAllLastWeek(db *mongo.Database) (map[string]int, map[string]float64, error) {
+	filter := bson.M{
+		"_id": WeeklyFilter(),
+		"$and": []bson.M{
+			{
+				"hostname": bson.M{"$nin": []string{"", "127.0.0.1", "3.27.215.75"}}, // Hostname domain tidak valid
+			},
+			{
+				"hostname": bson.M{"$not": bson.M{"$regex": `^[a-z0-9]+--`}}, // Hostname tanpa prefix acak
+			},
+			{
+				"hostname": bson.M{"$in": GetValidHostnames()}, // Hanya hostname dari domainProyek1 yang ditampilkan
+			},
+		},
+	}
+
+	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackeriptest", filter)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	jumlah := make(map[string]int)
+	for _, lap := range laps {
+		jumlah[lap.Hostname]++
+	}
+
+	point := make(map[string]float64)
+	for hostname, count := range jumlah {
+		calculatedPoint := (float64(count) / 7) * 10
+		point[hostname] = math.Min(calculatedPoint, 100) // Batasi maksimal 100
+	}
+
+	return jumlah, point, err
 }
