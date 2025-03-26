@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -106,6 +107,24 @@ func GenerateRekapPengunjungWebPerWAGroupID(db *mongo.Database) (msg string, err
 	return
 }
 
+func GetScoreTrackerAll(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
+	filter := bson.M{
+		"hostname": hostname,
+	}
+
+	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackeriptest", filter)
+	if err != nil {
+		return activityscore, err
+	}
+
+	jumlah := len(laps)
+	calculatedPoint := (float64(jumlah) / 7) * 10
+	point := math.Min(calculatedPoint, 100)
+	activityscore.Trackerdata = jumlah
+	activityscore.Tracker = point
+	return activityscore, err
+}
+
 func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": YesterdayFilter(), "project.wagroupid": groupId}
 	pushrepodata, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", filter)
@@ -116,7 +135,7 @@ func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (ph
 	return
 }
 
-func getValidHostnames() []string {
+func GetValidHostnames() []string {
 	var validHostnames []string
 	for _, domain := range DomainProyek1 {
 		validHostnames = append(validHostnames, domain.Project_Hostname)
@@ -139,7 +158,7 @@ func GetVisitorReportForWhatsApp(db *mongo.Database) (string, error) {
 				"hostname": bson.M{"$not": bson.M{"$regex": `^[a-z0-9]+--`}}, // Hostname tanpa prefix acak
 			},
 			{
-				"hostname": bson.M{"$in": getValidHostnames()}, // Hanya hostname dari domainProyek1 yang ditampilkan
+				"hostname": bson.M{"$in": GetValidHostnames()}, // Hanya hostname dari domainProyek1 yang ditampilkan
 			},
 		},
 	}
