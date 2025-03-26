@@ -273,9 +273,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	//strava coba
 	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
-		controller.ProcessStravaPoints1(w, r)
+		controller.ProcessStravaPoints(w, r)
 	case method == "POST" && at.URLParam(path, "/data/strava-poin/wa/:nomorwa"):
-		controller.ProcessStravaPoints1(w, r)
+		controller.AddStravaPoints(w, r)
 
 	// Endpoint GTMetrix Report
 	case method == "GET" && path == "/report/gtmetrix/yesterday":
