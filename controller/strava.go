@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -232,4 +233,139 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil diperbarui"})
+}
+
+func ProcessStravaPoints1(respw http.ResponseWriter, req *http.Request) {
+	db := config.Mongoconn
+	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+	if err != nil {
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch config"})
+		return
+	}
+
+	scode, activities, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
+	if err != nil || scode != http.StatusOK {
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch data"})
+		return
+	}
+
+	colPoin := db.Collection("stravapoin")
+	colUsers := db.Collection("user")
+
+	phoneNumbers := make(map[string]bool)
+	userData := make(map[string]map[string]struct {
+		TotalKm       float64
+		ActivityCount int
+		NameStrava    string
+	})
+
+	for _, activity := range activities {
+		if activity.Status != "Valid" {
+			continue
+		}
+
+		year, week := activity.CreatedAt.ISOWeek()
+		weekYear := fmt.Sprintf("%d_%d", year, week)
+
+		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
+		distance, err := strconv.ParseFloat(distanceStr, 64)
+		if err != nil {
+			log.Println("Error converting distance:", err)
+			continue
+		}
+
+		phoneNumbers[activity.PhoneNumber] = true
+		if _, exists := userData[activity.PhoneNumber]; !exists {
+			userData[activity.PhoneNumber] = make(map[string]struct {
+				TotalKm       float64
+				ActivityCount int
+				NameStrava    string
+			})
+		}
+
+		userData[activity.PhoneNumber][weekYear] = struct {
+			TotalKm       float64
+			ActivityCount int
+			NameStrava    string
+		}{
+			TotalKm:       userData[activity.PhoneNumber][weekYear].TotalKm + distance,
+			ActivityCount: userData[activity.PhoneNumber][weekYear].ActivityCount + 1,
+			NameStrava:    activity.Name,
+		}
+	}
+
+	phoneList := make([]string, 0, len(phoneNumbers))
+	for phone := range phoneNumbers {
+		phoneList = append(phoneList, phone)
+	}
+	groupMap, err := report.GetGrupIDFromProject(db, phoneList)
+	if err != nil {
+		log.Println("Error getting group IDs:", err)
+	}
+
+	for phone, weeks := range userData {
+		for weekYear, data := range weeks {
+			filter := bson.M{"phone_number": phone, "week_year": weekYear}
+
+			var existing struct {
+				ActivityCount int                `bson:"activity_count"`
+				WaGroupID     string             `bson:"wagroupid,omitempty"`
+				UserID        primitive.ObjectID `bson:"user_id,omitempty"`
+				NameStrava    string             `bson:"name_strava,omitempty"`
+			}
+			err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
+			if err != nil && err != mongo.ErrNoDocuments {
+				log.Println("Error fetching existing data:", err)
+				continue
+			}
+
+			var user struct {
+				ID   primitive.ObjectID `bson:"_id"`
+				Name string             `bson:"name"`
+			}
+			err = colUsers.FindOne(context.TODO(), bson.M{"phonenumber": phone}).Decode(&user)
+			if err != nil && err != mongo.ErrNoDocuments {
+				log.Println("Error fetching user_id:", err)
+			}
+
+			selectedGroup := ""
+			if groupIDs, exists := groupMap[phone]; exists {
+				for _, groupID := range groupIDs {
+					if allowedGroups[groupID] {
+						selectedGroup = groupID
+						break
+					}
+				}
+			}
+
+			newPoin := (data.TotalKm / 6 * 100)
+
+			update := bson.M{
+				"$set": bson.M{
+					"wagroupid":   selectedGroup,
+					"user_id":     user.ID,
+					"updated_at":  time.Now(),
+					"name":        user.Name,
+					"name_strava": data.NameStrava,
+					"week_year":   weekYear,
+				},
+				"$setOnInsert": bson.M{
+					"created_at": time.Now(),
+				},
+				"$inc": bson.M{
+					"poin":           newPoin,            // Menambahkan poin jika minggu yang sama
+					"total_km":       data.TotalKm,       // Menambahkan total km jika minggu yang sama
+					"activity_count": data.ActivityCount, // Menambahkan jumlah aktivitas jika minggu yang sama
+				},
+			}
+
+			opts := options.Update().SetUpsert(true)
+			_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+			if err != nil {
+				log.Println("Error updating strava_poin:", err)
+			}
+		}
+	}
+
+	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Proses poin Strava selesai"})
 }

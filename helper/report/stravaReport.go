@@ -77,9 +77,10 @@ func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, pe
 	// Set perwakilan pertama sebagai nomor yang akan menerima pesan jika private
 	if len(filteredDailyData) > 0 {
 		perwakilanphone = filteredDailyData[0].PhoneNumber
-	} else if len(filteredTotalData) > 0 {
-		perwakilanphone = filteredTotalData[0].PhoneNumber
-	}
+	} 
+	// else if len(filteredTotalData) > 0 {
+	// 	perwakilanphone = filteredTotalData[0].PhoneNumber
+	// }
 
 	return msg, perwakilanphone, nil
 }
