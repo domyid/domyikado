@@ -11,11 +11,9 @@ type PreTestQuestion struct {
 }
 
 type PreTestScoring struct {
-	ID        string  `json:"id" bson:"id"`
-	Pretest   string  `json:"pratest" bson:"pratest"`
-	Score     string  `json:"score" bson:"score"`
-	CreatedAt string  `json:"created_at" bson:"created_at"`
-	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	ID      string `json:"id" bson:"id"`
+	Pretest string `json:"pretest" bson:"pretest"`
+	Score   string `json:"score" bson:"score"`
 }
 
 type PreTestUser struct {
