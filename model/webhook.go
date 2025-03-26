@@ -89,7 +89,7 @@ type ActivityScore struct {
 	Rupiah         int                `bson:"rupiah,omitempty" json:"rupiah,omitempty"`                 //total nilai rupiah yang disetorkan
 	QRIS           int                `bson:"qris,omitempty" json:"qris,omitempty"`                     // dibagi rata2 kelas dikali 100
 	Trackerdata    int                `bson:"trackerdata,omitempty" json:"trackerdata,omitempty"`       //jumlah total visitor
-	Tracker        int                `bson:"tracker,omitempty" json:"tracker,omitempty"`               //rata2 10 unique visitor sehari 100
+	Tracker        float64            `bson:"tracker,omitempty" json:"tracker,omitempty"`               //rata2 10 unique visitor sehari 100
 	BukuKatalog    string             `bson:"bukukatalog,omitempty" json:"bukukatalog,omitempty"`       //url katalog buku
 	BukPed         int                `bson:"bukped,omitempty" json:"bukped,omitempty"`                 //upload 25;approve 50;resi 75;deposit 100
 	JurnalWeb      string             `bson:"jurnalweb,omitempty" json:"jurnalweb,omitempty"`           //Alamat web jurnal
