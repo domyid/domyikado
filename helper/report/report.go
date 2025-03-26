@@ -107,7 +107,7 @@ func GenerateRekapPengunjungWebPerWAGroupID(db *mongo.Database) (msg string, err
 	return
 }
 
-func GetScoreTrackerAll(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
+func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
 	filter := bson.M{
 		"hostname": hostname,
 	}
