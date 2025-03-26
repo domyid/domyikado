@@ -122,23 +122,23 @@ func GetGTMetrixData(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) 
 }
 
 func shouldIncludeGTMetrixResult(info model.GTMetrixInfo, onlyYesterday bool, onlyLastWeek bool) bool {
+    result := false
+    
     if !onlyYesterday && !onlyLastWeek {
-        return true
-    }
-    
-    createdAt := info.CreatedAt
-    
-    if onlyYesterday {
+        result = true
+    } else if onlyYesterday {
         start, end := getStartAndEndOfYesterday(time.Now())
-        return createdAt.After(start) && createdAt.Before(end)
-    }
-    
-    if onlyLastWeek {
+        result = info.CreatedAt.After(start) && info.CreatedAt.Before(end)
+        fmt.Printf("DEBUG: Filtering yesterday - createdAt: %v, start: %v, end: %v, result: %v\n", 
+                   info.CreatedAt, start, end, result)
+    } else if onlyLastWeek {
         weekAgo := time.Now().AddDate(0, 0, -7)
-        return createdAt.After(weekAgo)
+        result = info.CreatedAt.After(weekAgo)
+        fmt.Printf("DEBUG: Filtering last week - createdAt: %v, weekAgo: %v, result: %v\n", 
+                   info.CreatedAt, weekAgo, result)
     }
     
-    return false
+    return result
 }
 
 func getGTMetrixDataFromDB(db *mongo.Database, onlyYesterday bool, onlyLastWeek bool) ([]model.GTMetrixInfo, error) {
