@@ -19,12 +19,13 @@ type PreTestScoring struct {
 }
 
 type PreTestAnswerScore struct {
-	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
-	Name        string             `json:"name,omitempty" bson:"name,omitempty"`
-	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
-	Score       string             `json:"score" bson:"score"`
-	Pretest     string             `json:"pretest" bson:"pretest"`
-	CreatedAt   string             `json:"created_at" bson:"created_at"`
+	ID          primitive.ObjectID  `json:"id,omitempty" bson:"_id,omitempty"`
+	Name        string              `json:"name,omitempty" bson:"name,omitempty"`
+	PhoneNumber string              `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
+	Answers     []PreTestAnswerItem `json:"answers" bson:"answers"`
+	Score       string              `json:"score" bson:"score"`
+	Pretest     string              `json:"pretest" bson:"pretest"`
+	CreatedAt   string              `json:"created_at" bson:"created_at"`
 }
 
 type UserWithPretestScore struct {
