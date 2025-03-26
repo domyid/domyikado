@@ -36,12 +36,32 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	
+	dataPomokitScore, err := GetPomokitScoreForUser(authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data Pomokit tidak ditemukan",
+		})
+		return
+	}
+	
+	dataGTMetrixScore, err := GetGTMetrixScoreForUser(authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data GTMetrix tidak ditemukan",
+		})
+		return
+	}
 
 	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
-		Trackerdata: datatracker.Trackerdata,
-		Tracker:     datatracker.Tracker,
-		StravaKM:    datastravapoin.StravaKM,
-		Strava:      datastravapoin.Strava,
+		Trackerdata:    datatracker.Trackerdata,
+		Tracker:        datatracker.Tracker,
+		StravaKM:       datastravapoin.StravaKM,
+		Strava:         datastravapoin.Strava,
+		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
+		Pomokit:        dataPomokitScore.Pomokit,
+		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
+		GTMetrix:       dataGTMetrixScore.GTMetrix,
 	})
 }
 
@@ -71,11 +91,31 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	
+	dataPomokitScore, err := GetLastWeekPomokitScoreForUser(authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data Pomokit mingguan tidak ditemukan",
+		})
+		return
+	}
+	
+	dataGTMetrixScore, err := GetLastWeekGTMetrixScoreForUser(authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data GTMetrix mingguan tidak ditemukan",
+		})
+		return
+	}
 
 	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
-		Trackerdata: datatracker.Trackerdata,
-		Tracker:     datatracker.Tracker,
-		StravaKM:    datastravapoin.StravaKM,
-		Strava:      datastravapoin.Strava,
+		Trackerdata:    datatracker.Trackerdata,
+		Tracker:        datatracker.Tracker,
+		StravaKM:       datastravapoin.StravaKM,
+		Strava:         datastravapoin.Strava,
+		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
+		Pomokit:        dataPomokitScore.Pomokit,
+		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
+		GTMetrix:       dataGTMetrixScore.GTMetrix,
 	})
 }
