@@ -107,6 +107,13 @@ func GenerateRekapPengunjungWebPerWAGroupID(db *mongo.Database) (msg string, err
 	return
 }
 
+func SelisihHariTracker() int {
+	tanggalAwal := time.Date(2025, 3, 11, 0, 0, 0, 0, time.UTC)
+	tanggalHariIni := time.Now()
+	selisihHari := tanggalHariIni.Sub(tanggalAwal).Hours() / 24
+	return int(selisihHari)
+}
+
 func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
 	filter := bson.M{
 		"hostname": hostname,
@@ -116,9 +123,9 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 	if err != nil {
 		return activityscore, err
 	}
-
+	days := SelisihHariTracker()
 	jumlah := len(laps)
-	calculatedPoint := (float64(jumlah) / 7) * 10
+	calculatedPoint := (float64(jumlah) / float64(days)) * 10
 	point := math.Min(calculatedPoint, 100)
 	activityscore.Trackerdata = jumlah
 	activityscore.Tracker = point
