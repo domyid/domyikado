@@ -235,14 +235,12 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.SimpanInformasiUserTesting(w, r)
 	case method == "POST" && path == "/api/laporantracker":
 		controller.LaporanengunjungWeb(w, r)
-	case method == "GET" && path == "/api/ambildatatracker":
-		controller.GetAllDataTracker(w, r)
 	// Tracker end
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
 
 	// Pomodoro
-		// dengan token header 'login'
+	// dengan token header 'login'
 	case method == "GET" && path == ("/report/pomokit/user"):
 		controller.GetPomokitDataUserAPI(w, r)
 	// parameter groupid=, phonenumber=, send=true/false(default nya true)
@@ -276,12 +274,15 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// 	controller.GetGTMetrixReportLastWeek(w, r)
 	// case method == "GET" && path == "/report/gtmetrix/total":
 	// 	controller.GetGTMetrixReportTotal(w, r)
-		
+
 	// Endpoint untuk refresh report secara otomatis
 	case method == "GET" && path == "/refresh/report/gtmetrixharian":
 		controller.RefreshGTMetrixHarianReport(w, r)
 	// case method == "GET" && path == "/refresh/report/gtmetrixmingguan":
 	// 	controller.RefreshGTMetrixMingguanReport(w, r)
+	// Endpoint activity score
+	case method == "GET" && path == "/api/activityscore":
+		controller.GetAllActivityScore(w, r)
 
 	default:
 		controller.NotFound(w, r)
