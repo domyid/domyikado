@@ -293,6 +293,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Endpoint activity score
 	case method == "GET" && path == "/api/activityscore":
 		controller.GetAllActivityScore(w, r)
+	case method == "GET" && path == "/api/activityscoreweekly":
+		controller.GetLastWeekActivityScore(w, r)
 
 	default:
 		controller.NotFound(w, r)
