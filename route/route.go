@@ -267,29 +267,33 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// hanya melalui log
 	case method == "GET" && path == "/report/pomokit/grup/mingguan/log":
 		controller.GetPomokitReportMingguanPerGrup(w, r)
-	// Menjalankan laporan mingguan untuk semua grup secara otomatis
+	// Menjalankan laporan dengan cron job
 	case method == "GET" && path == "/refresh/report/pomokitmingguan":
 		controller.RefreshPomokitMingguanReport(w, r)
-
-	//strava coba
-	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
-		controller.ProcessStravaPoints(w, r)
-	case method == "POST" && at.URLParam(path, "/data/strava-poin/wa/:nomorwa"):
-		controller.AddStravaPoints(w, r)
+	case method == "GET" && path == "/refresh/report/pomokitharian":
+		controller.RefreshPomokitHarianReport(w, r)
 
 	// Endpoint GTMetrix Report
+		// dengan token header 'login'
+	case method == "GET" && path == ("/report/gtmetrix/user"):
+		controller.GetGTMetrixDataUserAPI(w, r)
 	case method == "GET" && path == "/report/gtmetrix/yesterday":
 		controller.GetGTMetrixReportYesterday(w, r)
 	case method == "GET" && path == "/report/gtmetrix/lastweek":
 		controller.GetGTMetrixReportLastWeek(w, r)
 	case method == "GET" && path == "/report/gtmetrix/total":
 		controller.GetGTMetrixReportTotal(w, r)
-
 	// Endpoint untuk cron job
 	case method == "GET" && path == "/refresh/report/gtmetrixharian":
 		controller.RefreshGTMetrixHarianReport(w, r)
 	case method == "GET" && path == "/refresh/report/gtmetrixmingguan":
 		controller.RefreshGTMetrixMingguanReport(w, r)
+
+	//strava coba
+	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
+		controller.ProcessStravaPoints(w, r)
+	case method == "POST" && at.URLParam(path, "/data/strava-poin/wa/:nomorwa"):
+		controller.AddStravaPoints(w, r)
 
 	// Endpoint activity score
 	case method == "GET" && path == "/api/activityscore":
