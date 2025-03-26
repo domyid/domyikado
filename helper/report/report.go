@@ -132,6 +132,24 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 	return activityscore, err
 }
 
+func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
+	filter := bson.M{
+		"_id":      WeeklyFilter(),
+		"hostname": hostname,
+	}
+
+	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
+	if err != nil {
+		return activityscore, err
+	}
+	jumlah := len(laps)
+	calculatedPoint := (float64(jumlah) / 7) * 10
+	point := math.Min(calculatedPoint, 100)
+	activityscore.Trackerdata = jumlah
+	activityscore.Tracker = point
+	return activityscore, err
+}
+
 func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": YesterdayFilter(), "project.wagroupid": groupId}
 	pushrepodata, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", filter)
