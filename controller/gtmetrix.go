@@ -1,6 +1,11 @@
 package controller
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -9,10 +14,155 @@ import (
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/report"
+	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
-// GetGTMetrixReportYesterday mengirimkan laporan GTMetrix kemarin
+func GetGTMetrixDataUserAPI(respw http.ResponseWriter, req *http.Request) {
+	// Validasi token
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		at.WriteJSON(respw, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(req),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+	
+	// Ambil konfigurasi
+	var conf model.Config
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = config.Mongoconn.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+	if err != nil {
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+			Status:   "Error: Config Not Found",
+			Location: "Database Config",
+			Response: err.Error(),
+		})
+		return
+	}
+	
+	// HTTP Client request ke API GTMetrix
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(conf.PomokitUrl) // URL yang sama dengan Pomokit (sesuaikan jika berbeda)
+	if err != nil {
+		at.WriteJSON(respw, http.StatusBadGateway, model.Response{
+			Status:   "Error: API Connection Failed",
+			Location: "GTMetrix API",
+			Response: err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		at.WriteJSON(respw, http.StatusBadGateway, model.Response{
+			Status:   fmt.Sprintf("Error: API Returned Status %d", resp.StatusCode),
+			Location: "GTMetrix API",
+			Response: string(body),
+		})
+		return
+	}
+	
+	// Proses response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+			Status:   "Error: Failed to Read Response",
+			Location: "Response Reading",
+			Response: err.Error(),
+		})
+		return
+	}
+	
+	// Decode response menjadi data GTMetrixInfo
+	var gtmetrixReports []model.GTMetrixInfo
+	err = json.Unmarshal(body, &gtmetrixReports)
+	
+	// Coba format respons alternatif jika unmarshal langsung gagal
+	if err != nil {
+		var apiResponse struct {
+			Success bool                 `json:"success"`
+			Data    []model.GTMetrixInfo `json:"data"`
+			Message string               `json:"message,omitempty"`
+		}
+		
+		err = json.Unmarshal(body, &apiResponse)
+		if err != nil {
+			at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
+				Status:   "Error: Invalid API Response Format",
+				Location: "Response Decoding",
+				Response: fmt.Sprintf("Error: %v, Raw Response: %s", err, string(body)),
+			})
+			return
+		}
+		gtmetrixReports = apiResponse.Data
+	}
+	
+	// Filter data yang cocok dengan nomor telepon pengguna
+	var matchingReports []model.GTMetrixInfo
+	var latestReport model.GTMetrixInfo
+	var hasLatestReport bool
+	
+	for _, report := range gtmetrixReports {
+		if report.PhoneNumber == payload.Id {
+			// Tambahkan poin berdasarkan grade
+			report.Points = gradeToPoints(report.GTMetrixGrade)
+			matchingReports = append(matchingReports, report)
+			
+			// Cek apakah ini laporan terbaru
+			if !hasLatestReport || report.CreatedAt.After(latestReport.CreatedAt) {
+				latestReport = report
+				hasLatestReport = true
+			}
+		}
+	}
+	
+	// Kembalikan data kosong jika tidak ada yang cocok
+	if len(matchingReports) == 0 {
+		at.WriteJSON(respw, http.StatusNotFound, model.GTMetrixInfo{
+			PhoneNumber: payload.Id,
+			Name:        payload.Alias,
+		})
+		return
+	}
+
+	// Buat response dengan data dan grade terbaru
+	response := struct {
+		Data        []model.GTMetrixInfo `json:"data"`
+		LatestGrade string               `json:"latest_grade"`
+		Points      float64              `json:"points"`
+	}{
+		Data:        matchingReports,
+		LatestGrade: latestReport.GTMetrixGrade,
+		Points:      latestReport.Points,
+	}
+
+	at.WriteJSON(respw, http.StatusOK, response)
+}
+
+// Fungsi untuk mengkonversi grade GTMetrix ke poin
+func gradeToPoints(grade string) float64 {
+	switch strings.ToUpper(grade) {
+	case "A":
+		return 100
+	case "B":
+		return 75
+	case "C":
+		return 50
+	case "D":
+		return 25
+	default:
+		return 0
+	}
+}
+
 func GetGTMetrixReportYesterday(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
@@ -263,4 +413,100 @@ func GetGTMetrixReportTotal(respw http.ResponseWriter, req *http.Request) {
     }
 
     at.WriteJSON(respw, http.StatusOK, resp)
+}
+
+// untuk activity_score.go
+
+// Fungsi untuk mendapatkan skor GTMetrix terbaru
+func GetGTMetrixScoreForUser(phoneNumber string) (model.ActivityScore, error) {
+    var score model.ActivityScore
+    
+    // Ambil semua data GTMetrix (tanpa filter waktu)
+    allGTMetrixData, err := report.GetGTMetrixData(config.Mongoconn, false, false)
+    if err != nil {
+        return score, err
+    }
+    
+    // Temukan entry terbaru untuk user
+    var latestReport model.GTMetrixInfo
+    var hasLatestReport bool
+    
+    for _, report := range allGTMetrixData {
+        if report.PhoneNumber == phoneNumber {
+            if !hasLatestReport || report.CreatedAt.After(latestReport.CreatedAt) {
+                latestReport = report
+                hasLatestReport = true
+            }
+        }
+    }
+    
+    if !hasLatestReport {
+        return score, errors.New("tidak ditemukan data GTMetrix untuk pengguna ini")
+    }
+    
+    // Hitung skor berdasarkan grade sesuai dengan komentar di struct
+    score.GTMetrixResult = latestReport.GTMetrixGrade
+    
+    // A 100;B 75;C 50;D 25; E 0
+    switch strings.ToUpper(latestReport.GTMetrixGrade) {
+    case "A":
+        score.GTMetrix = 100
+    case "B":
+        score.GTMetrix = 75
+    case "C":
+        score.GTMetrix = 50
+    case "D":
+        score.GTMetrix = 25
+    default:
+        score.GTMetrix = 0
+    }
+    
+    return score, nil
+}
+
+// Fungsi untuk mendapatkan skor GTMetrix seminggu terakhir
+func GetLastWeekGTMetrixScoreForUser(phoneNumber string) (model.ActivityScore, error) {
+    var score model.ActivityScore
+    
+    // Ambil data GTMetrix seminggu terakhir
+    lastWeekData, err := report.GetGTMetrixData(config.Mongoconn, false, true)
+    if err != nil {
+        return score, err
+    }
+    
+    // Temukan entry terbaru untuk user dalam seminggu terakhir
+    var latestReport model.GTMetrixInfo
+    var hasLatestReport bool
+    
+    for _, report := range lastWeekData {
+        if report.PhoneNumber == phoneNumber {
+            if !hasLatestReport || report.CreatedAt.After(latestReport.CreatedAt) {
+                latestReport = report
+                hasLatestReport = true
+            }
+        }
+    }
+    
+    if !hasLatestReport {
+        return score, errors.New("tidak ditemukan data GTMetrix untuk pengguna ini dalam seminggu terakhir")
+    }
+    
+    // Hitung skor berdasarkan grade sesuai dengan komentar di struct
+    score.GTMetrixResult = latestReport.GTMetrixGrade
+    
+    // A 100;B 75;C 50;D 25; E 0
+    switch strings.ToUpper(latestReport.GTMetrixGrade) {
+    case "A":
+        score.GTMetrix = 100
+    case "B":
+        score.GTMetrix = 75
+    case "C":
+        score.GTMetrix = 50
+    case "D":
+        score.GTMetrix = 25
+    default:
+        score.GTMetrix = 0
+    }
+    
+    return score, nil
 }

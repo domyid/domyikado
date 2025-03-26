@@ -367,6 +367,54 @@ func GetPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request
 	at.WriteJSON(respw, http.StatusOK, resp)
 }
 
+func RefreshPomokitHarianReport(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	var wg sync.WaitGroup
+	var errChan = make(chan error, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.RekapPomokitKemarin(config.Mongoconn); err != nil {
+			// Send error to channel if it occurs
+			select {
+			case errChan <- err:
+				// Error successfully sent
+			default:
+				// Channel full, error not sent
+			}
+		}
+	}()
+
+	// Wait with a 2-second timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Process completed in time
+		resp.Status = "Success"
+		resp.Location = "Laporan Pomokit Harian"
+		resp.Response = "Proses pengiriman laporan Pomokit harian berhasil diselesaikan"
+		at.WriteJSON(respw, http.StatusOK, resp)
+	case err := <-errChan:
+		// Error occurred
+		resp.Status = "Error"
+		resp.Location = "Laporan Pomokit Harian"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+	case <-time.After(2 * time.Second):
+		// Timeout, but process continues in background
+		resp.Status = "Success"
+		resp.Location = "Laporan Pomokit Harian"
+		resp.Response = "Proses pengiriman laporan Pomokit harian telah dimulai dan sedang berjalan di background"
+		at.WriteJSON(respw, http.StatusOK, resp)
+	}
+}
+
 func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
 
@@ -524,4 +572,61 @@ func RefreshPomokitMingguanReport(respw http.ResponseWriter, req *http.Request) 
 		resp.Response = "Proses pengiriman laporan Pomokit mingguan telah dimulai dan sedang berjalan di background"
 		at.WriteJSON(respw, http.StatusOK, resp)
 	}
+}
+
+// untuk activity_score.go
+
+// Fungsi untuk mendapatkan skor Pomokit semua waktu
+func GetPomokitScoreForUser(phoneNumber string) (model.ActivityScore, error) {
+    var score model.ActivityScore
+    
+    // Ambil semua data Pomokit
+    allPomokitData, err := report.GetAllPomokitDataAPI(config.Mongoconn)
+    if err != nil {
+        return score, err
+    }
+    
+    // Filter dan hitung untuk user spesifik
+    var sessionCount int
+    
+    for _, report := range allPomokitData {
+        if report.PhoneNumber == phoneNumber {
+            sessionCount++
+        }
+    }
+    
+    // Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
+    score.Pomokitsesi = sessionCount
+    score.Pomokit = sessionCount * 20 // 20 per cycle
+    
+    return score, nil
+}
+
+// Fungsi untuk mendapatkan skor Pomokit seminggu terakhir
+func GetLastWeekPomokitScoreForUser(phoneNumber string) (model.ActivityScore, error) {
+    var score model.ActivityScore
+    
+    // Ambil semua data Pomokit
+    allPomokitData, err := report.GetAllPomokitDataAPI(config.Mongoconn)
+    if err != nil {
+        return score, err
+    }
+    
+    // Tentukan waktu seminggu yang lalu
+    weekAgo := time.Now().AddDate(0, 0, -7)
+    
+    // Filter dan hitung untuk user spesifik dalam seminggu terakhir
+    var sessionCount int
+    
+    for _, report := range allPomokitData {
+        if report.PhoneNumber == phoneNumber && report.CreatedAt.After(weekAgo) {
+            sessionCount++
+        }
+    }
+    
+    // Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
+    score.Pomokitsesi = sessionCount
+    score.Pomokit = sessionCount * 20 // 20 per cycle
+    
+    return score, nil
 }
