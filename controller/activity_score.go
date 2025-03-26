@@ -33,3 +33,27 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		Tracker:     datatracker.Tracker,
 	})
 }
+
+func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+	datatracker, err := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(authorization.Id))
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data tracker tidak di temukan",
+		})
+		return
+	}
+	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
+		Trackerdata: datatracker.Trackerdata,
+		Tracker:     datatracker.Tracker,
+	})
+}
