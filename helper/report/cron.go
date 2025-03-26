@@ -600,3 +600,25 @@ func RekapGTMetrixTotalToGroup(db *mongo.Database, groupID string) (string, erro
 
 	return msg, nil
 }
+
+// RekapCrowdfundingHarianJob mengirimkan rekap donasi crowdfunding harian ke grup WhatsApp
+func RekapCrowdfundingHarianJob(db *mongo.Database) error {
+	// Menjalankan fungsi rekap crowdfunding harian
+	err := RekapCrowdfundingHarian(db)
+	if err != nil {
+		return fmt.Errorf("gagal mengirim rekap crowdfunding harian: %v", err)
+	}
+
+	return nil
+}
+
+// RekapCrowdfundingMingguanJob mengirimkan rekap donasi crowdfunding mingguan ke grup WhatsApp
+func RekapCrowdfundingMingguanJob(db *mongo.Database) error {
+	// Menjalankan fungsi rekap crowdfunding mingguan
+	err := RekapCrowdfundingMingguan(db)
+	if err != nil {
+		return fmt.Errorf("gagal mengirim rekap crowdfunding mingguan: %v", err)
+	}
+
+	return nil
+}

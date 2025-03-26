@@ -196,6 +196,16 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetCrowdfundingTotal(w, r)
 	case method == "GET" && path == "/api/crowdfunding/history":
 		controller.GetUserCrowdfundingHistory(w, r)
+	// Endpoints untuk laporan crowdfunding
+	case method == "GET" && path == "/refresh/report/crowdfundingharian":
+		controller.GetCrowdfundingDailyReport(w, r)
+	case method == "GET" && path == "/refresh/report/crowdfundingmingguan":
+		controller.GetCrowdfundingWeeklyReport(w, r)
+	case method == "GET" && path == "/refresh/report/crowdfundingtotal":
+		controller.GetCrowdfundingTotalReport(w, r)
+	case method == "GET" && path == "/api/crowdfunding/user":
+		controller.GetCrowdfundingUserData(w, r)
+
 	// IQ
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)

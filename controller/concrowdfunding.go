@@ -17,10 +17,12 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -1880,4 +1882,124 @@ func BasicAuth(next http.HandlerFunc) http.HandlerFunc {
 		// Autentikasi berhasil, panggil handler berikutnya
 		next(w, r)
 	}
+}
+
+// GetCrowdfundingDailyReport sends a daily crowdfunding report to WhatsApp groups
+func GetCrowdfundingDailyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the daily crowdfunding report
+	err := report.RekapCrowdfundingHarian(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding harian",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding harian berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetCrowdfundingWeeklyReport sends a weekly crowdfunding report to WhatsApp groups
+func GetCrowdfundingWeeklyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the weekly crowdfunding report
+	err := report.RekapCrowdfundingMingguan(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding mingguan",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding mingguan berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetCrowdfundingTotalReport sends a total crowdfunding report to WhatsApp groups
+func GetCrowdfundingTotalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the total crowdfunding report
+	err := report.RekapCrowdfundingTotal(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding total",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding total berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetCrowdfundingUserData gets crowdfunding data for a specific user by phone number
+func GetCrowdfundingUserData(w http.ResponseWriter, r *http.Request) {
+	// Get the phone number from URL parameter
+	phoneNumber := r.URL.Query().Get("phonenumber")
+	if phoneNumber == "" {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Status:   "Error",
+			Info:     "Parameter 'phonenumber' diperlukan",
+			Response: "Missing parameter",
+		})
+		return
+	}
+
+	// Get database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Get MBC and QRIS data for the last week
+	mbcAmount, err1 := report.GetJumlahMBCLastWeek(db, phoneNumber)
+	qrisAmount, err2 := report.GetJumlahQRISLastWeek(db, phoneNumber)
+
+	if err1 != nil || err2 != nil {
+		var errMsg string
+		if err1 != nil {
+			errMsg += "MBC error: " + err1.Error() + ". "
+		}
+		if err2 != nil {
+			errMsg += "QRIS error: " + err2.Error()
+		}
+
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengambil data crowdfunding",
+			Response: errMsg,
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":      "Success",
+		"phoneNumber": phoneNumber,
+		"lastWeek": map[string]interface{}{
+			"mbcAmount":  mbcAmount,
+			"qrisAmount": qrisAmount,
+		},
+	})
 }
