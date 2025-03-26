@@ -31,6 +31,7 @@ var allowedGroups = map[string]bool{
 	"120363347214689840": true,
 }
 
+// API untuk menghitung poin Strava dan menyimpan Grup ID
 func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	db := config.Mongoconn
 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
@@ -164,125 +165,6 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Proses poin Strava selesai"})
 }
 
-// API untuk menghitung poin Strava dan menyimpan Grup ID
-// func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
-// 	db := config.Mongoconn
-
-// 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
-// 	if err != nil {
-// 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch config"})
-// 		return
-// 	}
-
-// 	scode, activities, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
-// 	if err != nil || scode != http.StatusOK {
-// 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch data"})
-// 		return
-// 	}
-
-// 	colPoin := db.Collection("stravapoin")
-// 	colUsers := db.Collection("user")
-
-// 	phoneNumbers := make(map[string]bool)
-// 	userData := make(map[string]struct {
-// 		TotalKm       float64
-// 		ActivityCount int
-// 		NameStrava    string
-// 	})
-
-// 	for _, activity := range activities {
-// 		if activity.Status != "Valid" {
-// 			continue
-// 		}
-
-// 		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
-// 		distance, err := strconv.ParseFloat(distanceStr, 64)
-// 		if err != nil {
-// 			log.Println("Error converting distance:", err)
-// 			continue
-// 		}
-
-// 		phoneNumbers[activity.PhoneNumber] = true
-// 		userData[activity.PhoneNumber] = struct {
-// 			TotalKm       float64
-// 			ActivityCount int
-// 			NameStrava    string
-// 		}{
-// 			TotalKm:       userData[activity.PhoneNumber].TotalKm + distance,
-// 			ActivityCount: userData[activity.PhoneNumber].ActivityCount + 1,
-// 			NameStrava:    activity.Name,
-// 		}
-// 	}
-
-// 	phoneList := make([]string, 0, len(phoneNumbers))
-// 	for phone := range phoneNumbers {
-// 		phoneList = append(phoneList, phone)
-// 	}
-// 	groupMap, err := report.GetGrupIDFromProject(db, phoneList)
-// 	if err != nil {
-// 		log.Println("Error getting group IDs:", err)
-// 	}
-
-// 	for phone, data := range userData {
-// 		filter := bson.M{"phone_number": phone}
-
-// 		var existing struct {
-// 			ActivityCount int                `bson:"activity_count"`
-// 			WaGroupID     string             `bson:"wagroupid,omitempty"`
-// 			UserID        primitive.ObjectID `bson:"user_id,omitempty"`
-// 			NameStrava    string             `bson:"name_strava,omitempty"`
-// 		}
-// 		err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
-// 		if err != nil && err != mongo.ErrNoDocuments {
-// 			log.Println("Error fetching existing count:", err)
-// 			continue
-// 		}
-
-// 		// Ambil user_id dari koleksi users berdasarkan phone_number
-// 		var user struct {
-// 			ID   primitive.ObjectID `bson:"_id"`
-// 			Name string             `bson:"name"`
-// 		}
-// 		err = colUsers.FindOne(context.TODO(), bson.M{"phonenumber": phone}).Decode(&user)
-// 		if err != nil && err != mongo.ErrNoDocuments {
-// 			log.Println("Error fetching user_id:", err)
-// 		}
-
-// 		selectedGroup := ""
-// 		if groupIDs, exists := groupMap[phone]; exists {
-// 			for _, groupID := range groupIDs {
-// 				if allowedGroups[groupID] {
-// 					selectedGroup = groupID
-// 					break
-// 				}
-// 			}
-// 		}
-
-// 		update := bson.M{
-// 			"$set": bson.M{
-// 				"total_km":       math.Round(data.TotalKm*10) / 10,
-// 				"activity_count": existing.ActivityCount + data.ActivityCount,
-// 				"wagroupid":      selectedGroup,
-// 				"user_id":        user.ID, // Disimpan sebagai ObjectID
-// 				"updated_at":     time.Now(),
-// 				"name":           user.Name,       // Menyimpan nama user dari koleksi users
-// 				"name_strava":    data.NameStrava, // Menyimpan nama Strava dari aktivitas
-// 			},
-// 			"$inc": bson.M{
-// 				"poin": math.Round((data.TotalKm/6)*100*10) / 10,
-// 			},
-// 		}
-// 		opts := options.Update().SetUpsert(true)
-
-// 		_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
-// 		if err != nil {
-// 			log.Println("Error updating strava_poin:", err)
-// 		}
-// 	}
-
-// 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Proses poin Strava selesai"})
-// }
-
 type AddPointsRequest struct {
 	ActivityID  string  `json:"activity_id"`
 	PhoneNumber string  `json:"phone_number"`
@@ -377,4 +259,41 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil diperbarui"})
+}
+
+func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	var totalKm float64
+	var totalPoin float64
+
+	// Loop untuk menjumlahkan total_km dan poin
+	for _, doc := range docs {
+		totalKm += doc.TotalKm
+		totalPoin += doc.Poin
+	}
+
+	// Simpan hasilnya dalam struct
+	activityscore.StravaKM = float32(totalKm)
+	activityscore.Strava = int(totalPoin)
+
+	return activityscore, nil
+}
+
+func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	year, week := time.Now().AddDate(0, 0, -7).ISOWeek()
+	weekYear := fmt.Sprintf("%d_%d", year, week)
+
+	doc, err := atdb.GetOneDoc[model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber, "week_year": weekYear})
+	if err != nil {
+		return activityscore, err
+	}
+
+	activityscore.StravaKM = float32(doc.TotalKm)
+	activityscore.Strava = int(doc.Poin)
+
+	return activityscore, nil
 }

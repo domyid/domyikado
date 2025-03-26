@@ -28,9 +28,20 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	datastravapoin, err := GetAllDataStravaPoin(config.Mongoconn, authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data Strava Poin tidak di temukan",
+		})
+		return
+	}
+
 	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
 		Trackerdata: datatracker.Trackerdata,
 		Tracker:     datatracker.Tracker,
+		StravaKM:    datastravapoin.StravaKM,
+		Strava:      datastravapoin.Strava,
 	})
 }
 
@@ -52,8 +63,19 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	datastravapoin, err := GetLastWeekDataStravaPoin(config.Mongoconn, authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data Strava Poin tidak di temukan",
+		})
+		return
+	}
+
 	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
 		Trackerdata: datatracker.Trackerdata,
 		Tracker:     datatracker.Tracker,
+		StravaKM:    datastravapoin.StravaKM,
+		Strava:      datastravapoin.Strava,
 	})
 }
