@@ -12,7 +12,6 @@ import (
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/report"
-	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -72,43 +71,13 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func getHostname(auth string, domains []model.PhoneDomain) string {
-	for _, domain := range domains {
+func GetHostname(auth string) string {
+	for _, domain := range report.DomainProyek1 {
 		if auth == domain.PhoneNumber {
 			return domain.Project_Hostname
 		}
 	}
 	return ""
-}
-
-func GetAllDataTracker(w http.ResponseWriter, r *http.Request) {
-	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-	if err != nil {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
-			Info:     at.GetSecretFromHeader(r),
-			Location: "Token Validation",
-			Response: err.Error(),
-		})
-		return
-	}
-	userinfo := model.UserInfo{Hostname: getHostname(authorization.Id, report.DomainProyek1)}
-	filter := primitive.M{
-		"hostname": userinfo.Hostname,
-	}
-	datatracker, err := atdb.GetAllDoc[[]model.UserInfo](config.Mongoconn, "trackerip", filter)
-	if err != nil {
-		at.WriteJSON(w, http.StatusConflict, model.Response{
-			Response: "Data tidak di temukan",
-		})
-		return
-	}
-	count := len(datatracker)
-	at.WriteJSON(w, http.StatusOK, model.Response{
-		Status:   "Hostname: " + userinfo.Hostname,
-		Info:     "Nomor telephone" + authorization.Id,
-		Response: fmt.Sprintf("%d", count),
-	})
 }
 
 func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
