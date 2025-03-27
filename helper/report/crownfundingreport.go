@@ -433,7 +433,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 
 	// Add overall total
 	msg += "*RINGKASAN MINGGUAN*\n"
-	msg += fmt.Sprintf("Jumlah Donatur: %d\n", len(sortedUsers))
+	msg += fmt.Sprintf("Jumlah Crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
@@ -554,7 +554,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 		topN = len(sortedUsers)
 	}
 
-	msg += "*TOP " + fmt.Sprintf("%d", topN) + " DONATUR*\n"
+	msg += "*TOP " + fmt.Sprintf("%d", topN) + " crownfunding*\n"
 	for i, user := range sortedUsers[:topN] {
 		msg += fmt.Sprintf("%d. *%s*\n", i+1, user.Name)
 		if user.QRISCount > 0 {
@@ -568,7 +568,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 
 	// Add overall total
 	msg += "\n*STATISTIK KESELURUHAN*\n"
-	msg += fmt.Sprintf("Jumlah Donatur: %d\n", len(sortedUsers))
+	msg += fmt.Sprintf("Jumlah Crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
