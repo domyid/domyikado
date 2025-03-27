@@ -61,8 +61,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 			continue
 		}
 
-		year, week := activity.CreatedAt.ISOWeek()
-		weekYear := fmt.Sprintf("%d_%d", year, week)
+		weekYear := getCurrentWeekYear()
 
 		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
 		distance, err := strconv.ParseFloat(distanceStr, 64)
@@ -210,9 +209,7 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Tentukan minggu dari aktivitas
-	now := time.Now()
-	year, week := now.ISOWeek()
-	weekYear := fmt.Sprintf("%d_%d", year, week)
+	weekYear := getCurrentWeekYear()
 
 	// Filter berdasarkan phone_number dan minggu tahun (week_year)
 	filter := bson.M{"phone_number": reqBody.PhoneNumber, "week_year": weekYear}
@@ -261,27 +258,74 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil diperbarui"})
 }
 
+// func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+// 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber})
+// 	if err != nil {
+// 		return activityscore, err
+// 	}
+
+// 	var totalKm float64
+// 	var totalPoin float64
+// 	weekPoinMap := make(map[string]float64) // Menyimpan poin per minggu
+
+// 	for _, doc := range docs {
+// 		totalKm += doc.TotalKm
+
+// 		// Batasi poin per minggu maksimal 100
+// 		weekPoinMap[doc.WeekYear] += doc.Poin
+// 		if weekPoinMap[doc.WeekYear] > 100 {
+// 			weekPoinMap[doc.WeekYear] = 100
+// 		}
+// 	}
+
+// 	// Total poin adalah akumulasi dari poin tiap minggu yang sudah dibatasi 100
+// 	for _, poin := range weekPoinMap {
+// 		totalPoin += poin
+// 	}
+
+// 	activityscore.StravaKM = float32(totalKm)
+// 	activityscore.Strava = int(totalPoin)
+
+// 	return activityscore, nil
+// }
+
 func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber})
 	if err != nil {
 		return activityscore, err
 	}
 
+	// Jika tidak ada data sama sekali, return 0
+	if len(docs) == 0 {
+		return activityscore, nil
+	}
+
 	var totalKm float64
 	var totalPoin float64
-	weekPoinMap := make(map[string]float64) // Menyimpan poin per minggu
+	weekPoinMap := make(map[string]float64)
 
+	// Ambil minggu pertama yang ada di database
+	firstWeekYear := docs[0].WeekYear
+	currentWeekYear := getCurrentWeekYear()
+
+	// Loop untuk data dari database dan simpan poin
 	for _, doc := range docs {
 		totalKm += doc.TotalKm
-
-		// Batasi poin per minggu maksimal 100
 		weekPoinMap[doc.WeekYear] += doc.Poin
 		if weekPoinMap[doc.WeekYear] > 100 {
 			weekPoinMap[doc.WeekYear] = 100
 		}
 	}
 
-	// Total poin adalah akumulasi dari poin tiap minggu yang sudah dibatasi 100
+	// **Tambahkan minggu kosong dengan poin 0 jika tidak ditemukan**
+	weekList := generateWeekRange(firstWeekYear, currentWeekYear)
+	for _, week := range weekList {
+		if _, exists := weekPoinMap[week]; !exists {
+			weekPoinMap[week] = 0
+		}
+	}
+
+	// Total poin adalah akumulasi dari semua minggu (termasuk yang kosong)
 	for _, poin := range weekPoinMap {
 		totalPoin += poin
 	}
@@ -293,8 +337,7 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 }
 
 func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	year, week := time.Now().AddDate(0, 0, -7).ISOWeek()
-	weekYear := fmt.Sprintf("%d_%d", year, week)
+	weekYear := getCurrentWeekYear()
 
 	// Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu lalu
 	doc, err := atdb.GetOneDoc[model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber, "week_year": weekYear})
@@ -312,4 +355,39 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 	activityscore.Strava = poin
 
 	return activityscore, nil
+}
+
+func generateWeekRange(startWeekYear, endWeekYear string) []string {
+	startYear, startWeek := parseWeekYear(startWeekYear)
+	endYear, endWeek := parseWeekYear(endWeekYear)
+
+	var weekList []string
+	for y := startYear; y <= endYear; y++ {
+		weekStart := 1
+		weekEnd := 52 // Default minggu dalam setahun
+
+		if y == startYear {
+			weekStart = startWeek
+		}
+		if y == endYear {
+			weekEnd = endWeek
+		}
+
+		for w := weekStart; w <= weekEnd; w++ {
+			weekList = append(weekList, fmt.Sprintf("%d_%d", y, w))
+		}
+	}
+	return weekList
+}
+
+// Parse "2025_11" menjadi (2025, 11)
+func parseWeekYear(weekYear string) (int, int) {
+	var year, week int
+	fmt.Sscanf(weekYear, "%d_%d", &year, &week)
+	return year, week
+}
+
+func getCurrentWeekYear() string {
+	year, week := time.Now().ISOWeek()
+	return fmt.Sprintf("%d_%d", year, week)
 }
