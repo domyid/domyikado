@@ -214,7 +214,7 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 
 	// Prepare the message
 	msg := "*📊 Rekap Crowdfunding Harian 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan crownfunding kemarin:\n\n"
+	msg += "Berikut ini adalah ringkasan aktifitasi-crownfunding kemarin:\n\n"
 
 	// Separate QRIS and MicroBitcoin payments
 	var qrisPayments, mbcPayments []CrowdfundingInfo
@@ -341,7 +341,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 
 	// Prepare the message
 	msg := "*📊 Rekap Crowdfunding Mingguan 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan crownfunding selama seminggu terakhir:\n\n"
+	msg += "Berikut ini adalah ringkasan aktifitasi-crownfunding selama seminggu terakhir:\n\n"
 
 	// Group payments by user
 	userPayments := make(map[string]struct {
@@ -433,7 +433,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 
 	// Add overall total
 	msg += "*RINGKASAN MINGGUAN*\n"
-	msg += fmt.Sprintf("Jumlah Crownfunding: %d\n", len(sortedUsers))
+	msg += fmt.Sprintf("Jumlah crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
@@ -470,7 +470,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 
 	// Prepare the message
 	msg := "*📊 Rekap Total Crowdfunding 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan seluruh crownfunding:\n\n"
+	msg += "Berikut ini adalah ringkasan seluruh aktifitasi-crownfunding:\n\n"
 
 	// Group payments by user
 	userPayments := make(map[string]struct {
@@ -548,15 +548,10 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 		return sortedUsers[i].TotalPayment > sortedUsers[j].TotalPayment
 	})
 
-	// Add top 5 user payments to the message
-	topN := 5
-	if len(sortedUsers) < topN {
-		topN = len(sortedUsers)
-	}
-
-	msg += "*TOP " + fmt.Sprintf("%d", topN) + " crownfunding*\n"
-	for i, user := range sortedUsers[:topN] {
-		msg += fmt.Sprintf("%d. *%s*\n", i+1, user.Name)
+	// List all users with their donation details
+	msg += "*DAFTAR SEMUA crownfunding*\n\n"
+	for i, user := range sortedUsers {
+		msg += fmt.Sprintf("%d. *%s* (%s)\n", i+1, user.Name, user.PhoneNumber)
 		if user.QRISCount > 0 {
 			msg += fmt.Sprintf("   - QRIS: Rp %.2f (%d transaksi)\n", user.QRISAmount, user.QRISCount)
 		}
@@ -568,7 +563,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 
 	// Add overall total
 	msg += "\n*STATISTIK KESELURUHAN*\n"
-	msg += fmt.Sprintf("Jumlah Crownfunding: %d\n", len(sortedUsers))
+	msg += fmt.Sprintf("Jumlah crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
