@@ -214,7 +214,7 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 
 	// Prepare the message
 	msg := "*📊 Rekap Crowdfunding Harian 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan donasi kemarin:\n\n"
+	msg += "Berikut ini adalah ringkasan crownfunding kemarin:\n\n"
 
 	// Separate QRIS and MicroBitcoin payments
 	var qrisPayments, mbcPayments []CrowdfundingInfo
@@ -341,7 +341,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 
 	// Prepare the message
 	msg := "*📊 Rekap Crowdfunding Mingguan 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan donasi selama seminggu terakhir:\n\n"
+	msg += "Berikut ini adalah ringkasan crownfunding selama seminggu terakhir:\n\n"
 
 	// Group payments by user
 	userPayments := make(map[string]struct {
@@ -470,7 +470,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 
 	// Prepare the message
 	msg := "*📊 Rekap Total Crowdfunding 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan seluruh donasi:\n\n"
+	msg += "Berikut ini adalah ringkasan seluruh crownfunding:\n\n"
 
 	// Group payments by user
 	userPayments := make(map[string]struct {
