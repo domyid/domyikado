@@ -2003,3 +2003,132 @@ func GetCrowdfundingUserData(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// GetLogCrowdfundingDailyReport generates daily crowdfunding report logs for all specified groups without sending to WhatsApp
+func GetLogCrowdfundingDailyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Grup yang sudah ditentukan
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Menyimpan hasil laporan untuk semua grup
+	var results []map[string]interface{}
+
+	// Generate laporan untuk setiap grup
+	for _, groupID := range allowedGroups {
+		// Generate laporan harian tanpa mengirim
+		msg, _, err := report.GenerateRekapCrowdfundingDaily(db, groupID)
+
+		result := map[string]interface{}{
+			"groupID": groupID,
+		}
+
+		if err != nil {
+			result["status"] = "Error"
+			result["message"] = err.Error()
+		} else {
+			result["status"] = "Success"
+			result["report"] = msg
+		}
+
+		results = append(results, result)
+	}
+
+	// Return semua laporan sebagai respons
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "Success",
+		"info":    "Log rekap crowdfunding harian untuk semua grup",
+		"reports": results,
+	})
+}
+
+// GetLogCrowdfundingWeeklyReport generates weekly crowdfunding report logs for all specified groups without sending to WhatsApp
+func GetLogCrowdfundingWeeklyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Grup yang sudah ditentukan
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Menyimpan hasil laporan untuk semua grup
+	var results []map[string]interface{}
+
+	// Generate laporan untuk setiap grup
+	for _, groupID := range allowedGroups {
+		// Generate laporan mingguan tanpa mengirim
+		msg, _, err := report.GenerateRekapCrowdfundingWeekly(db, groupID)
+
+		result := map[string]interface{}{
+			"groupID": groupID,
+		}
+
+		if err != nil {
+			result["status"] = "Error"
+			result["message"] = err.Error()
+		} else {
+			result["status"] = "Success"
+			result["report"] = msg
+		}
+
+		results = append(results, result)
+	}
+
+	// Return semua laporan sebagai respons
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "Success",
+		"info":    "Log rekap crowdfunding mingguan untuk semua grup",
+		"reports": results,
+	})
+}
+
+// GetLogCrowdfundingTotalReport generates total crowdfunding report logs for all specified groups without sending to WhatsApp
+func GetLogCrowdfundingTotalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Grup yang sudah ditentukan
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Menyimpan hasil laporan untuk semua grup
+	var results []map[string]interface{}
+
+	// Generate laporan untuk setiap grup
+	for _, groupID := range allowedGroups {
+		// Generate laporan total tanpa mengirim
+		msg, _, err := report.GenerateRekapCrowdfundingAll(db, groupID)
+
+		result := map[string]interface{}{
+			"groupID": groupID,
+		}
+
+		if err != nil {
+			result["status"] = "Error"
+			result["message"] = err.Error()
+		} else {
+			result["status"] = "Success"
+			result["report"] = msg
+		}
+
+		results = append(results, result)
+	}
+
+	// Return semua laporan sebagai respons
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "Success",
+		"info":    "Log rekap crowdfunding total untuk semua grup",
+		"reports": results,
+	})
+}

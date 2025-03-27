@@ -272,9 +272,15 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.RefreshPomokitMingguanReport(w, r)
 	case method == "GET" && path == "/refresh/report/pomokitharian":
 		controller.RefreshPomokitHarianReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingharian":
+		controller.GetLogCrowdfundingDailyReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingmingguan":
+		controller.GetLogCrowdfundingWeeklyReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingtotal":
+		controller.GetLogCrowdfundingTotalReport(w, r)
 
 	// Endpoint GTMetrix Report
-		// dengan token header 'login'
+	// dengan token header 'login'
 	case method == "GET" && path == ("/report/gtmetrix/user"):
 		controller.GetGTMetrixDataUserAPI(w, r)
 	case method == "GET" && path == "/report/gtmetrix/yesterday":
