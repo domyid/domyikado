@@ -163,6 +163,17 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// 	controller.ConfirmMerchCoinNotification(w, r)
 		// case method == "POST" && path == "/api/merchcoin/simulate":
 		// 	controller.SimulateMerchCoinPayment(w, r)
+		//log
+	case method == "GET" && path == "/refresh/report/crowdfundingglobal":
+		controller.GetCrowdfundingGlobalReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingglobal":
+		controller.GetLogCrowdfundingGlobalReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingharian":
+		controller.GetLogCrowdfundingDailyReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingmingguan":
+		controller.GetLogCrowdfundingWeeklyReport(w, r)
+	case method == "GET" && path == "/refresh/report/log/crowdfundingtotal":
+		controller.GetLogCrowdfundingTotalReport(w, r)
 		// QRIS Payment Routes dengan Basic Auth
 	// QRIS Payment Routes
 	case method == "POST" && path == "/api/crowdfunding/qris/createOrder":
@@ -272,12 +283,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.RefreshPomokitMingguanReport(w, r)
 	case method == "GET" && path == "/refresh/report/pomokitharian":
 		controller.RefreshPomokitHarianReport(w, r)
-	case method == "GET" && path == "/refresh/report/log/crowdfundingharian":
-		controller.GetLogCrowdfundingDailyReport(w, r)
-	case method == "GET" && path == "/refresh/report/log/crowdfundingmingguan":
-		controller.GetLogCrowdfundingWeeklyReport(w, r)
-	case method == "GET" && path == "/refresh/report/log/crowdfundingtotal":
-		controller.GetLogCrowdfundingTotalReport(w, r)
 
 	// Endpoint GTMetrix Report
 	// dengan token header 'login'

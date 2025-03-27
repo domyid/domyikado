@@ -2132,3 +2132,51 @@ func GetLogCrowdfundingTotalReport(w http.ResponseWriter, r *http.Request) {
 		"reports": results,
 	})
 }
+
+// GetCrowdfundingGlobalReport sends a global crowdfunding report (without grouping by WAGroupID)
+func GetCrowdfundingGlobalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the global crowdfunding report
+	err := report.RekapCrowdfundingGlobal(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding global",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding global berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetLogCrowdfundingGlobalReport generates a global crowdfunding report log without sending to WhatsApp
+func GetLogCrowdfundingGlobalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Generate the global report without sending
+	msg, _, err := report.GenerateRekapCrowdfundingGlobal(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal membuat log rekap crowdfunding global",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Return the report as a response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Log rekap crowdfunding global",
+		Response: msg,
+	})
+}

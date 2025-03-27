@@ -729,3 +729,228 @@ func RekapCrowdfundingTotal(db *mongo.Database) error {
 
 	return lastErr
 }
+
+// GenerateRekapCrowdfundingGlobal generates a complete global crowdfunding recap of all users
+func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error) {
+	// Get all successful crowdfunding data without daily filter
+	filter := bson.M{"status": "success"}
+
+	// Query the collection with sorting by timestamp (newest first)
+	opts := options.Find().SetSort(bson.M{"timestamp": -1})
+	cursor, err := db.Collection("crowdfundingorders").Find(context.TODO(), filter, opts)
+	if err != nil {
+		return "", "", fmt.Errorf("error querying crowdfunding payments: %v", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	// Extract payments
+	var payments []CrowdfundingInfo
+	for cursor.Next(context.TODO()) {
+		var payment model.CrowdfundingOrder
+		if err := cursor.Decode(&payment); err != nil {
+			return "", "", fmt.Errorf("error decoding payment: %v", err)
+		}
+
+		// Add to our slice
+		payments = append(payments, CrowdfundingInfo{
+			Name:          payment.Name,
+			PhoneNumber:   payment.PhoneNumber,
+			Amount:        payment.Amount,
+			PaymentMethod: payment.PaymentMethod,
+			Timestamp:     payment.Timestamp,
+			Status:        payment.Status,
+		})
+	}
+
+	if err := cursor.Err(); err != nil {
+		return "", "", fmt.Errorf("cursor error: %v", err)
+	}
+
+	// If no payments, return a message
+	if len(payments) == 0 {
+		return "Belum ada transaksi crowdfunding yang tercatat.", "", nil
+	}
+
+	// Prepare the message
+	msg := "*📊 Rekap Total Crowdfunding Global 📊*\n\n"
+	msg += "Berikut ini adalah ringkasan seluruh transaksi crowdfunding dari semua pengguna:\n\n"
+
+	// Group payments by user and payment method
+	userPayments := make(map[string]struct {
+		Name         string
+		PhoneNumber  string
+		QRISAmount   float64
+		QRISCount    int
+		MBCAmount    float64
+		MBCCount     int
+		TotalPayment int
+	})
+
+	var totalQRIS, totalMBC float64
+	var totalQRISCount, totalMBCCount int
+
+	for _, payment := range payments {
+		userInfo, exists := userPayments[payment.PhoneNumber]
+		if !exists {
+			userInfo = struct {
+				Name         string
+				PhoneNumber  string
+				QRISAmount   float64
+				QRISCount    int
+				MBCAmount    float64
+				MBCCount     int
+				TotalPayment int
+			}{
+				Name:        payment.Name,
+				PhoneNumber: payment.PhoneNumber,
+			}
+		}
+
+		if payment.PaymentMethod == model.QRIS {
+			userInfo.QRISAmount += payment.Amount
+			userInfo.QRISCount++
+			totalQRIS += payment.Amount
+			totalQRISCount++
+		} else if payment.PaymentMethod == model.MicroBitcoin {
+			userInfo.MBCAmount += payment.Amount
+			userInfo.MBCCount++
+			totalMBC += payment.Amount
+			totalMBCCount++
+		}
+
+		userInfo.TotalPayment++
+		userPayments[payment.PhoneNumber] = userInfo
+	}
+
+	// Sort users by total payment
+	type UserPaymentInfo struct {
+		Name         string
+		PhoneNumber  string
+		QRISAmount   float64
+		QRISCount    int
+		MBCAmount    float64
+		MBCCount     int
+		TotalPayment int
+	}
+
+	var sortedMBCUsers []UserPaymentInfo
+	var sortedQRISUsers []UserPaymentInfo
+
+	for _, info := range userPayments {
+		userInfo := UserPaymentInfo{
+			Name:         info.Name,
+			PhoneNumber:  info.PhoneNumber,
+			QRISAmount:   info.QRISAmount,
+			QRISCount:    info.QRISCount,
+			MBCAmount:    info.MBCAmount,
+			MBCCount:     info.MBCCount,
+			TotalPayment: info.TotalPayment,
+		}
+
+		// Add to MBC list if they have MBC transactions
+		if info.MBCCount > 0 {
+			sortedMBCUsers = append(sortedMBCUsers, userInfo)
+		}
+
+		// Add to QRIS list if they have QRIS transactions
+		if info.QRISCount > 0 {
+			sortedQRISUsers = append(sortedQRISUsers, userInfo)
+		}
+	}
+
+	// Sort MBC users by MBC amount (highest first)
+	sort.Slice(sortedMBCUsers, func(i, j int) bool {
+		return sortedMBCUsers[i].MBCAmount > sortedMBCUsers[j].MBCAmount
+	})
+
+	// Sort QRIS users by QRIS amount (highest first)
+	sort.Slice(sortedQRISUsers, func(i, j int) bool {
+		return sortedQRISUsers[i].QRISAmount > sortedQRISUsers[j].QRISAmount
+	})
+
+	// First list all MBC users
+	if len(sortedMBCUsers) > 0 {
+		msg += "*DAFTAR aktifitasi-crownfunding MBC*\n\n"
+		for i, user := range sortedMBCUsers {
+			msg += fmt.Sprintf("%d. *%s* (%s)\n", i+1, user.Name, user.PhoneNumber)
+			msg += fmt.Sprintf("   - MBC: %.8f MBC (%d transaksi)\n", user.MBCAmount, user.MBCCount)
+		}
+		msg += "\n"
+	}
+
+	// Then list all QRIS users
+	if len(sortedQRISUsers) > 0 {
+		msg += "*DAFTAR aktifitasi-crownfunding QRIS*\n\n"
+		for i, user := range sortedQRISUsers {
+			msg += fmt.Sprintf("%d. *%s* (%s)\n", i+1, user.Name, user.PhoneNumber)
+			msg += fmt.Sprintf("   - QRIS: Rp %.2f (%d transaksi)\n", user.QRISAmount, user.QRISCount)
+		}
+		msg += "\n"
+	}
+
+	// Add overall total stats
+	msg += "*STATISTIK KESELURUHAN*\n"
+	msg += fmt.Sprintf("Total Pengguna: %d\n", len(userPayments))
+	msg += fmt.Sprintf("Total Transaksi: %d\n", len(payments))
+	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
+	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
+
+	// Use first payment's phone number as representative phone
+	perwakilanphone := ""
+	if len(payments) > 0 {
+		perwakilanphone = payments[0].PhoneNumber
+	}
+
+	return msg, perwakilanphone, nil
+}
+
+// RekapCrowdfundingGlobal sends a global crowdfunding recap to specified WhatsApp groups
+func RekapCrowdfundingGlobal(db *mongo.Database) error {
+	// List of allowed group IDs
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Generate the global report
+	msg, perwakilanphone, err := GenerateRekapCrowdfundingGlobal(db)
+	if err != nil {
+		return fmt.Errorf("failed to generate global report: %v", err)
+	}
+
+	// If no data, return
+	if strings.Contains(msg, "Belum ada transaksi") {
+		return fmt.Errorf("no crowdfunding transactions found")
+	}
+
+	var lastErr error
+
+	// Send the same report to all groups
+	for _, groupID := range allowedGroups {
+		// Prepare message to send
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+
+		// If it's a private chat (contains hyphen), send to representative
+		if strings.Contains(groupID, "-") {
+			if perwakilanphone == "" {
+				continue // Skip if no representative found
+			}
+			dt.To = perwakilanphone
+			dt.IsGroup = false
+		}
+
+		// Send the message
+		_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to send global report to group %s: %v, info: %s", groupID, err, resp.Info)
+			continue
+		}
+	}
+
+	return lastErr
+}
