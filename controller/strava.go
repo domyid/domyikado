@@ -267,9 +267,13 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 	var totalKm float64
 	var totalPoin float64
 
-	// Hitung minggu sekarang
+	// Hitung jumlah minggu sejak aktivitas dimulai
+	startWeek := 11 // Minggu pertama aktivitas dimulai
 	_, currentWeek := time.Now().ISOWeek()
-	maxPoin := float64(currentWeek * 100) // Maksimal poin berdasarkan minggu berjalan
+	activeWeeks := currentWeek - startWeek + 1 // Total minggu berjalan sejak minggu ke-11
+
+	// Maksimal poin dihitung berdasarkan minggu aktif
+	maxPoin := float64(activeWeeks * 100)
 
 	// Loop untuk menjumlahkan total_km dan total poin
 	for _, doc := range docs {
