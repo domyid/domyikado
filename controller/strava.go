@@ -269,14 +269,23 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 
 	var totalKm float64
 	var totalPoin float64
+	weekPoinMap := make(map[string]float64) // Menyimpan poin per minggu
 
-	// Loop untuk menjumlahkan total_km dan poin
 	for _, doc := range docs {
 		totalKm += doc.TotalKm
-		totalPoin += doc.Poin
+
+		// Batasi poin per minggu maksimal 100
+		weekPoinMap[doc.WeekYear] += doc.Poin
+		if weekPoinMap[doc.WeekYear] > 100 {
+			weekPoinMap[doc.WeekYear] = 100
+		}
 	}
 
-	// Simpan hasilnya dalam struct
+	// Total poin adalah akumulasi dari poin tiap minggu yang sudah dibatasi 100
+	for _, poin := range weekPoinMap {
+		totalPoin += poin
+	}
+
 	activityscore.StravaKM = float32(totalKm)
 	activityscore.Strava = int(totalPoin)
 
@@ -287,13 +296,20 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 	year, week := time.Now().AddDate(0, 0, -7).ISOWeek()
 	weekYear := fmt.Sprintf("%d_%d", year, week)
 
+	// Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu lalu
 	doc, err := atdb.GetOneDoc[model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber, "week_year": weekYear})
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return activityscore, nil
+		}
 		return activityscore, err
 	}
 
+	// Menjamin poin tidak melebihi 100
+	poin := int(math.Min(doc.Poin, 100))
+
 	activityscore.StravaKM = float32(doc.TotalKm)
-	activityscore.Strava = int(doc.Poin)
+	activityscore.Strava = poin
 
 	return activityscore, nil
 }
