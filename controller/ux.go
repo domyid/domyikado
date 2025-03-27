@@ -22,6 +22,7 @@ import (
 	"github.com/whatsauth/itmodel"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func PostTaskList(w http.ResponseWriter, r *http.Request) {
@@ -655,4 +656,36 @@ func GetUXReport(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(logUXReport); err != nil {
 		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	doc, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	activityscore.WebHookpush = 0
+	activityscore.WebHook = int(doc.Poin)
+
+	return activityscore, nil
+}
+
+func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"phonenumber": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	var totalHari int
+	var totalPoin float64
+
+	for _, presensi := range doc {
+		totalHari++
+		totalPoin += presensi.Skor
+	}
+
+	activityscore.PresensiHari = totalHari
+	activityscore.Presensi = int(totalPoin)
+
+	return activityscore, nil
 }

@@ -36,7 +36,7 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	dataPomokitScore, err := GetPomokitScoreForUser(authorization.Id)
 	if err != nil {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
@@ -44,11 +44,27 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
-	dataGTMetrixScore, err := GetGTMetrixScoreForUser(authorization.Id)
+
+	// dataGTMetrixScore, err := GetGTMetrixScoreForUser(authorization.Id)
+	// if err != nil {
+	// 	at.WriteJSON(w, http.StatusConflict, model.Response{
+	// 		Response: "Data GTMetrix tidak ditemukan",
+	// 	})
+	// 	return
+	// }
+
+	dataWebhook, err := GetAllWebhookPoin(config.Mongoconn, authorization.Id)
 	if err != nil {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
-			Response: "Data GTMetrix tidak ditemukan",
+			Response: "Data Webhook Poin tidak ditemukan",
+		})
+		return
+	}
+
+	dataPresensi, err := GetAllPresensiPoin(config.Mongoconn, authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data Webhook Poin tidak ditemukan",
 		})
 		return
 	}
@@ -60,8 +76,12 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		Strava:         datastravapoin.Strava,
 		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
 		Pomokit:        dataPomokitScore.Pomokit,
-		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
-		GTMetrix:       dataGTMetrixScore.GTMetrix,
+		// GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
+		// GTMetrix:       dataGTMetrixScore.GTMetrix,
+		WebHookpush:    dataWebhook.WebHookpush,
+		WebHook:        dataWebhook.WebHook,
+		PresensiHari:   dataPresensi.PresensiHari,
+		Presensi:       dataPresensi.Presensi,
 	})
 }
 
@@ -91,7 +111,7 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	dataPomokitScore, err := GetLastWeekPomokitScoreForUser(authorization.Id)
 	if err != nil {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
@@ -99,14 +119,14 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
-	dataGTMetrixScore, err := GetLastWeekGTMetrixScoreForUser(authorization.Id)
-	if err != nil {
-		at.WriteJSON(w, http.StatusConflict, model.Response{
-			Response: "Data GTMetrix mingguan tidak ditemukan",
-		})
-		return
-	}
+
+	// dataGTMetrixScore, err := GetLastWeekGTMetrixScoreForUser(authorization.Id)
+	// if err != nil {
+	// 	at.WriteJSON(w, http.StatusConflict, model.Response{
+	// 		Response: "Data GTMetrix mingguan tidak ditemukan",
+	// 	})
+	// 	return
+	// }
 
 	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
 		Trackerdata:    datatracker.Trackerdata,
@@ -115,7 +135,7 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		Strava:         datastravapoin.Strava,
 		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
 		Pomokit:        dataPomokitScore.Pomokit,
-		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
-		GTMetrix:       dataGTMetrixScore.GTMetrix,
+		// GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
+		// GTMetrix:       dataGTMetrixScore.GTMetrix,
 	})
 }
