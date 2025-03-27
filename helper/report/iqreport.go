@@ -6,8 +6,6 @@ import (
 
 	// "errors"
 	"fmt"
-	"sort"
-	"strconv"
 
 	// "time"
 
@@ -82,41 +80,6 @@ func GetTotalDataIqMasuk(db *mongo.Database) ([]IqScoreInfo, error) {
 	}
 
 	return users, nil
-}
-
-// ✅ **Fungsi untuk memformat data IQ Score dalam pesan WhatsApp**
-func formatIqScoreData(data []IqScoreInfo) string {
-	if len(data) == 0 {
-		return "Tidak ada skor IQ yang tercatat."
-	}
-
-	// **Urutkan berdasarkan skor tertinggi**
-	sort.Slice(data, func(i, j int) bool {
-		scoreI, _ := strconv.Atoi(data[i].Score)
-		scoreJ, _ := strconv.Atoi(data[j].Score)
-		return scoreI > scoreJ
-	})
-
-	var result string
-	for _, iq := range data {
-		result += fmt.Sprintf("✅ *%s* - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
-	}
-
-	return result
-}
-
-// ✅ **Fungsi untuk mengambil nomor telepon unik dari daftar IQ Score**
-func extractUniquePhoneNumbers(users []IqScoreInfo) []string {
-	phoneSet := make(map[string]bool)
-	var phoneNumbers []string
-
-	for _, user := range users {
-		if !phoneSet[user.PhoneNumber] {
-			phoneSet[user.PhoneNumber] = true
-			phoneNumbers = append(phoneNumbers, user.PhoneNumber)
-		}
-	}
-	return phoneNumbers
 }
 
 // ✅ **Fungsi untuk mendapatkan Group ID berdasarkan nomor telepon**
