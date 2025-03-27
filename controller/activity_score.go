@@ -48,7 +48,7 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 	dataPresensi, err := GetAllPresensiPoin(config.Mongoconn, authorization.Id)
 	if err != nil {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
-			Response: "Data Webhook Poin tidak ditemukan",
+			Response: "Data Presensi Poin tidak ditemukan",
 		})
 		return
 	}
@@ -114,7 +114,7 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 	dataPresensi, err := GetLastWeekPresensiPoin(config.Mongoconn, authorization.Id)
 	if err != nil {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
-			Response: "Data Strava Poin tidak di temukan",
+			Response: "Data Presensi Poin tidak di temukan",
 		})
 		return
 	}
