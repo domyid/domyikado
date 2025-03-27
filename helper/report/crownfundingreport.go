@@ -771,9 +771,9 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 		return "Belum ada transaksi crowdfunding yang tercatat.", "", nil
 	}
 
-	// Prepare the message
-	msg := "*📊 Rekap Total Crowdfunding Global 📊*\n\n"
-	msg += "Berikut ini adalah ringkasan seluruh transaksi crowdfunding dari semua pengguna:\n\n"
+	// Prepare the message global
+	msg := "*📊 Rekap Total Crowdfunding 📊*\n\n"
+	msg += "Berikut ini adalah rekap seluruh transaksi crowdfunding dari semua pengguna:\n\n"
 
 	// Group payments by user and payment method
 	userPayments := make(map[string]struct {
