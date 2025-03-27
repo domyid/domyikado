@@ -689,3 +689,23 @@ func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore m
 
 	return activityscore, nil
 }
+
+func GetLastWeekPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"_id": report.WeeklyFilter(), "phonenumber": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	var totalHari int
+	var totalPoin float64
+
+	for _, presensi := range doc {
+		totalHari++
+		totalPoin += presensi.Skor
+	}
+
+	activityscore.PresensiHari = totalHari
+	activityscore.Presensi = int(totalPoin)
+
+	return activityscore, nil
+}
