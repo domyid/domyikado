@@ -255,7 +255,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUserTesting(w, r)
-	case method == "POST" && path == "/api/laporantracker":
+	case method == "GET" && path == "/refresh/laporantracker":
 		controller.LaporanengunjungWeb(w, r)
 	// Tracker end
 	case method == "GET" && path == "/refresh/reportmingguan":
