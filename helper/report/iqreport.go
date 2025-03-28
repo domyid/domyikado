@@ -77,15 +77,16 @@ func GenerateRekapIqScoreByWeek(db *mongo.Database, groupID string) (string, str
 			continue
 		}
 
-		// Parse waktu created_at
-		createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", info.CreatedAt, loc)
+		// ✅ Parse created_at string → time.Time
+		createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(info.CreatedAt), loc)
 		if err != nil {
-			continue
+			continue // skip jika gagal parsing
 		}
 
-		// Kategorikan berdasarkan minggu
+		// Masukkan semua ke total
 		total = append(total, info)
 
+		// ✅ Kategorikan berdasarkan minggu
 		if createdAt.After(seninIni) {
 			thisWeek = append(thisWeek, info)
 		} else if createdAt.After(seninLalu) && createdAt.Before(mingguLaluAkhir) {
@@ -97,6 +98,7 @@ func GenerateRekapIqScoreByWeek(db *mongo.Database, groupID string) (string, str
 		return "", "", fmt.Errorf("tidak ada data IQ Score untuk grup %s", groupID)
 	}
 
+	// ✅ Susun pesan rekap
 	msg := "*🧠 Laporan Tes IQ Berdasarkan Minggu*\n\n"
 
 	msg += fmt.Sprintf("📊 *Total Seluruh*: %d peserta\n", len(total))
