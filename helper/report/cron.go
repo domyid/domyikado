@@ -515,7 +515,7 @@ func RekapIqScoreHarian(db *mongo.Database) error {
 		groupSet[groupID] = true // Tandai bahwa grup ini sudah diproses
 
 		// **Buat pesan rekapitulasi IQ Score**
-		msg, perwakilanphone, err := GenerateRekapPoinIqScore(db, groupID)
+		msg, perwakilanphone, err := GenerateRekapIqScoreByDay(db, groupID)
 		if err != nil {
 			lastErr = errors.New("Gagal Membuat Rekapitulasi IQ Score: " + err.Error())
 			continue

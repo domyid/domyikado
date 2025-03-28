@@ -21,6 +21,52 @@ type IqScoreInfo struct {
 	CreatedAt   string `bson:"created_at"` // ✅ Tambahan untuk filter waktu
 }
 
+func GenerateRekapIqScoreByDay(db *mongo.Database, groupID string) (string, string, error) {
+	dataIqScore, err := GetTotalDataIqMasuk(db)
+	if err != nil {
+		return "", "", fmt.Errorf("gagal mengambil data IQ Score: %v", err)
+	}
+
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
+	today := now.Format("2006-01-02")
+
+	var todayList, total []IqScoreInfo
+
+	for _, info := range dataIqScore {
+		if info.WaGroupID != groupID {
+			continue
+		}
+
+		createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(info.CreatedAt), loc)
+		if err != nil {
+			continue
+		}
+
+		// Tambahkan ke total & hari ini
+		total = append(total, info)
+
+		if createdAt.Format("2006-01-02") == today {
+			todayList = append(todayList, info)
+		}
+	}
+
+	if len(todayList) == 0 {
+		return "", "", fmt.Errorf("tidak ada data IQ Score untuk hari ini di grup %s", groupID)
+	}
+
+	// Buat pesan rekap harian
+	msg := "*🧠 Rekap Harian Tes IQ - " + today + "*\n\n"
+	msg += fmt.Sprintf("Total peserta hari ini: %d orang\n\n", len(todayList))
+
+	for _, iq := range todayList {
+		msg += fmt.Sprintf("✅ %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	}
+
+	// Gunakan nomor peserta pertama untuk pengiriman jika dibutuhkan
+	return msg, todayList[0].PhoneNumber, nil
+}
+
 // ✅ **Fungsi utama untuk menghasilkan rekap IQ Score yang akan dikirim ke WhatsApp**
 func GenerateRekapPoinIqScore(db *mongo.Database, groupID string) (string, string, error) {
 	// Ambil data IQ Score terbaru
