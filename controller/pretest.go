@@ -192,6 +192,8 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	now := time.Now().In(loc).Format("2006-01-02 15:04:05")
 
+	const groupID = "120363022595651310"
+
 	// Simpan ke pretestanswer
 	pretestAnswerCollection := config.Mongoconn.Collection("pretestanswer")
 	_, err = pretestAnswerCollection.InsertOne(context.TODO(), bson.M{
@@ -200,6 +202,7 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 		"answers":     userAnswer.Answers,
 		"score":       fmt.Sprintf("%d", correctCount),
 		"pretest":     scoring.Pretest,
+		"wagroupid":   groupID,
 		"created_at":  now,
 	})
 	if err != nil {
@@ -208,11 +211,12 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"status":   "success",
-		"message":  "Jawaban berhasil disimpan!",
-		"name":     userAnswer.Name,
-		"score":    fmt.Sprintf("%d", correctCount),
-		"pretest":  scoring.Pretest,
-		"datetime": now + " WIB",
+		"status":    "success",
+		"message":   "Jawaban berhasil disimpan!",
+		"name":      userAnswer.Name,
+		"score":     fmt.Sprintf("%d", correctCount),
+		"pretest":   scoring.Pretest,
+		"wagroupid": groupID,
+		"datetime":  now + " WIB",
 	})
 }

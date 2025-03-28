@@ -59,6 +59,7 @@ type IqScore struct {
 	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
 	Score       string             `json:"score" bson:"score"`
 	IQ          string             `json:"iq" bson:"iq"`
+	WaGroupID   string             `bson:"wagroupid"`
 	CreatedAt   string             `json:"created_at" bson:"created_at"`
 	UpdatedAt   *time.Time         `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
 }
@@ -289,6 +290,8 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	nowWIB := time.Now().In(loc)
 	formattedTime := nowWIB.Format("2006-01-02 15:04:05") // Format yang digunakan untuk menyimpan
 
+	const groupID = "120363022595651310"
+
 	// Simpan Hasil ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	newIqScore := IqScore{
@@ -297,6 +300,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		PhoneNumber: docuser.PhoneNumber,
 		Score:       fmt.Sprintf("%d", correctCount),
 		IQ:          iqScoring.IQ,
+		WaGroupID:   groupID,
 		CreatedAt:   formattedTime,
 	}
 
@@ -315,6 +319,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		"score":       newIqScore.Score,
 		"iq":          newIqScore.IQ,
 		"correct":     correctCount,
+		"wagroupid":   groupID,
 		"datetime":    formattedTime + "WIB", // Format dengan zona waktu WIB
 	}
 	w.Header().Set("Content-Type", "application/json")
