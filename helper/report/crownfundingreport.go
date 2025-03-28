@@ -306,6 +306,7 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 	msg += fmt.Sprintf("*Jumlah Transaksi:* %d\n", len(groupPayments))
 	msg += fmt.Sprintf("*Total QRIS:* %s\n", formatQRISAmount(totalQRIS))
 	msg += fmt.Sprintf("*Total MBC:* %s\n", formatMBCAmount(totalMBC))
+	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
@@ -491,6 +492,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: %s (%d transaksi)\n", formatQRISAmount(totalQRIS), totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
+	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
@@ -621,6 +623,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: %s (%d transaksi)\n", formatQRISAmount(totalQRIS), totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
+	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
@@ -948,6 +951,7 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(payments))
 	msg += fmt.Sprintf("Total QRIS: %s (%d transaksi)\n", formatQRISAmount(totalQRIS), totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
+	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
