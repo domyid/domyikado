@@ -27,6 +27,16 @@ type CrowdfundingInfo struct {
 	WaGroupID     string              // Will be populated from project collection
 }
 
+// Helper function to format MBC amount for display
+// Convert 0.0002 to "2 coin MBC"
+func formatMBCAmount(amount float64) string {
+	// Convert to coin MBC (multiply by 10000)
+	coinAmount := amount * 10000
+
+	// Format with no decimal places
+	return fmt.Sprintf("%.0f coin MBC", coinAmount)
+}
+
 // GetJumlahMBCLastWeek returns the total MicroBitcoin amount contributed by a user in the last week
 func GetJumlahMBCLastWeek(db *mongo.Database, phoneNumber string) (float64, error) {
 	// Calculate the date one week ago from now
@@ -243,15 +253,15 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 	if len(mbcPayments) > 0 {
 		msg += "*MicroBitcoin Payments:*\n"
 		for _, payment := range mbcPayments {
-			msg += fmt.Sprintf("• %s: %.8f MBC\n", payment.Name, payment.Amount)
+			msg += fmt.Sprintf("• %s: %s\n", payment.Name, formatMBCAmount(payment.Amount))
 		}
-		msg += fmt.Sprintf("Total MBC: %.8f MBC\n\n", totalMBC)
+		msg += fmt.Sprintf("Total MBC: %s\n\n", formatMBCAmount(totalMBC))
 	}
 
 	// Add overall total
 	msg += fmt.Sprintf("*Jumlah Transaksi:* %d\n", len(groupPayments))
 	msg += fmt.Sprintf("*Total QRIS:* Rp %.2f\n", totalQRIS)
-	msg += fmt.Sprintf("*Total MBC:* %.8f MBC\n", totalMBC)
+	msg += fmt.Sprintf("*Total MBC:* %s\n", formatMBCAmount(totalMBC))
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
@@ -426,7 +436,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 			msg += fmt.Sprintf("- QRIS: Rp %.2f (%d transaksi)\n", user.QRISAmount, user.QRISCount)
 		}
 		if user.MBCCount > 0 {
-			msg += fmt.Sprintf("- MBC: %.8f MBC (%d transaksi)\n", user.MBCAmount, user.MBCCount)
+			msg += fmt.Sprintf("- MBC: %s (%d transaksi)\n", formatMBCAmount(user.MBCAmount), user.MBCCount)
 		}
 		msg += fmt.Sprintf("- Total: %d transaksi\n\n", user.TotalPayment)
 	}
@@ -436,7 +446,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 	msg += fmt.Sprintf("Jumlah crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
-	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
+	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
@@ -556,7 +566,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 			msg += fmt.Sprintf("   - QRIS: Rp %.2f (%d transaksi)\n", user.QRISAmount, user.QRISCount)
 		}
 		if user.MBCCount > 0 {
-			msg += fmt.Sprintf("   - MBC: %.8f MBC (%d transaksi)\n", user.MBCAmount, user.MBCCount)
+			msg += fmt.Sprintf("   - MBC: %s (%d transaksi)\n", formatMBCAmount(user.MBCAmount), user.MBCCount)
 		}
 		msg += fmt.Sprintf("   - Total: %d transaksi\n", user.TotalPayment)
 	}
@@ -566,7 +576,7 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 	msg += fmt.Sprintf("Jumlah crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
-	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
+	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
@@ -873,7 +883,7 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 		msg += "*DAFTAR aktifitasi-crownfunding MBC*\n\n"
 		for i, user := range sortedMBCUsers {
 			msg += fmt.Sprintf("%d. *%s* (%s)\n", i+1, user.Name, user.PhoneNumber)
-			msg += fmt.Sprintf("   - MBC: %.8f MBC (%d transaksi)\n", user.MBCAmount, user.MBCCount)
+			msg += fmt.Sprintf("   - MBC: %s (%d transaksi)\n", formatMBCAmount(user.MBCAmount), user.MBCCount)
 		}
 		msg += "\n"
 	}
@@ -893,7 +903,7 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 	msg += fmt.Sprintf("Total Pengguna: %d\n", len(userPayments))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(payments))
 	msg += fmt.Sprintf("Total QRIS: Rp %.2f (%d transaksi)\n", totalQRIS, totalQRISCount)
-	msg += fmt.Sprintf("Total MBC: %.8f MBC (%d transaksi)\n", totalMBC, totalMBCCount)
+	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
 
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
