@@ -34,5 +34,7 @@ type StravaPoin struct {
 	NameStrava    string             `bson:"name_strava" json:"name_strava"`
 	Poin          float64            `bson:"poin" json:"poin"`
 	TotalKm       float64            `bson:"total_km" json:"total_km"`
+	WeekYear      string             `bson:"week_year" json:"week_year"`
+	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at"`
 }
