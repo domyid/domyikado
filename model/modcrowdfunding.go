@@ -12,7 +12,6 @@ type PaymentMethod string
 const (
 	QRIS         PaymentMethod = "qris"
 	MicroBitcoin PaymentMethod = "microbitcoin"
-	Ravencoin    PaymentMethod = "ravencoin"
 )
 
 // CrowdfundingOrder struct to store unified payment data
@@ -25,8 +24,8 @@ type CrowdfundingOrder struct {
 	Amount        float64            `json:"amount" bson:"amount"`
 	PaymentMethod PaymentMethod      `json:"paymentMethod" bson:"paymentMethod"`
 	WonpayCode    string             `json:"wonpayCode,omitempty" bson:"wonpayCode,omitempty"`       // Used for MicroBitcoin
-	WalletAddress string             `json:"walletAddress,omitempty" bson:"walletAddress,omitempty"` // Used for MicroBitcoin and Ravencoin
-	TxID          string             `json:"txid,omitempty" bson:"txid,omitempty"`                   // Used for MicroBitcoin and Ravencoin
+	WalletAddress string             `json:"walletAddress,omitempty" bson:"walletAddress,omitempty"` // Used for MicroBitcoin
+	TxID          string             `json:"txid,omitempty" bson:"txid,omitempty"`                   // Used for MicroBitcoin
 	Timestamp     time.Time          `json:"timestamp" bson:"timestamp"`
 	ExpiryTime    time.Time          `json:"expiryTime" bson:"expiryTime"`
 	Status        string             `json:"status" bson:"status"` // pending, success, failed
@@ -44,16 +43,14 @@ type CrowdfundingQueue struct {
 
 // CrowdfundingTotal struct to track total payments
 type CrowdfundingTotal struct {
-	ID                   primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	TotalQRISAmount      float64            `json:"totalQRISAmount" bson:"totalQRISAmount"`
-	QRISCount            int                `json:"qrisCount" bson:"qrisCount"`
-	TotalBitcoinAmount   float64            `json:"totalBitcoinAmount" bson:"totalBitcoinAmount"`
-	BitcoinCount         int                `json:"bitcoinCount" bson:"bitcoinCount"`
-	TotalRavencoinAmount float64            `json:"totalRavencoinAmount" bson:"totalRavencoinAmount"`
-	RavencoinCount       int                `json:"ravencoinCount" bson:"ravencoinCount"`
-	TotalAmount          float64            `json:"totalAmount" bson:"totalAmount"`
-	TotalCount           int                `json:"totalCount" bson:"totalCount"`
-	LastUpdated          time.Time          `json:"lastUpdated" bson:"lastUpdated"`
+	ID                 primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	TotalQRISAmount    float64            `json:"totalQRISAmount" bson:"totalQRISAmount"`
+	QRISCount          int                `json:"qrisCount" bson:"qrisCount"`
+	TotalBitcoinAmount float64            `json:"totalBitcoinAmount" bson:"totalBitcoinAmount"`
+	BitcoinCount       int                `json:"bitcoinCount" bson:"bitcoinCount"`
+	TotalAmount        float64            `json:"totalAmount" bson:"totalAmount"`
+	TotalCount         int                `json:"totalCount" bson:"totalCount"`
+	LastUpdated        time.Time          `json:"lastUpdated" bson:"lastUpdated"`
 }
 
 // CreateOrderRequest represents the request body for creating a QRIS order
@@ -64,11 +61,6 @@ type CreateQRISOrderRequest struct {
 // CreateMicroBitcoinOrderRequest represents the request body for creating a MicroBitcoin order
 type CreateMicroBitcoinOrderRequest struct {
 	WonpayCode string `json:"wonpayCode"`
-}
-
-// CreateRavencoinOrderRequest represents the request body for creating a Ravencoin order
-type CreateRavencoinOrderRequest struct {
-	Amount float64 `json:"amount,omitempty"`
 }
 
 // NotificationRequest for receiving notification text from payment gateway
@@ -183,49 +175,3 @@ type MicroBitcoinTransactionVout struct {
 	ScriptPubKey MicroBitcoinScriptPubKey `json:"scriptPubKey"`
 	Value        int64                    `json:"value"`
 }
-
-// Ravencoin API response structures
-// RavencoinAPIResponse represents the response from the Ravencoin nanopool API
-type RavencoinAPIResponse struct {
-	Status  bool        `json:"status"`
-	Data    interface{} `json:"data"`
-	Error   string      `json:"error,omitempty"`
-	Address string      `json:"address,omitempty"`
-}
-
-// RavencoinBalanceResponse represents the balance data from the API
-type RavencoinBalanceResponse struct {
-	Status bool    `json:"status"`
-	Data   float64 `json:"data"`
-	Error  string  `json:"error,omitempty"`
-}
-
-// RavencoinTransactionResponse represents a transaction from the API
-type RavencoinTransactionResponse struct {
-	Status bool                `json:"status"`
-	Data   []RavencoinTxDetail `json:"data"`
-	Error  string              `json:"error,omitempty"`
-}
-
-// RavencoinTxDetail represents details of a Ravencoin transaction
-type RavencoinTxDetail struct {
-	TxID          string  `json:"txid"`
-	Amount        float64 `json:"amount"`
-	Confirmations int     `json:"confirmations"`
-	Timestamp     int64   `json:"timestamp"`
-}
-
-// Constants for payment methods
-const (
-	// Expiry times for different payment methods
-	QRISExpirySeconds         = 300 // 5 minutes
-	MicroBitcoinExpirySeconds = 900 // 15 minutes
-	RavencoinExpirySeconds    = 900 // 15 minutes
-
-	// Wallet addresses
-	MicroBitcoinWalletAddress = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
-	RavencoinWalletAddress    = "RBLh9tDZBnzGbFLNVSJvHWkJrSjwKB7z4v" // Example wallet address
-
-	// Configuration
-	RavencoinMinConfirmations = 3 // Number of confirmations needed
-)

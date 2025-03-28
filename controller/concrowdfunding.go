@@ -3,26 +3,37 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
 	// Discord webhook URL for logging
 	CrowdfundingDiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
+	MicroBitcoinWalletAddress     = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
+
+	// Expiry times for different payment methods
+	QRISExpirySeconds         = 300 // 5 minutes
+	MicroBitcoinExpirySeconds = 900 // 15 minutes
 )
 
 // Discord embed structure
@@ -118,15 +129,13 @@ func InitializeCrowdfundingTotal() {
 	if err != nil {
 		// Total document doesn't exist, create it
 		_, err = config.Mongoconn.Collection("crowdfundingtotals").InsertOne(context.Background(), model.CrowdfundingTotal{
-			TotalQRISAmount:      0,
-			QRISCount:            0,
-			TotalBitcoinAmount:   0,
-			BitcoinCount:         0,
-			TotalRavencoinAmount: 0, // Add for Ravencoin
-			RavencoinCount:       0, // Add for Ravencoin
-			TotalAmount:          0,
-			TotalCount:           0,
-			LastUpdated:          time.Now(),
+			TotalQRISAmount:    0,
+			QRISCount:          0,
+			TotalBitcoinAmount: 0,
+			BitcoinCount:       0,
+			TotalAmount:        0,
+			TotalCount:         0,
+			LastUpdated:        time.Now(),
 		})
 		if err != nil {
 			log.Printf("Error initializing crowdfunding totals: %v", err)
@@ -215,18 +224,6 @@ func updateCrowdfundingTotal(amount float64, paymentMethod model.PaymentMethod) 
 				"lastUpdated": time.Now(),
 			},
 		}
-	} else if paymentMethod == model.Ravencoin {
-		update = bson.M{
-			"$inc": bson.M{
-				"totalRavencoinAmount": amount,
-				"ravencoinCount":       1,
-				"totalAmount":          amount,
-				"totalCount":           1,
-			},
-			"$set": bson.M{
-				"lastUpdated": time.Now(),
-			},
-		}
 	}
 
 	var result model.CrowdfundingTotal
@@ -266,13 +263,8 @@ func updateCrowdfundingTotal(amount float64, paymentMethod model.PaymentMethod) 
 func formatAmount(amount float64, paymentMethod model.PaymentMethod) string {
 	if paymentMethod == model.QRIS {
 		return fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64))
-	} else if paymentMethod == model.MicroBitcoin {
-		return fmt.Sprintf("%f MBC", amount)
-	} else if paymentMethod == model.Ravencoin {
-		return fmt.Sprintf("%f RVN", amount)
 	} else {
-		// Default format
-		return strconv.FormatFloat(amount, 'f', 2, 64)
+		return fmt.Sprintf("%f MBC", amount)
 	}
 }
 
@@ -365,6 +357,7 @@ func GetUserInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// 2
 // CheckQueueStatus checks if there's an active payment in the queue
 func CheckQueueStatus(w http.ResponseWriter, r *http.Request) {
 	var queue model.CrowdfundingQueue
@@ -479,7 +472,7 @@ func CreateQRISOrder(w http.ResponseWriter, r *http.Request) {
 	orderID := uuid.New().String()
 
 	// Set expiry time
-	expiryTime := time.Now().Add(model.QRISExpirySeconds * time.Second)
+	expiryTime := time.Now().Add(QRISExpirySeconds * time.Second)
 
 	// Create new order in database
 	newOrder := model.CrowdfundingOrder{
@@ -558,7 +551,7 @@ func CreateQRISOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Set up expiry timer
 	go func() {
-		time.Sleep(model.QRISExpirySeconds * time.Second)
+		time.Sleep(QRISExpirySeconds * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.CrowdfundingQueue
@@ -688,7 +681,7 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 	orderID := uuid.New().String()
 
 	// Set expiry time
-	expiryTime := time.Now().Add(model.MicroBitcoinExpirySeconds * time.Second)
+	expiryTime := time.Now().Add(MicroBitcoinExpirySeconds * time.Second)
 
 	// Create new order in database
 	newOrder := model.CrowdfundingOrder{
@@ -696,7 +689,7 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 		Name:          name,
 		PhoneNumber:   phoneNumber,
 		NPM:           npm,
-		WalletAddress: model.MicroBitcoinWalletAddress,
+		WalletAddress: MicroBitcoinWalletAddress,
 		PaymentMethod: model.MicroBitcoin,
 		Timestamp:     time.Now(),
 		ExpiryTime:    expiryTime,
@@ -763,10 +756,10 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 			{Name: "Status", Value: "Pending", Inline: true},
 		},
 	)
-
+	//3
 	// Set up expiry timer
 	go func() {
-		time.Sleep(model.MicroBitcoinExpirySeconds * time.Second)
+		time.Sleep(MicroBitcoinExpirySeconds * time.Second)
 
 		// Check if this order is still the current one
 		var currentQueue model.CrowdfundingQueue
@@ -839,612 +832,8 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 		OrderID:       orderID,
 		ExpiryTime:    expiryTime,
 		QRImageURL:    "wonpay.png",
-		WalletAddress: model.MicroBitcoinWalletAddress,
+		WalletAddress: MicroBitcoinWalletAddress,
 		PaymentMethod: model.MicroBitcoin,
-	})
-}
-
-// CreateRavencoinOrder creates a new Ravencoin payment order
-func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
-	var request model.CreateRavencoinOrderRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Invalid Request",
-			"Failed to process create Ravencoin order request.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Invalid request body",
-		})
-		return
-	}
-
-	// Extract user info from token
-	phoneNumber, name, npm, err := extractUserInfoFromToken(r)
-	if err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Authentication Failed",
-			"Failed to extract user information from token.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Authentication failed: " + err.Error(),
-		})
-		return
-	}
-
-	// Validate amount if provided
-	if request.Amount <= 0 {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Invalid Order Parameters",
-			"Ravencoin order creation failed due to invalid amount.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Name", Value: name, Inline: true},
-				{Name: "Phone", Value: phoneNumber, Inline: true},
-				{Name: "Amount", Value: strconv.FormatFloat(request.Amount, 'f', 8, 64), Inline: true},
-			},
-		)
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Valid amount is required",
-		})
-		return
-	}
-
-	// Check if someone is currently paying
-	var queue model.CrowdfundingQueue
-	err = config.Mongoconn.Collection("crowdfundingqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
-	if err != nil {
-		// Initialize queue if it doesn't exist
-		InitializeCrowdfundingQueue()
-	} else if queue.IsProcessing {
-		sendCrowdfundingDiscordEmbed(
-			"⏳ Queue: Ravencoin Payment in Progress",
-			"Another payment is already in progress.",
-			ColorYellow,
-			[]DiscordEmbedField{
-				{Name: "Customer", Value: name, Inline: true},
-				{Name: "Phone", Value: phoneNumber, Inline: true},
-				{Name: "Status", Value: "Queued", Inline: true},
-				{Name: "Payment Method", Value: string(queue.PaymentMethod), Inline: true},
-			},
-		)
-		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-			Success:       false,
-			Message:       "Sedang ada pembayaran berlangsung. Silakan tunggu.",
-			QueueStatus:   true,
-			ExpiryTime:    queue.ExpiryTime,
-			PaymentMethod: queue.PaymentMethod,
-		})
-		return
-	}
-
-	// Create order ID
-	orderID := uuid.New().String()
-
-	// Set expiry time
-	expiryTime := time.Now().Add(model.RavencoinExpirySeconds * time.Second)
-
-	// Create new order in database
-	newOrder := model.CrowdfundingOrder{
-		OrderID:       orderID,
-		Name:          name,
-		PhoneNumber:   phoneNumber,
-		NPM:           npm,
-		Amount:        request.Amount,
-		WalletAddress: model.RavencoinWalletAddress,
-		PaymentMethod: model.Ravencoin,
-		Timestamp:     time.Now(),
-		ExpiryTime:    expiryTime,
-		Status:        "pending",
-	}
-
-	_, err = config.Mongoconn.Collection("crowdfundingorders").InsertOne(context.Background(), newOrder)
-	if err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Database Error",
-			"Failed to create Ravencoin order in database.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Error creating order",
-		})
-		return
-	}
-
-	// Update queue status
-	_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
-		context.Background(),
-		bson.M{},
-		bson.M{"$set": bson.M{
-			"isProcessing":   true,
-			"currentOrderId": orderID,
-			"paymentMethod":  model.Ravencoin,
-			"expiryTime":     expiryTime,
-		}},
-		options.Update().SetUpsert(true),
-	)
-
-	if err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Queue Update Failed",
-			"Failed to update Ravencoin payment queue.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Error updating queue",
-		})
-		return
-	}
-
-	// Log successful order creation
-	sendCrowdfundingDiscordEmbed(
-		"🛒 New Ravencoin Order Created",
-		"A new Ravencoin payment order has been created.",
-		ColorBlue,
-		[]DiscordEmbedField{
-			{Name: "Order ID", Value: orderID, Inline: true},
-			{Name: "Customer", Value: name, Inline: true},
-			{Name: "Phone", Value: phoneNumber, Inline: true},
-			{Name: "NPM", Value: npm, Inline: true},
-			{Name: "Amount", Value: fmt.Sprintf("%f RVN", request.Amount), Inline: true},
-			{Name: "Expires", Value: expiryTime.Format("15:04:05"), Inline: true},
-			{Name: "Status", Value: "Pending", Inline: true},
-		},
-	)
-
-	// Set up expiry timer
-	go func() {
-		time.Sleep(model.RavencoinExpirySeconds * time.Second)
-
-		// Check if this order is still the current one
-		var currentQueue model.CrowdfundingQueue
-		err := config.Mongoconn.Collection("crowdfundingqueue").FindOne(context.Background(), bson.M{}).Decode(&currentQueue)
-		if err != nil {
-			log.Printf("Error checking Ravencoin queue for timeout: %v", err)
-			return
-		}
-
-		if currentQueue.CurrentOrderID == orderID {
-			// Update order status to failed
-			_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
-				context.Background(),
-				bson.M{"orderId": orderID},
-				bson.M{"$set": bson.M{
-					"status":    "failed",
-					"updatedAt": time.Now(),
-				}},
-			)
-			if err != nil {
-				log.Printf("Error updating Ravencoin order status: %v", err)
-				sendCrowdfundingDiscordEmbed(
-					"🔴 Error: Status Update Failed",
-					"Failed to update expired Ravencoin order status.",
-					ColorRed,
-					[]DiscordEmbedField{
-						{Name: "Error", Value: err.Error(), Inline: false},
-					},
-				)
-			}
-
-			// Reset queue
-			_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
-				context.Background(),
-				bson.M{},
-				bson.M{"$set": bson.M{
-					"isProcessing":   false,
-					"currentOrderId": "",
-					"paymentMethod":  "",
-					"expiryTime":     time.Time{},
-				}},
-			)
-			if err != nil {
-				log.Printf("Error resetting Ravencoin queue: %v", err)
-				sendCrowdfundingDiscordEmbed(
-					"🔴 Error: Queue Reset Failed",
-					"Failed to reset Ravencoin queue after order expiry.",
-					ColorRed,
-					[]DiscordEmbedField{
-						{Name: "Error", Value: err.Error(), Inline: false},
-					},
-				)
-			}
-
-			sendCrowdfundingDiscordEmbed(
-				"⏱️ Ravencoin Order Expired",
-				"A Ravencoin payment order has expired.",
-				ColorYellow,
-				[]DiscordEmbedField{
-					{Name: "Order ID", Value: orderID, Inline: true},
-					{Name: "Customer", Value: newOrder.Name, Inline: true},
-					{Name: "Amount", Value: fmt.Sprintf("%f RVN", newOrder.Amount), Inline: true},
-					{Name: "Status", Value: "Expired", Inline: true},
-				},
-			)
-		}
-	}()
-
-	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-		Success:       true,
-		OrderID:       orderID,
-		ExpiryTime:    expiryTime,
-		QRImageURL:    "ravencoin.png",
-		WalletAddress: model.RavencoinWalletAddress,
-		PaymentMethod: model.Ravencoin,
-		Amount:        request.Amount,
-	})
-}
-
-// CheckRavencoinTransaction checks with Nanopool API if a transaction occurred
-func CheckRavencoinTransaction(walletAddress string) (bool, string, float64, error) {
-	// API URL for checking transactions
-	url := fmt.Sprintf("https://api.nanopool.org/v1/rvn/payments/%s", walletAddress)
-
-	// Make the request
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return false, "", 0, err
-	}
-	defer resp.Body.Close()
-
-	// Parse response
-	var txResp model.RavencoinTransactionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
-		return false, "", 0, err
-	}
-
-	// Check for errors in API response
-	if !txResp.Status {
-		return false, "", 0, errors.New("API error: " + txResp.Error)
-	}
-
-	// Check if there are any transactions
-	if len(txResp.Data) > 0 {
-		// Get the most recent transaction
-		latestTx := txResp.Data[0]
-
-		// Check if it has required confirmations
-		if latestTx.Confirmations >= model.RavencoinMinConfirmations {
-			return true, latestTx.TxID, latestTx.Amount, nil
-		}
-	}
-
-	return false, "", 0, nil
-}
-
-// CheckRavencoinMempool checks for pending transactions in the Ravencoin network
-func CheckRavencoinMempool(walletAddress string) (bool, string, error) {
-	// API URL for checking mempool
-	url := fmt.Sprintf("https://api.nanopool.org/v1/rvn/payments_unconfirmed/%s", walletAddress)
-
-	// Make the request
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return false, "", err
-	}
-	defer resp.Body.Close()
-
-	// Parse response
-	var mempoolResp model.RavencoinAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&mempoolResp); err != nil {
-		return false, "", err
-	}
-
-	// Check for errors in API response
-	if !mempoolResp.Status {
-		return false, "", errors.New("API error: " + mempoolResp.Error)
-	}
-
-	// If data is an array and has elements, there are pending transactions
-	if data, ok := mempoolResp.Data.([]interface{}); ok && len(data) > 0 {
-		// Extract txid from first transaction
-		if tx, ok := data[0].(map[string]interface{}); ok {
-			if txid, ok := tx["txid"].(string); ok {
-				return true, txid, nil
-			}
-		}
-	}
-
-	return false, "", nil
-}
-
-// CheckRavencoinStep2Handler checks transaction confirmation status
-func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
-	orderID := at.GetParam(r)
-	txid := r.URL.Query().Get("txid")
-
-	if txid == "" {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Transaction ID is required",
-		})
-		return
-	}
-
-	// Find the order
-	var order model.CrowdfundingOrder
-	err := config.Mongoconn.Collection("crowdfundingorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
-	if err != nil {
-		at.WriteJSON(w, http.StatusNotFound, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Order not found",
-		})
-		return
-	}
-
-	// Verify this is a Ravencoin payment
-	if order.PaymentMethod != model.Ravencoin {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success:       true,
-			Status:        order.Status,
-			Message:       "This endpoint is only for Ravencoin payments",
-			PaymentMethod: order.PaymentMethod,
-		})
-		return
-	}
-
-	// Check transaction status with Nanopool API
-	isConfirmed, _, amount, err := CheckRavencoinTransaction(order.WalletAddress)
-	if err != nil {
-		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-			Success:       true,
-			Status:        "pending",
-			Message:       "Error checking transaction status: " + err.Error(),
-			Step1Complete: true,
-			Step2Complete: false,
-			Step3Complete: false,
-			TxID:          txid,
-			PaymentMethod: model.Ravencoin,
-		})
-		return
-	}
-
-	if isConfirmed {
-		// Transaction confirmed, complete the payment process
-
-		// Update order status to success
-		_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
-			context.Background(),
-			bson.M{"orderId": orderID},
-			bson.M{"$set": bson.M{
-				"status":    "success",
-				"txid":      txid,
-				"amount":    amount,
-				"updatedAt": time.Now(),
-			}},
-		)
-		if err != nil {
-			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-				Success:       true,
-				Status:        "pending",
-				Message:       "Transaction confirmed but error updating order status: " + err.Error(),
-				Step1Complete: true,
-				Step2Complete: true,
-				Step3Complete: false,
-				TxID:          txid,
-				Amount:        amount,
-				PaymentMethod: model.Ravencoin,
-			})
-			return
-		}
-
-		// Update payment totals
-		updateCrowdfundingTotal(amount, model.Ravencoin)
-
-		// Reset queue
-		_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
-			context.Background(),
-			bson.M{},
-			bson.M{"$set": bson.M{
-				"isProcessing":   false,
-				"currentOrderId": "",
-				"paymentMethod":  "",
-				"expiryTime":     time.Time{},
-			}},
-		)
-		if err != nil {
-			log.Printf("Error resetting Ravencoin queue: %v", err)
-		}
-
-		sendCrowdfundingDiscordEmbed(
-			"✅ Ravencoin Payment Successful",
-			"A Ravencoin payment has been confirmed automatically.",
-			ColorGreen,
-			[]DiscordEmbedField{
-				{Name: "Order ID", Value: orderID, Inline: true},
-				{Name: "Customer", Value: order.Name, Inline: true},
-				{Name: "Phone", Value: order.PhoneNumber, Inline: true},
-				{Name: "NPM", Value: order.NPM, Inline: true},
-				{Name: "Transaction ID", Value: txid, Inline: true},
-				{Name: "Amount", Value: fmt.Sprintf("%f RVN", amount), Inline: true},
-			},
-		)
-
-		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-			Success:       true,
-			Status:        "success",
-			Message:       "Payment confirmed successfully!",
-			Step1Complete: true,
-			Step2Complete: true,
-			Step3Complete: true,
-			TxID:          txid,
-			Amount:        amount,
-			PaymentMethod: model.Ravencoin,
-		})
-		return
-	}
-
-	// Transaction not yet confirmed
-	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-		Success:       true,
-		Status:        "pending",
-		Message:       "Transaction found but waiting for confirmations. Please wait.",
-		Step1Complete: true,
-		Step2Complete: false,
-		Step3Complete: false,
-		TxID:          txid,
-		PaymentMethod: model.Ravencoin,
-	})
-}
-
-// ConfirmRavencoinPayment manually confirms a Ravencoin payment
-func ConfirmRavencoinPayment(w http.ResponseWriter, r *http.Request) {
-	orderID := at.GetParam(r)
-
-	// Parse request body to get txid and amount
-	var request struct {
-		TxID   string  `json:"txid"`
-		Amount float64 `json:"amount"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Invalid request body",
-		})
-		return
-	}
-
-	// Validate the request
-	if request.TxID == "" {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Transaction ID is required",
-		})
-		return
-	}
-
-	if request.Amount <= 0 {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Amount must be greater than 0",
-		})
-		return
-	}
-
-	// Find the order
-	var order model.CrowdfundingOrder
-	err := config.Mongoconn.Collection("crowdfundingorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
-	if err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Manual Confirmation Failed",
-			"Failed to confirm Ravencoin payment manually.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Order ID", Value: orderID, Inline: true},
-				{Name: "Error", Value: "Order not found", Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusNotFound, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Order not found",
-		})
-		return
-	}
-
-	// Verify this is a Ravencoin payment
-	if order.PaymentMethod != model.Ravencoin {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success:       false,
-			Message:       "This endpoint is only for Ravencoin payments",
-			PaymentMethod: order.PaymentMethod,
-		})
-		return
-	}
-
-	// Update order status
-	_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
-		context.Background(),
-		bson.M{"orderId": orderID},
-		bson.M{"$set": bson.M{
-			"status":    "success",
-			"txid":      request.TxID,
-			"amount":    request.Amount,
-			"updatedAt": time.Now(),
-		}},
-	)
-	if err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Status Update Failed",
-			"Failed to update Ravencoin order status during manual confirmation.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Order ID", Value: orderID, Inline: true},
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Error updating order status",
-		})
-		return
-	}
-
-	// Update payment totals
-	updateCrowdfundingTotal(request.Amount, model.Ravencoin)
-
-	// Reset queue
-	_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
-		context.Background(),
-		bson.M{},
-		bson.M{"$set": bson.M{
-			"isProcessing":   false,
-			"currentOrderId": "",
-			"paymentMethod":  "",
-			"expiryTime":     time.Time{},
-		}},
-	)
-	if err != nil {
-		sendCrowdfundingDiscordEmbed(
-			"🔴 Error: Queue Reset Failed",
-			"Failed to reset Ravencoin queue after manual confirmation.",
-			ColorRed,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: err.Error(), Inline: false},
-			},
-		)
-		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Error resetting queue",
-		})
-		return
-	}
-
-	sendCrowdfundingDiscordEmbed(
-		"✅ Manual Ravencoin Payment Confirmation",
-		"A Ravencoin payment has been confirmed manually.",
-		ColorGreen,
-		[]DiscordEmbedField{
-			{Name: "Order ID", Value: orderID, Inline: true},
-			{Name: "Customer", Value: order.Name, Inline: true},
-			{Name: "Phone", Value: order.PhoneNumber, Inline: true},
-			{Name: "NPM", Value: order.NPM, Inline: true},
-			{Name: "Transaction ID", Value: request.TxID, Inline: true},
-			{Name: "Amount", Value: fmt.Sprintf("%f RVN", request.Amount), Inline: true},
-		},
-	)
-
-	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-		Success: true,
-		Message: "Payment confirmed",
 	})
 }
 
@@ -1525,134 +914,7 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For Ravencoin payments, if the payment is pending, check mempool
-	if order.PaymentMethod == model.Ravencoin && order.Status == "pending" {
-		// Check if there's a transaction in the mempool
-		mempoolStatus, mempoolTxid, err := CheckRavencoinMempool(order.WalletAddress)
-
-		if err != nil {
-			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-				Success:       true,
-				Status:        "pending",
-				Message:       "Checking mempool failed: " + err.Error(),
-				Step1Complete: false,
-				Step2Complete: false,
-				TxID:          "",
-				PaymentMethod: model.Ravencoin,
-			})
-			return
-		}
-
-		if mempoolStatus && mempoolTxid != "" {
-			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-				Success:       true,
-				Status:        "pending",
-				Message:       "Transaction found in mempool, waiting for confirmation.",
-				Step1Complete: true,
-				Step2Complete: false,
-				TxID:          mempoolTxid,
-				PaymentMethod: model.Ravencoin,
-			})
-			return
-		}
-
-		// If not in mempool, check for confirmed transactions
-		isConfirmed, txid, amount, err := CheckRavencoinTransaction(order.WalletAddress)
-		if err != nil {
-			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-				Success:       true,
-				Status:        "pending",
-				Message:       "Checking confirmed transactions failed: " + err.Error(),
-				Step1Complete: false,
-				Step2Complete: false,
-				PaymentMethod: model.Ravencoin,
-			})
-			return
-		}
-
-		if isConfirmed && txid != "" {
-			// Transaction is confirmed, update order
-			_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
-				context.Background(),
-				bson.M{"orderId": orderID},
-				bson.M{"$set": bson.M{
-					"status":    "success",
-					"txid":      txid,
-					"amount":    amount,
-					"updatedAt": time.Now(),
-				}},
-			)
-			if err != nil {
-				at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-					Success:       true,
-					Status:        "pending",
-					Message:       "Transaction confirmed but error updating order status: " + err.Error(),
-					Step1Complete: true,
-					Step2Complete: true,
-					TxID:          txid,
-					Amount:        amount,
-					PaymentMethod: model.Ravencoin,
-				})
-				return
-			}
-
-			// Update payment totals
-			updateCrowdfundingTotal(amount, model.Ravencoin)
-
-			// Reset queue
-			_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
-				context.Background(),
-				bson.M{},
-				bson.M{"$set": bson.M{
-					"isProcessing":   false,
-					"currentOrderId": "",
-					"paymentMethod":  "",
-					"expiryTime":     time.Time{},
-				}},
-			)
-			if err != nil {
-				log.Printf("Error resetting Ravencoin queue: %v", err)
-			}
-
-			// Log successful payment
-			sendCrowdfundingDiscordEmbed(
-				"✅ Ravencoin Payment Successful",
-				"A Ravencoin payment has been confirmed automatically.",
-				ColorGreen,
-				[]DiscordEmbedField{
-					{Name: "Order ID", Value: orderID, Inline: true},
-					{Name: "Customer", Value: order.Name, Inline: true},
-					{Name: "Transaction ID", Value: txid, Inline: true},
-					{Name: "Amount", Value: fmt.Sprintf("%f RVN", amount), Inline: true},
-				},
-			)
-
-			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-				Success:       true,
-				Status:        "success",
-				Message:       "Payment confirmed successfully!",
-				Step1Complete: true,
-				Step2Complete: true,
-				TxID:          txid,
-				Amount:        amount,
-				PaymentMethod: model.Ravencoin,
-			})
-			return
-		}
-
-		// No transaction found yet
-		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
-			Success:       true,
-			Status:        "pending",
-			Message:       "No transaction found yet. Please make the payment or wait if you've already sent it.",
-			Step1Complete: false,
-			Step2Complete: false,
-			PaymentMethod: model.Ravencoin,
-		})
-		return
-	}
-
-	// For already processed payments (MicroBitcoin or Ravencoin)
+	// For already processed MicroBitcoin payments
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success:       true,
 		Status:        order.Status,
@@ -1665,7 +927,7 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 // Step 1: Check mempool for transactions and extract txid properly
 func checkMicroBitcoinMempool() (bool, string, float64, error) {
 	// API URL for checking mempool
-	url := "https://api.mbc.wiki/mempool/" + model.MicroBitcoinWalletAddress
+	url := "https://api.mbc.wiki/mempool/" + MicroBitcoinWalletAddress
 
 	// Make the request
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -1700,7 +962,7 @@ func checkMicroBitcoinMempool() (bool, string, float64, error) {
 // Step 2: Check if transaction exists in history
 func checkMicroBitcoinTxHistory() (bool, string, error) {
 	// API URL for checking transaction history
-	url := "https://api.mbc.wiki/history/" + model.MicroBitcoinWalletAddress
+	url := "https://api.mbc.wiki/history/" + MicroBitcoinWalletAddress
 
 	// Make the request
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -1761,13 +1023,13 @@ func checkMicroBitcoinTxDetails(txid string) (bool, float64, error) {
 	for _, vout := range txResp.Result.Vout {
 		// Check if this output is to our wallet address
 		for _, addr := range vout.ScriptPubKey.Addresses {
-			if addr == model.MicroBitcoinWalletAddress {
+			if addr == MicroBitcoinWalletAddress {
 				amount = vout.Value
 				break
 			}
 		}
 		// Alternative check using the single address field
-		if vout.ScriptPubKey.Address == model.MicroBitcoinWalletAddress {
+		if vout.ScriptPubKey.Address == MicroBitcoinWalletAddress {
 			amount = vout.Value
 			break
 		}
@@ -1997,6 +1259,7 @@ func CheckStep3Handler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// 4
 // ConfirmQRISPayment manually confirms a QRIS payment
 func ConfirmQRISPayment(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
@@ -2103,5 +1366,817 @@ func ConfirmQRISPayment(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success: true,
 		Message: "Payment confirmed",
+	})
+}
+
+// ConfirmMicroBitcoinPayment manually confirms a MicroBitcoin payment
+func ConfirmMicroBitcoinPayment(w http.ResponseWriter, r *http.Request) {
+	orderID := at.GetParam(r)
+
+	// Parse request body to get txid and amount
+	var request struct {
+		TxID   string  `json:"txid"`
+		Amount float64 `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// Validate the request
+	if request.TxID == "" {
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Transaction ID is required",
+		})
+		return
+	}
+
+	if request.Amount <= 0 {
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Amount must be greater than 0",
+		})
+		return
+	}
+
+	// Find the order
+	var order model.CrowdfundingOrder
+	err := config.Mongoconn.Collection("crowdfundingorders").FindOne(context.Background(), bson.M{"orderId": orderID}).Decode(&order)
+	if err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Manual Confirmation Failed",
+			"Failed to confirm MicroBitcoin payment manually.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: "Order not found", Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusNotFound, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Order not found",
+		})
+		return
+	}
+
+	// Verify this is a MicroBitcoin payment
+	if order.PaymentMethod != model.MicroBitcoin {
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success:       false,
+			Message:       "This endpoint is only for MicroBitcoin payments",
+			PaymentMethod: order.PaymentMethod,
+		})
+		return
+	}
+
+	// Update order status
+	_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
+		context.Background(),
+		bson.M{"orderId": orderID},
+		bson.M{"$set": bson.M{
+			"status":    "success",
+			"txid":      request.TxID,
+			"amount":    request.Amount,
+			"updatedAt": time.Now(),
+		}},
+	)
+	if err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Status Update Failed",
+			"Failed to update MicroBitcoin order status during manual confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: orderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Error updating order status",
+		})
+		return
+	}
+
+	// Update payment totals
+	updateCrowdfundingTotal(request.Amount, model.MicroBitcoin)
+
+	// Reset queue
+	_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
+		context.Background(),
+		bson.M{},
+		bson.M{"$set": bson.M{
+			"isProcessing":   false,
+			"currentOrderId": "",
+			"paymentMethod":  "",
+			"expiryTime":     time.Time{},
+		}},
+	)
+	if err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Queue Reset Failed",
+			"Failed to reset MicroBitcoin queue after manual confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Error resetting queue",
+		})
+		return
+	}
+
+	sendCrowdfundingDiscordEmbed(
+		"✅ Manual MicroBitcoin Payment Confirmation",
+		"A MicroBitcoin payment has been confirmed manually.",
+		ColorGreen,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Customer", Value: order.Name, Inline: true},
+			{Name: "Phone", Value: order.PhoneNumber, Inline: true},
+			{Name: "NPM", Value: order.NPM, Inline: true},
+			{Name: "Transaction ID", Value: request.TxID, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("%f MBC", request.Amount), Inline: true},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
+		Success: true,
+		Message: "Payment confirmed",
+	})
+}
+
+func ProcessQRISNotificationHandler(w http.ResponseWriter, r *http.Request) {
+	BasicAuth(ProcessQRISNotification)(w, r)
+}
+
+// ProcessQRISNotification processes QRIS payment notifications from payment gateway
+func ProcessQRISNotification(w http.ResponseWriter, r *http.Request) {
+	var request model.NotificationRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Invalid Notification",
+			"Failed to process QRIS payment notification.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// Log notification for debugging
+	log.Printf("Received QRIS notification: %s", request.NotificationText)
+	sendCrowdfundingDiscordEmbed(
+		"📥 QRIS Notification Received",
+		"Received a QRIS payment notification.",
+		ColorBlue,
+		[]DiscordEmbedField{
+			{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+		},
+	)
+
+	// Check if this is a QRIS payment notification
+	if !strings.Contains(request.NotificationText, "Pembayaran QRIS") {
+		sendCrowdfundingDiscordEmbed(
+			"❌ Notification Rejected",
+			"The received notification is not a QRIS payment.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+				{Name: "Reason", Value: "Not a QRIS payment notification", Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Not a QRIS payment notification",
+		})
+		return
+	}
+
+	// Extract payment amount with regex - format: "Pembayaran QRIS Rp 1 di Informatika Digital Bisnis, PRNGPNG telah diterima."
+	re := regexp.MustCompile(`Pembayaran QRIS Rp\s*(\d+(?:[.,]\d+)?)`)
+	matches := re.FindStringSubmatch(request.NotificationText)
+
+	if len(matches) < 2 {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Amount Extraction Failed",
+			"Could not extract payment amount from notification.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Notification Text", Value: request.NotificationText, Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Cannot extract payment amount from notification",
+		})
+		return
+	}
+
+	// Clean number format
+	amountStr := strings.ReplaceAll(matches[1], ".", "")
+	amountStr = strings.ReplaceAll(amountStr, ",", "")
+
+	// Convert to float
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Invalid Amount",
+			"The extracted payment amount is invalid.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Extracted Amount", Value: amountStr, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Invalid payment amount",
+		})
+		return
+	}
+
+	// Find order with EXACTLY matching amount, pending status, and QRIS payment method
+	ctx := context.Background()
+	var order model.CrowdfundingOrder
+
+	// Create filter for EXACT amount, pending status, and QRIS payment method
+	filter := bson.M{
+		"amount":        amount,
+		"status":        "pending",
+		"paymentMethod": model.QRIS,
+	}
+
+	// Add sort by latest timestamp
+	opts := options.FindOne().SetSort(bson.M{"timestamp": -1})
+
+	err = config.Mongoconn.Collection("crowdfundingorders").FindOne(ctx, filter, opts).Decode(&order)
+	if err != nil {
+		// Log the attempted payment even if it doesn't match any order
+		sendCrowdfundingDiscordEmbed(
+			"❌ QRIS Payment Failed",
+			"No pending QRIS order found with the exact amount.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+				{Name: "Status", Value: "Failed to Match", Inline: true},
+				{Name: "Notification", Value: request.NotificationText, Inline: false},
+			},
+		)
+
+		// Store this as a failed payment attempt in database with a generated order ID
+		failedPayment := model.CrowdfundingOrder{
+			OrderID:       "unmatched-" + uuid.New().String(),
+			Name:          "Unknown",
+			PhoneNumber:   "Unknown",
+			Amount:        amount,
+			PaymentMethod: model.QRIS,
+			Timestamp:     time.Now(),
+			Status:        "failed", // Mark as failed directly
+		}
+
+		_, dbErr := config.Mongoconn.Collection("crowdfundingorders").InsertOne(context.Background(), failedPayment)
+		if dbErr != nil {
+			log.Printf("Error storing failed payment: %v", dbErr)
+		}
+
+		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "No pending QRIS order found with amount: " + amountStr,
+		})
+		return
+	}
+
+	// Update order status to success
+	_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
+		ctx,
+		bson.M{"orderId": order.OrderID},
+		bson.M{"$set": bson.M{
+			"status":    "success",
+			"updatedAt": time.Now(),
+		}},
+	)
+	if err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Status Update Failed",
+			"Failed to update order status after notification.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Order ID", Value: order.OrderID, Inline: true},
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Error updating order status",
+		})
+		return
+	}
+
+	// Update payment totals
+	updateCrowdfundingTotal(amount, model.QRIS)
+
+	// Reset queue
+	_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
+		ctx,
+		bson.M{},
+		bson.M{"$set": bson.M{
+			"isProcessing":   false,
+			"currentOrderId": "",
+			"paymentMethod":  "",
+			"expiryTime":     time.Time{},
+		}},
+	)
+	if err != nil {
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Queue Reset Failed",
+			"Failed to reset queue after payment confirmation.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Error resetting queue",
+		})
+		return
+	}
+
+	// Log successful confirmation
+	log.Printf("QRIS Payment confirmed from notification for amount: Rp%v, Order ID: %s", amount, order.OrderID)
+	sendCrowdfundingDiscordEmbed(
+		"✅ QRIS Payment Successful",
+		"A QRIS payment has been confirmed via notification.",
+		ColorGreen,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: order.OrderID, Inline: true},
+			{Name: "Customer", Value: order.Name, Inline: true},
+			{Name: "Phone", Value: order.PhoneNumber, Inline: true},
+			{Name: "NPM", Value: order.NPM, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("Rp %s", strconv.FormatFloat(amount, 'f', 2, 64)), Inline: true},
+			{Name: "Status", Value: "Confirmed", Inline: true},
+			{Name: "Notification", Value: request.NotificationText, Inline: false},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
+		Success: true,
+		Message: "Payment confirmed",
+		OrderID: order.OrderID,
+	})
+}
+
+// GetCrowdfundingTotal gets the total payments for all payment methods
+func GetCrowdfundingTotal(w http.ResponseWriter, r *http.Request) {
+	var total model.CrowdfundingTotal
+	err := config.Mongoconn.Collection("crowdfundingtotals").FindOne(context.Background(), bson.M{}).Decode(&total)
+	if err != nil {
+		// Initialize totals if not found
+		InitializeCrowdfundingTotal()
+
+		// Return empty totals
+		at.WriteJSON(w, http.StatusOK, model.CrowdfundingTotal{
+			TotalQRISAmount:    0,
+			QRISCount:          0,
+			TotalBitcoinAmount: 0,
+			BitcoinCount:       0,
+			TotalAmount:        0,
+			TotalCount:         0,
+			LastUpdated:        time.Now(),
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, total)
+}
+
+// GetUserCrowdfundingHistory gets the payment history for a specific user
+func GetUserCrowdfundingHistory(w http.ResponseWriter, r *http.Request) {
+	// Extract user info from token
+	phoneNumber, _, _, err := extractUserInfoFromToken(r)
+	if err != nil {
+		at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Authentication failed: " + err.Error(),
+		})
+		return
+	}
+
+	// Find all orders for this user
+	filter := bson.M{"phoneNumber": phoneNumber}
+	opts := options.Find().SetSort(bson.M{"timestamp": -1}) // Most recent first
+
+	cursor, err := config.Mongoconn.Collection("crowdfundingorders").Find(context.Background(), filter, opts)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Error retrieving payment history",
+		})
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	// Decode results
+	var orders []model.CrowdfundingOrder
+	if err := cursor.All(context.Background(), &orders); err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
+			Success: false,
+			Message: "Error parsing payment history",
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, orders)
+}
+
+// newww
+// AuthCredentials stores basic auth credentials
+type AuthCredentials struct {
+	Username string    `bson:"username" json:"username"`
+	Password string    `bson:"password" json:"password"`
+	Created  time.Time `bson:"created" json:"created"`
+}
+
+// Basic Auth middleware yang mengambil kredensial dari MongoDB collection merchsecret
+func BasicAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Dapatkan header auth
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Authentication required",
+			})
+			return
+		}
+
+		// Parse header auth
+		authParts := strings.Split(authHeader, " ")
+		if len(authParts) != 2 || authParts[0] != "Basic" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication format",
+			})
+			return
+		}
+
+		// Decode kredensial
+		payload, err := base64.StdEncoding.DecodeString(authParts[1])
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication credentials",
+			})
+			return
+		}
+
+		// Split username dan password
+		pair := strings.SplitN(string(payload), ":", 2)
+		if len(pair) != 2 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid authentication credentials",
+			})
+			return
+		}
+
+		// Dapatkan kredensial dari database collection merchsecret
+		var dbCreds AuthCredentials
+		err = config.Mongoconn.Collection("merchsecret").FindOne(context.Background(), bson.M{}).Decode(&dbCreds)
+		if err != nil {
+			log.Printf("Warning: Could not retrieve auth credentials from database: %v.", err)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Server error retrieving credentials",
+			})
+			return
+		}
+
+		// Verifikasi kredensial dengan data dari database
+		if subtle.ConstantTimeCompare([]byte(pair[0]), []byte(dbCreds.Username)) != 1 ||
+			subtle.ConstantTimeCompare([]byte(pair[1]), []byte(dbCreds.Password)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
+				Success: false,
+				Message: "Unauthorized: Invalid username or password",
+			})
+			return
+		}
+
+		// Autentikasi berhasil, panggil handler berikutnya
+		next(w, r)
+	}
+}
+
+// GetCrowdfundingDailyReport sends a daily crowdfunding report to WhatsApp groups
+func GetCrowdfundingDailyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the daily crowdfunding report
+	err := report.RekapCrowdfundingHarian(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding harian",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding harian berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetCrowdfundingWeeklyReport sends a weekly crowdfunding report to WhatsApp groups
+func GetCrowdfundingWeeklyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the weekly crowdfunding report
+	err := report.RekapCrowdfundingMingguan(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding mingguan",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding mingguan berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetCrowdfundingTotalReport sends a total crowdfunding report to WhatsApp groups
+func GetCrowdfundingTotalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the total crowdfunding report
+	err := report.RekapCrowdfundingTotal(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding total",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding total berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetCrowdfundingUserData gets crowdfunding data for a specific user by phone number
+func GetCrowdfundingUserData(w http.ResponseWriter, r *http.Request) {
+	// Get the phone number from URL parameter
+	phoneNumber := r.URL.Query().Get("phonenumber")
+	if phoneNumber == "" {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Status:   "Error",
+			Info:     "Parameter 'phonenumber' diperlukan",
+			Response: "Missing parameter",
+		})
+		return
+	}
+
+	// Get database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Get MBC and QRIS data for the last week
+	mbcAmount, err1 := report.GetJumlahMBCLastWeek(db, phoneNumber)
+	qrisAmount, err2 := report.GetJumlahQRISLastWeek(db, phoneNumber)
+
+	if err1 != nil || err2 != nil {
+		var errMsg string
+		if err1 != nil {
+			errMsg += "MBC error: " + err1.Error() + ". "
+		}
+		if err2 != nil {
+			errMsg += "QRIS error: " + err2.Error()
+		}
+
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengambil data crowdfunding",
+			Response: errMsg,
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":      "Success",
+		"phoneNumber": phoneNumber,
+		"lastWeek": map[string]interface{}{
+			"mbcAmount":  mbcAmount,
+			"qrisAmount": qrisAmount,
+		},
+	})
+}
+
+// GetLogCrowdfundingDailyReport generates daily crowdfunding report logs for all specified groups without sending to WhatsApp
+func GetLogCrowdfundingDailyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Grup yang sudah ditentukan
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Menyimpan hasil laporan untuk semua grup
+	var results []map[string]interface{}
+
+	// Generate laporan untuk setiap grup
+	for _, groupID := range allowedGroups {
+		// Generate laporan harian tanpa mengirim
+		msg, _, err := report.GenerateRekapCrowdfundingDaily(db, groupID)
+
+		result := map[string]interface{}{
+			"groupID": groupID,
+		}
+
+		if err != nil {
+			result["status"] = "Error"
+			result["message"] = err.Error()
+		} else {
+			result["status"] = "Success"
+			result["report"] = msg
+		}
+
+		results = append(results, result)
+	}
+
+	// Return semua laporan sebagai respons
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "Success",
+		"info":    "Log rekap crowdfunding harian untuk semua grup",
+		"reports": results,
+	})
+}
+
+// GetLogCrowdfundingWeeklyReport generates weekly crowdfunding report logs for all specified groups without sending to WhatsApp
+func GetLogCrowdfundingWeeklyReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Grup yang sudah ditentukan
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Menyimpan hasil laporan untuk semua grup
+	var results []map[string]interface{}
+
+	// Generate laporan untuk setiap grup
+	for _, groupID := range allowedGroups {
+		// Generate laporan mingguan tanpa mengirim
+		msg, _, err := report.GenerateRekapCrowdfundingWeekly(db, groupID)
+
+		result := map[string]interface{}{
+			"groupID": groupID,
+		}
+
+		if err != nil {
+			result["status"] = "Error"
+			result["message"] = err.Error()
+		} else {
+			result["status"] = "Success"
+			result["report"] = msg
+		}
+
+		results = append(results, result)
+	}
+
+	// Return semua laporan sebagai respons
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "Success",
+		"info":    "Log rekap crowdfunding mingguan untuk semua grup",
+		"reports": results,
+	})
+}
+
+// GetLogCrowdfundingTotalReport generates total crowdfunding report logs for all specified groups without sending to WhatsApp
+func GetLogCrowdfundingTotalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Grup yang sudah ditentukan
+	allowedGroups := []string{
+		"120363022595651310",
+		"120363347214689840",
+		"120363298977628161",
+	}
+
+	// Menyimpan hasil laporan untuk semua grup
+	var results []map[string]interface{}
+
+	// Generate laporan untuk setiap grup
+	for _, groupID := range allowedGroups {
+		// Generate laporan total tanpa mengirim
+		msg, _, err := report.GenerateRekapCrowdfundingAll(db, groupID)
+
+		result := map[string]interface{}{
+			"groupID": groupID,
+		}
+
+		if err != nil {
+			result["status"] = "Error"
+			result["message"] = err.Error()
+		} else {
+			result["status"] = "Success"
+			result["report"] = msg
+		}
+
+		results = append(results, result)
+	}
+
+	// Return semua laporan sebagai respons
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "Success",
+		"info":    "Log rekap crowdfunding total untuk semua grup",
+		"reports": results,
+	})
+}
+
+// GetCrowdfundingGlobalReport sends a global crowdfunding report (without grouping by WAGroupID)
+func GetCrowdfundingGlobalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Run the global crowdfunding report
+	err := report.RekapCrowdfundingGlobal(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal mengirim rekap crowdfunding global",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Success response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap crowdfunding global berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// GetLogCrowdfundingGlobalReport generates a global crowdfunding report log without sending to WhatsApp
+func GetLogCrowdfundingGlobalReport(w http.ResponseWriter, r *http.Request) {
+	// Get the database connection
+	var db *mongo.Database = config.Mongoconn
+
+	// Generate the global report without sending
+	msg, _, err := report.GenerateRekapCrowdfundingGlobal(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal membuat log rekap crowdfunding global",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Return the report as a response
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Log rekap crowdfunding global",
+		Response: msg,
 	})
 }
