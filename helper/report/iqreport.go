@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"strings"
+	"time"
 
 	"fmt"
 
@@ -16,7 +17,8 @@ type IqScoreInfo struct {
 	PhoneNumber string `bson:"phonenumber"`
 	Score       string `bson:"score"`
 	IQ          string `bson:"iq"`
-	WaGroupID   string `bson:"wagroupid"` // ✅ Ubah ke string, lalu kita proses ke slice
+	WaGroupID   string `bson:"wagroupid"`  // ✅ Ubah ke string, lalu kita proses ke slice
+	CreatedAt   string `bson:"created_at"` // ✅ Tambahan untuk filter waktu
 }
 
 // ✅ **Fungsi utama untuk menghasilkan rekap IQ Score yang akan dikirim ke WhatsApp**
@@ -50,6 +52,69 @@ func GenerateRekapPoinIqScore(db *mongo.Database, groupID string) (string, strin
 	perwakilanphone := filteredData[0].PhoneNumber
 
 	return msg, perwakilanphone, nil
+}
+
+func GenerateRekapIqScoreByWeek(db *mongo.Database, groupID string) (string, string, error) {
+	// Ambil semua data IQ
+	dataIqScore, err := GetTotalDataIqMasuk(db)
+	if err != nil {
+		return "", "", fmt.Errorf("gagal mengambil data IQ Score: %v", err)
+	}
+
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
+
+	// Hitung awal minggu ini dan minggu lalu
+	offset := (int(now.Weekday()) + 6) % 7 // Senin = 0
+	seninIni := now.AddDate(0, 0, -offset).Truncate(24 * time.Hour)
+	seninLalu := seninIni.AddDate(0, 0, -7)
+	mingguLaluAkhir := seninIni.AddDate(0, 0, -1).Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+
+	var thisWeek, lastWeek, total []IqScoreInfo
+
+	for _, info := range dataIqScore {
+		if info.WaGroupID != groupID {
+			continue
+		}
+
+		// Parse waktu created_at
+		createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", info.CreatedAt, loc)
+		if err != nil {
+			continue
+		}
+
+		// Kategorikan berdasarkan minggu
+		total = append(total, info)
+
+		if createdAt.After(seninIni) {
+			thisWeek = append(thisWeek, info)
+		} else if createdAt.After(seninLalu) && createdAt.Before(mingguLaluAkhir) {
+			lastWeek = append(lastWeek, info)
+		}
+	}
+
+	if len(total) == 0 {
+		return "", "", fmt.Errorf("tidak ada data IQ Score untuk grup %s", groupID)
+	}
+
+	msg := "*🧠 Laporan Tes IQ Berdasarkan Minggu*\n\n"
+
+	msg += fmt.Sprintf("📊 *Total Seluruh*: %d peserta\n", len(total))
+	for _, iq := range total {
+		msg += fmt.Sprintf("• %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	}
+
+	msg += fmt.Sprintf("\n📅 *Minggu Ini*: %d peserta\n", len(thisWeek))
+	for _, iq := range thisWeek {
+		msg += fmt.Sprintf("• %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	}
+
+	msg += fmt.Sprintf("\n📆 *Minggu Lalu*: %d peserta\n", len(lastWeek))
+	for _, iq := range lastWeek {
+		msg += fmt.Sprintf("• %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	}
+
+	return msg, total[0].PhoneNumber, nil
 }
 
 // ✅ **Fungsi untuk mengambil seluruh data IQ Score dari database**
