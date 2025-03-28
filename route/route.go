@@ -227,9 +227,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/iq/answer":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostAnswer(w, r)
-		// Endpoint untuk meng-refresh rekap IQ Score harian
-	case method == "GET" && path == "/refresh/report/iqscoreharian":
-		controller.GetIqScoreData(w, r)
+	case method == "GET" && path == "/refresh/report/iq/score/harian":
+		controller.GetIqScoreDataDaily(w, r)
+	case method == "GET" && path == "/refresh/report/iq/score/mingguan":
+		controller.GetIqScoreDataWeekly(w, r)
 	// Pre Test
 	case method == "GET" && strings.HasPrefix(path, "/api/pretest/question/"):
 		controller.GetOnePreTestQuestion(w, r)

@@ -321,13 +321,37 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// **Handler untuk memanggil Rekapitulasi IQ Score Harian**
-func GetIqScoreData(w http.ResponseWriter, r *http.Request) {
+// Handler untuk memanggil Rekapitulasi IQ Score Harian
+func GetIqScoreDataDaily(w http.ResponseWriter, r *http.Request) {
 	// Ambil koneksi database
 	var db *mongo.Database = config.Mongoconn
 
 	// Jalankan fungsi rekap IQ Score harian
 	err := report.RekapIqScoreHarian(db)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Gagal melakukan rekap IQ Score",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Respon sukses
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     "Rekap IQ Score berhasil dikirim ke WhatsApp",
+		Response: "Laporan dikirim",
+	})
+}
+
+// Handler untuk memanggil Rekapitulasi IQ Score Mingguan
+func GetIqScoreDataWeekly(w http.ResponseWriter, r *http.Request) {
+	// Ambil koneksi database
+	var db *mongo.Database = config.Mongoconn
+
+	// Jalankan fungsi rekap IQ Score harian
+	err := report.RekapIqScoreMingguan(db)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
