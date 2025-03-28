@@ -51,7 +51,7 @@ func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 	httpstatus := http.StatusServiceUnavailable
 
 	var wg sync.WaitGroup
-	wg.Add(5) // Menambahkan jumlah goroutine yang akan dijalankan
+	wg.Add(4) // Menambahkan jumlah goroutine yang akan dijalankan
 
 	// Mutex untuk mengamankan akses ke variabel resp dan httpstatus
 	var mu sync.Mutex
@@ -118,18 +118,6 @@ func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 	go func() {
 		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
 		if err := report.RekapStravaYesterday(config.Mongoconn); err != nil {
-			mu.Lock()
-			lastErr = err
-			resp.Response = err.Error()
-			httpstatus = http.StatusInternalServerError
-			mu.Unlock()
-		}
-	}()
-
-	// 5. Menjalankan fungsi KirimLaporanPengunjungWebKeGrup dalam goroutine
-	go func() {
-		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
-		if err := report.KirimLaporanPengunjungWebKeGrup(config.Mongoconn); err != nil {
 			mu.Lock()
 			lastErr = err
 			resp.Response = err.Error()
