@@ -31,7 +31,7 @@ func GenerateRekapIqScoreByDay(db *mongo.Database, groupID string) (string, stri
 	now := time.Now().In(loc)
 	today := now.Format("2006-01-02")
 
-	var todayList, total []IqScoreInfo
+	var todayList []IqScoreInfo
 
 	for _, info := range dataIqScore {
 		if info.WaGroupID != groupID {
@@ -43,19 +43,19 @@ func GenerateRekapIqScoreByDay(db *mongo.Database, groupID string) (string, stri
 			continue
 		}
 
-		// Tambahkan ke total & hari ini
-		total = append(total, info)
-
 		if createdAt.Format("2006-01-02") == today {
 			todayList = append(todayList, info)
 		}
 	}
 
+	// ✅ Jika tidak ada data hari ini, tetap kembalikan pesan biasa
 	if len(todayList) == 0 {
-		return "", "", fmt.Errorf("tidak ada data IQ Score untuk hari ini di grup %s", groupID)
+		msg := "*🧠 Rekap Harian Tes IQ - " + today + "*\n\n"
+		msg += "Belum ada peserta yang mengikuti tes IQ hari ini."
+		return msg, "", nil
 	}
 
-	// Buat pesan rekap harian
+	// ✅ Jika ada peserta
 	msg := "*🧠 Rekap Harian Tes IQ - " + today + "*\n\n"
 	msg += fmt.Sprintf("Total peserta hari ini: %d orang\n\n", len(todayList))
 
@@ -63,7 +63,6 @@ func GenerateRekapIqScoreByDay(db *mongo.Database, groupID string) (string, stri
 		msg += fmt.Sprintf("✅ %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
 	}
 
-	// Gunakan nomor peserta pertama untuk pengiriman jika dibutuhkan
 	return msg, todayList[0].PhoneNumber, nil
 }
 
