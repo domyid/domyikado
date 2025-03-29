@@ -37,6 +37,13 @@ func formatMBCAmount(amount float64) string {
 	return fmt.Sprintf("%.0f coin MBC", coinAmount)
 }
 
+// Helper function to format Ravencoin amount for display
+// Convert 0.5 to "0.5 RVN"
+func formatRavencoinAmount(amount float64) string {
+	// Format with 8 decimal places maximum
+	return fmt.Sprintf("%.8f RVN", amount)
+}
+
 // Helper function to format QRIS amount for display
 // Convert 1 to "Rp 1" and 1000 to "Rp 1.000"
 func formatQRISAmount(amount float64) string {
@@ -100,6 +107,45 @@ func GetJumlahMBCLastWeek(db *mongo.Database, phoneNumber string) (float64, erro
 	cursor, err := db.Collection("crowdfundingorders").Find(context.TODO(), filter)
 	if err != nil {
 		return 0, fmt.Errorf("error querying MicroBitcoin payments: %v", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	// Calculate the total
+	var totalAmount float64
+	for cursor.Next(context.TODO()) {
+		var payment model.CrowdfundingOrder
+		if err := cursor.Decode(&payment); err != nil {
+			return 0, fmt.Errorf("error decoding payment: %v", err)
+		}
+		totalAmount += payment.Amount
+	}
+
+	if err := cursor.Err(); err != nil {
+		return 0, fmt.Errorf("cursor error: %v", err)
+	}
+
+	return totalAmount, nil
+}
+
+// GetJumlahRavencoinLastWeek returns the total Ravencoin amount contributed by a user in the last week
+func GetJumlahRavencoinLastWeek(db *mongo.Database, phoneNumber string) (float64, error) {
+	// Calculate the date one week ago from now
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Create a filter to find successful Ravencoin payments from the specified phone number in the last week
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.Ravencoin,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	// Query the collection
+	cursor, err := db.Collection("crowdfundingorders").Find(context.TODO(), filter)
+	if err != nil {
+		return 0, fmt.Errorf("error querying Ravencoin payments: %v", err)
 	}
 	defer cursor.Close(context.TODO())
 
@@ -214,7 +260,7 @@ func GetTotalDataCrowdfundingMasuk(db *mongo.Database, isDaily bool) ([]Crowdfun
 		phoneNumbers := extractUniquePaymentPhoneNumbers(payments)
 
 		// Get the WA Group IDs for these phone numbers
-		groupMap, err := GetGroupIDFromProject(db, phoneNumbers)
+		groupMap, err := GetCrowdfundingGroupIDFromProject(db, phoneNumbers)
 		if err != nil {
 			// Continue even if there's an error, just without group info
 			fmt.Printf("Warning: Could not get group IDs: %v\n", err)
@@ -270,9 +316,9 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 	msg := "*📊 Rekap Crowdfunding Harian 📊*\n\n"
 	msg += "Berikut ini adalah ringkasan aktifitasi-crownfunding kemarin:\n\n"
 
-	// Separate QRIS and MicroBitcoin payments
-	var qrisPayments, mbcPayments []CrowdfundingInfo
-	var totalQRIS, totalMBC float64
+	// Separate payments by payment method
+	var qrisPayments, mbcPayments, ravencoinPayments []CrowdfundingInfo
+	var totalQRIS, totalMBC, totalRavencoin float64
 
 	for _, payment := range groupPayments {
 		if payment.PaymentMethod == model.QRIS {
@@ -281,6 +327,9 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 		} else if payment.PaymentMethod == model.MicroBitcoin {
 			mbcPayments = append(mbcPayments, payment)
 			totalMBC += payment.Amount
+		} else if payment.PaymentMethod == model.Ravencoin {
+			ravencoinPayments = append(ravencoinPayments, payment)
+			totalRavencoin += payment.Amount
 		}
 	}
 
@@ -302,10 +351,20 @@ func GenerateRekapCrowdfundingDaily(db *mongo.Database, groupID string) (string,
 		msg += fmt.Sprintf("Total MBC: %s\n\n", formatMBCAmount(totalMBC))
 	}
 
+	// Add Ravencoin payments to the message
+	if len(ravencoinPayments) > 0 {
+		msg += "*Ravencoin Payments:*\n"
+		for _, payment := range ravencoinPayments {
+			msg += fmt.Sprintf("• %s: %s\n", payment.Name, formatRavencoinAmount(payment.Amount))
+		}
+		msg += fmt.Sprintf("Total Ravencoin: %s\n\n", formatRavencoinAmount(totalRavencoin))
+	}
+
 	// Add overall total
 	msg += fmt.Sprintf("*Jumlah Transaksi:* %d\n", len(groupPayments))
 	msg += fmt.Sprintf("*Total QRIS:* %s\n", formatQRISAmount(totalQRIS))
 	msg += fmt.Sprintf("*Total MBC:* %s\n", formatMBCAmount(totalMBC))
+	msg += fmt.Sprintf("*Total Ravencoin:* %s\n", formatRavencoinAmount(totalRavencoin))
 	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
@@ -367,7 +426,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 		phoneNumbers := extractUniquePaymentPhoneNumbers(payments)
 
 		// Get the WA Group IDs for these phone numbers
-		groupMap, err := GetGroupIDFromProject(db, phoneNumbers)
+		groupMap, err := GetCrowdfundingGroupIDFromProject(db, phoneNumbers)
 		if err != nil {
 			// Continue even if there's an error, just without group info
 			fmt.Printf("Warning: Could not get group IDs: %v\n", err)
@@ -400,29 +459,33 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 
 	// Group payments by user
 	userPayments := make(map[string]struct {
-		Name         string
-		PhoneNumber  string
-		QRISAmount   float64
-		QRISCount    int
-		MBCAmount    float64
-		MBCCount     int
-		TotalPayment int
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalPayment    int
 	})
 
-	var totalQRIS, totalMBC float64
-	var totalQRISCount, totalMBCCount int
+	var totalQRIS, totalMBC, totalRavencoin float64
+	var totalQRISCount, totalMBCCount, totalRavencoinCount int
 
 	for _, payment := range groupPayments {
 		userInfo, exists := userPayments[payment.PhoneNumber]
 		if !exists {
 			userInfo = struct {
-				Name         string
-				PhoneNumber  string
-				QRISAmount   float64
-				QRISCount    int
-				MBCAmount    float64
-				MBCCount     int
-				TotalPayment int
+				Name            string
+				PhoneNumber     string
+				QRISAmount      float64
+				QRISCount       int
+				MBCAmount       float64
+				MBCCount        int
+				RavencoinAmount float64
+				RavencoinCount  int
+				TotalPayment    int
 			}{
 				Name:        payment.Name,
 				PhoneNumber: payment.PhoneNumber,
@@ -439,6 +502,11 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 			userInfo.MBCCount++
 			totalMBC += payment.Amount
 			totalMBCCount++
+		} else if payment.PaymentMethod == model.Ravencoin {
+			userInfo.RavencoinAmount += payment.Amount
+			userInfo.RavencoinCount++
+			totalRavencoin += payment.Amount
+			totalRavencoinCount++
 		}
 
 		userInfo.TotalPayment++
@@ -447,25 +515,29 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 
 	// Sort users by total payment
 	type UserPaymentInfo struct {
-		Name         string
-		PhoneNumber  string
-		QRISAmount   float64
-		QRISCount    int
-		MBCAmount    float64
-		MBCCount     int
-		TotalPayment int
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalPayment    int
 	}
 
 	var sortedUsers []UserPaymentInfo
 	for _, info := range userPayments {
 		sortedUsers = append(sortedUsers, UserPaymentInfo{
-			Name:         info.Name,
-			PhoneNumber:  info.PhoneNumber,
-			QRISAmount:   info.QRISAmount,
-			QRISCount:    info.QRISCount,
-			MBCAmount:    info.MBCAmount,
-			MBCCount:     info.MBCCount,
-			TotalPayment: info.TotalPayment,
+			Name:            info.Name,
+			PhoneNumber:     info.PhoneNumber,
+			QRISAmount:      info.QRISAmount,
+			QRISCount:       info.QRISCount,
+			MBCAmount:       info.MBCAmount,
+			MBCCount:        info.MBCCount,
+			RavencoinAmount: info.RavencoinAmount,
+			RavencoinCount:  info.RavencoinCount,
+			TotalPayment:    info.TotalPayment,
 		})
 	}
 
@@ -483,6 +555,9 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 		if user.MBCCount > 0 {
 			msg += fmt.Sprintf("- MBC: %s (%d transaksi)\n", formatMBCAmount(user.MBCAmount), user.MBCCount)
 		}
+		if user.RavencoinCount > 0 {
+			msg += fmt.Sprintf("- RVN: %s (%d transaksi)\n", formatRavencoinAmount(user.RavencoinAmount), user.RavencoinCount)
+		}
 		msg += fmt.Sprintf("- Total: %d transaksi\n\n", user.TotalPayment)
 	}
 
@@ -492,6 +567,7 @@ func GenerateRekapCrowdfundingWeekly(db *mongo.Database, groupID string) (string
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: %s (%d transaksi)\n", formatQRISAmount(totalQRIS), totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
+	msg += fmt.Sprintf("Total RVN: %s (%d transaksi)\n", formatRavencoinAmount(totalRavencoin), totalRavencoinCount)
 	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
@@ -530,29 +606,33 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 
 	// Group payments by user
 	userPayments := make(map[string]struct {
-		Name         string
-		PhoneNumber  string
-		QRISAmount   float64
-		QRISCount    int
-		MBCAmount    float64
-		MBCCount     int
-		TotalPayment int
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalPayment    int
 	})
 
-	var totalQRIS, totalMBC float64
-	var totalQRISCount, totalMBCCount int
+	var totalQRIS, totalMBC, totalRavencoin float64
+	var totalQRISCount, totalMBCCount, totalRavencoinCount int
 
 	for _, payment := range groupPayments {
 		userInfo, exists := userPayments[payment.PhoneNumber]
 		if !exists {
 			userInfo = struct {
-				Name         string
-				PhoneNumber  string
-				QRISAmount   float64
-				QRISCount    int
-				MBCAmount    float64
-				MBCCount     int
-				TotalPayment int
+				Name            string
+				PhoneNumber     string
+				QRISAmount      float64
+				QRISCount       int
+				MBCAmount       float64
+				MBCCount        int
+				RavencoinAmount float64
+				RavencoinCount  int
+				TotalPayment    int
 			}{
 				Name:        payment.Name,
 				PhoneNumber: payment.PhoneNumber,
@@ -569,6 +649,11 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 			userInfo.MBCCount++
 			totalMBC += payment.Amount
 			totalMBCCount++
+		} else if payment.PaymentMethod == model.Ravencoin {
+			userInfo.RavencoinAmount += payment.Amount
+			userInfo.RavencoinCount++
+			totalRavencoin += payment.Amount
+			totalRavencoinCount++
 		}
 
 		userInfo.TotalPayment++
@@ -577,25 +662,29 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 
 	// Sort users by total payment
 	type UserPaymentInfo struct {
-		Name         string
-		PhoneNumber  string
-		QRISAmount   float64
-		QRISCount    int
-		MBCAmount    float64
-		MBCCount     int
-		TotalPayment int
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalPayment    int
 	}
 
 	var sortedUsers []UserPaymentInfo
 	for _, info := range userPayments {
 		sortedUsers = append(sortedUsers, UserPaymentInfo{
-			Name:         info.Name,
-			PhoneNumber:  info.PhoneNumber,
-			QRISAmount:   info.QRISAmount,
-			QRISCount:    info.QRISCount,
-			MBCAmount:    info.MBCAmount,
-			MBCCount:     info.MBCCount,
-			TotalPayment: info.TotalPayment,
+			Name:            info.Name,
+			PhoneNumber:     info.PhoneNumber,
+			QRISAmount:      info.QRISAmount,
+			QRISCount:       info.QRISCount,
+			MBCAmount:       info.MBCAmount,
+			MBCCount:        info.MBCCount,
+			RavencoinAmount: info.RavencoinAmount,
+			RavencoinCount:  info.RavencoinCount,
+			TotalPayment:    info.TotalPayment,
 		})
 	}
 
@@ -614,17 +703,21 @@ func GenerateRekapCrowdfundingAll(db *mongo.Database, groupID string) (string, s
 		if user.MBCCount > 0 {
 			msg += fmt.Sprintf("   - MBC: %s (%d transaksi)\n", formatMBCAmount(user.MBCAmount), user.MBCCount)
 		}
+		if user.RavencoinCount > 0 {
+			msg += fmt.Sprintf("   - RVN: %s (%d transaksi)\n", formatRavencoinAmount(user.RavencoinAmount), user.RavencoinCount)
+		}
 		msg += fmt.Sprintf("   - Total: %d transaksi\n", user.TotalPayment)
 	}
 
-	// Add overall total
 	msg += "\n*STATISTIK KESELURUHAN*\n"
 	msg += fmt.Sprintf("Jumlah crownfunding: %d\n", len(sortedUsers))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(groupPayments))
 	msg += fmt.Sprintf("Total QRIS: %s (%d transaksi)\n", formatQRISAmount(totalQRIS), totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
+	msg += fmt.Sprintf("Total RVN: %s (%d transaksi)\n", formatRavencoinAmount(totalRavencoin), totalRavencoinCount)
 	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
+	// Use first payment's phone number as representative
 	// Use first payment's phone number as representative phone
 	perwakilanphone := ""
 	if len(sortedUsers) > 0 {
@@ -834,29 +927,33 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 
 	// Group payments by user and payment method
 	userPayments := make(map[string]struct {
-		Name         string
-		PhoneNumber  string
-		QRISAmount   float64
-		QRISCount    int
-		MBCAmount    float64
-		MBCCount     int
-		TotalPayment int
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalPayment    int
 	})
 
-	var totalQRIS, totalMBC float64
-	var totalQRISCount, totalMBCCount int
+	var totalQRIS, totalMBC, totalRavencoin float64
+	var totalQRISCount, totalMBCCount, totalRavencoinCount int
 
 	for _, payment := range payments {
 		userInfo, exists := userPayments[payment.PhoneNumber]
 		if !exists {
 			userInfo = struct {
-				Name         string
-				PhoneNumber  string
-				QRISAmount   float64
-				QRISCount    int
-				MBCAmount    float64
-				MBCCount     int
-				TotalPayment int
+				Name            string
+				PhoneNumber     string
+				QRISAmount      float64
+				QRISCount       int
+				MBCAmount       float64
+				MBCCount        int
+				RavencoinAmount float64
+				RavencoinCount  int
+				TotalPayment    int
 			}{
 				Name:        payment.Name,
 				PhoneNumber: payment.PhoneNumber,
@@ -873,6 +970,11 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 			userInfo.MBCCount++
 			totalMBC += payment.Amount
 			totalMBCCount++
+		} else if payment.PaymentMethod == model.Ravencoin {
+			userInfo.RavencoinAmount += payment.Amount
+			userInfo.RavencoinCount++
+			totalRavencoin += payment.Amount
+			totalRavencoinCount++
 		}
 
 		userInfo.TotalPayment++
@@ -881,27 +983,32 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 
 	// Sort users by total payment
 	type UserPaymentInfo struct {
-		Name         string
-		PhoneNumber  string
-		QRISAmount   float64
-		QRISCount    int
-		MBCAmount    float64
-		MBCCount     int
-		TotalPayment int
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalPayment    int
 	}
 
 	var sortedMBCUsers []UserPaymentInfo
 	var sortedQRISUsers []UserPaymentInfo
+	var sortedRavencoinUsers []UserPaymentInfo
 
 	for _, info := range userPayments {
 		userInfo := UserPaymentInfo{
-			Name:         info.Name,
-			PhoneNumber:  info.PhoneNumber,
-			QRISAmount:   info.QRISAmount,
-			QRISCount:    info.QRISCount,
-			MBCAmount:    info.MBCAmount,
-			MBCCount:     info.MBCCount,
-			TotalPayment: info.TotalPayment,
+			Name:            info.Name,
+			PhoneNumber:     info.PhoneNumber,
+			QRISAmount:      info.QRISAmount,
+			QRISCount:       info.QRISCount,
+			MBCAmount:       info.MBCAmount,
+			MBCCount:        info.MBCCount,
+			RavencoinAmount: info.RavencoinAmount,
+			RavencoinCount:  info.RavencoinCount,
+			TotalPayment:    info.TotalPayment,
 		}
 
 		// Add to MBC list if they have MBC transactions
@@ -913,6 +1020,11 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 		if info.QRISCount > 0 {
 			sortedQRISUsers = append(sortedQRISUsers, userInfo)
 		}
+
+		// Add to Ravencoin list if they have Ravencoin transactions
+		if info.RavencoinCount > 0 {
+			sortedRavencoinUsers = append(sortedRavencoinUsers, userInfo)
+		}
 	}
 
 	// Sort MBC users by MBC amount (highest first)
@@ -923,6 +1035,11 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 	// Sort QRIS users by QRIS amount (highest first)
 	sort.Slice(sortedQRISUsers, func(i, j int) bool {
 		return sortedQRISUsers[i].QRISAmount > sortedQRISUsers[j].QRISAmount
+	})
+
+	// Sort Ravencoin users by Ravencoin amount (highest first)
+	sort.Slice(sortedRavencoinUsers, func(i, j int) bool {
+		return sortedRavencoinUsers[i].RavencoinAmount > sortedRavencoinUsers[j].RavencoinAmount
 	})
 
 	// First list all MBC users
@@ -945,12 +1062,23 @@ func GenerateRekapCrowdfundingGlobal(db *mongo.Database) (string, string, error)
 		msg += "\n"
 	}
 
+	// Finally list all Ravencoin users
+	if len(sortedRavencoinUsers) > 0 {
+		msg += "*DAFTAR aktifitasi-crownfunding Ravencoin*\n\n"
+		for i, user := range sortedRavencoinUsers {
+			msg += fmt.Sprintf("%d. *%s* (%s)\n", i+1, user.Name, user.PhoneNumber)
+			msg += fmt.Sprintf("   - RVN: %s (%d transaksi)\n", formatRavencoinAmount(user.RavencoinAmount), user.RavencoinCount)
+		}
+		msg += "\n"
+	}
+
 	// Add overall total stats
 	msg += "*STATISTIK KESELURUHAN*\n"
 	msg += fmt.Sprintf("Total Pengguna: %d\n", len(userPayments))
 	msg += fmt.Sprintf("Total Transaksi: %d\n", len(payments))
 	msg += fmt.Sprintf("Total QRIS: %s (%d transaksi)\n", formatQRISAmount(totalQRIS), totalQRISCount)
 	msg += fmt.Sprintf("Total MBC: %s (%d transaksi)\n", formatMBCAmount(totalMBC), totalMBCCount)
+	msg += fmt.Sprintf("Total RVN: %s (%d transaksi)\n", formatRavencoinAmount(totalRavencoin), totalRavencoinCount)
 	msg += "\n\n_Jika ada aktifitasi crownfunding yang tidak terinput bisa hubungi 6285312924192_"
 
 	// Use first payment's phone number as representative phone
@@ -1011,4 +1139,69 @@ func RekapCrowdfundingGlobal(db *mongo.Database) error {
 	}
 
 	return lastErr
+}
+
+// GetCrowdfundingGroupIDFromProject gets the WA Group IDs for the provided phone numbers
+func GetCrowdfundingGroupIDFromProject(db *mongo.Database, phoneNumbers []string) (map[string][]string, error) {
+	// Create a filter to find projects where any of the phone numbers is an owner or member
+	filter := bson.M{
+		"$or": []bson.M{
+			{"owner.phonenumber": bson.M{"$in": phoneNumbers}},
+			{"members.phonenumber": bson.M{"$in": phoneNumbers}},
+		},
+	}
+
+	// Query the collection
+	cursor, err := db.Collection("project").Find(context.TODO(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("error querying projects: %v", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	// Create a map of phone numbers to their group IDs
+	groupMap := make(map[string][]string)
+
+	// Process each project
+	for cursor.Next(context.TODO()) {
+		var project struct {
+			Owner struct {
+				PhoneNumber string `bson:"phonenumber"`
+			} `bson:"owner"`
+			Members []struct {
+				PhoneNumber string `bson:"phonenumber"`
+			} `bson:"members"`
+			WaGroupID string `bson:"wagroupid"`
+		}
+
+		if err := cursor.Decode(&project); err != nil {
+			return nil, fmt.Errorf("error decoding project: %v", err)
+		}
+
+		// If project has a WA Group ID
+		if project.WaGroupID != "" {
+			// Add owner's phone number to group map
+			if project.Owner.PhoneNumber != "" {
+				if _, ok := groupMap[project.Owner.PhoneNumber]; !ok {
+					groupMap[project.Owner.PhoneNumber] = []string{}
+				}
+				groupMap[project.Owner.PhoneNumber] = append(groupMap[project.Owner.PhoneNumber], project.WaGroupID)
+			}
+
+			// Add members' phone numbers to group map
+			for _, member := range project.Members {
+				if member.PhoneNumber != "" {
+					if _, ok := groupMap[member.PhoneNumber]; !ok {
+						groupMap[member.PhoneNumber] = []string{}
+					}
+					groupMap[member.PhoneNumber] = append(groupMap[member.PhoneNumber], project.WaGroupID)
+				}
+			}
+		}
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	return groupMap, nil
 }
