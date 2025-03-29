@@ -140,7 +140,7 @@ func HandleGetAllDataIQScore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Panggil fungsi logika
-	result, err := GetAllDataIQScoreForWeb(config.Mongoconn, payload.Id)
+	result, err := GetAllDataIQScore(config.Mongoconn, payload.Id)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
 		return
@@ -151,7 +151,7 @@ func HandleGetAllDataIQScore(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-func GetAllDataIQScoreForWeb(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
+func GetAllDataIQScore(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
 	// Ambil data IQ Score berdasarkan nomor telepon
@@ -170,48 +170,6 @@ func GetAllDataIQScoreForWeb(db *mongo.Database, phonenumber string) (model.Acti
 	activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
 
 	return activityscore, nil
-}
-
-func GetAllDataIQScoreForTest(w http.ResponseWriter, r *http.Request) {
-	// Ambil token login
-	token := at.GetLoginFromHeader(r)
-	if token == "" {
-		http.Error(w, `{"error": "Token login diperlukan"}`, http.StatusUnauthorized)
-		return
-	}
-
-	// Decode token
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
-	if err != nil {
-		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
-		return
-	}
-
-	// Ambil data IQ Score berdasarkan phonenumber
-	docs, err := atdb.GetAllDoc[[]model.UserWithIqScore](config.Mongoconn, "iqscore", bson.M{"phonenumber": payload.Id})
-	if err != nil {
-		http.Error(w, `{"error": "Gagal mengambil data IQ Score"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Proses perhitungan score & IQ
-	var scoreTotal, iqTotal int
-	for _, doc := range docs {
-		skorInt, _ := strconv.Atoi(doc.Score)
-		iqInt, _ := strconv.Atoi(doc.IQ)
-		scoreTotal += skorInt
-		iqTotal += iqInt
-	}
-
-	activity := model.ActivityScore{
-		PhoneNumber: payload.Id,
-		IQresult:    iqTotal,
-		IQ:          scoreTotal,
-	}
-
-	// Kirim response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(activity)
 }
 
 func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
