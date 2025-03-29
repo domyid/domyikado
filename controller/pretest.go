@@ -121,18 +121,21 @@ func GetUserAndPreTestScore(w http.ResponseWriter, r *http.Request) {
 }
 
 func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
+	// Validasi Token Login
 	token := at.GetLoginFromHeader(r)
 	if token == "" {
 		http.Error(w, `{"error": "Akses ditolak! Token login diperlukan."}`, http.StatusUnauthorized)
 		return
 	}
 
+	// Decode Token
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
 	if err != nil {
 		http.Error(w, `{"error": "Token tidak valid atau tidak dapat didecode"}`, http.StatusUnauthorized)
 		return
 	}
 
+	// Ambil data user dari MongoDB berdasarkan phonenumber
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		docuser.PhoneNumber = payload.Id
@@ -141,6 +144,7 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 		docuser.Name = payload.Alias
 	}
 
+	// Ambil payload jawaban dari frontend
 	var userAnswer model.PreTestAnswerPayload
 	err = json.NewDecoder(r.Body).Decode(&userAnswer)
 	if err != nil {
@@ -152,7 +156,7 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 		userAnswer.Name = docuser.Name
 	}
 
-	// Ambil soal dari DB
+	// Ambil semua soal pretest dari MongoDB
 	questionCollection := config.Mongoconn.Collection("pretestquestion")
 	cursor, err := questionCollection.Find(context.TODO(), bson.M{})
 	if err != nil {
@@ -167,7 +171,7 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hitung skor berdasarkan kecocokan answer_key
+	// Hitung jumlah jawaban benar
 	correctCount := 0
 	for _, answer := range userAnswer.Answers {
 		for _, q := range questions {
@@ -180,7 +184,7 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Ambil nilai pretest dari pretestscoring
+	// Ambil nilai pretest berdasarkan skor
 	scoringCollection := config.Mongoconn.Collection("pretestscoring")
 	var scoring model.PreTestScoring
 	err = scoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}).Decode(&scoring)
@@ -192,31 +196,30 @@ func PostPretestAnswer(w http.ResponseWriter, r *http.Request) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	now := time.Now().In(loc).Format("2006-01-02 15:04:05")
 
-	const groupID = "120363022595651310"
-
-	// Simpan ke pretestanswer
+	// Simpan hasil pretest ke MongoDB (urut & konsisten)
 	pretestAnswerCollection := config.Mongoconn.Collection("pretestanswer")
-	_, err = pretestAnswerCollection.InsertOne(context.TODO(), bson.M{
-		"name":        userAnswer.Name,
-		"phonenumber": docuser.PhoneNumber,
-		"answers":     userAnswer.Answers,
-		"score":       fmt.Sprintf("%d", correctCount),
-		"pretest":     scoring.Pretest,
-		"wagroupid":   groupID,
-		"created_at":  now,
+	_, err = pretestAnswerCollection.InsertOne(context.TODO(), bson.D{
+		{Key: "name", Value: userAnswer.Name},
+		{Key: "phonenumber", Value: docuser.PhoneNumber},
+		{Key: "answers", Value: userAnswer.Answers},
+		{Key: "score", Value: fmt.Sprintf("%d", correctCount)},
+		{Key: "pretest", Value: scoring.Pretest},
+		{Key: "wagroupid", Value: "120363022595651310"},
+		{Key: "created_at", Value: now},
 	})
 	if err != nil {
 		http.Error(w, `{"error": "Gagal menyimpan ke database"}`, http.StatusInternalServerError)
 		return
 	}
 
+	// Kirim respon ke frontend
 	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"status":    "success",
 		"message":   "Jawaban berhasil disimpan!",
 		"name":      userAnswer.Name,
 		"score":     fmt.Sprintf("%d", correctCount),
 		"pretest":   scoring.Pretest,
-		"wagroupid": groupID,
+		"wagroupid": "120363022595651310",
 		"datetime":  now + " WIB",
 	})
 }
