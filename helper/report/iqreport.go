@@ -66,39 +66,6 @@ func GenerateRekapIqScoreByDay(db *mongo.Database, groupID string) (string, stri
 	return msg, todayList[0].PhoneNumber, nil
 }
 
-// ✅ **Fungsi utama untuk menghasilkan rekap IQ Score yang akan dikirim ke WhatsApp**
-func GenerateRekapPoinIqScore(db *mongo.Database, groupID string) (string, string, error) {
-	// Ambil data IQ Score terbaru
-	dataIqScore, err := GetTotalDataIqMasuk(db)
-	if err != nil {
-		return "", "", fmt.Errorf("gagal mengambil data IQ Score: %v", err)
-	}
-
-	// Filter hanya data yang sesuai dengan Group ID
-	var filteredData []IqScoreInfo
-	for _, info := range dataIqScore {
-		if info.WaGroupID == groupID { // ✅ Cek langsung sebagai string
-			filteredData = append(filteredData, info)
-		}
-	}
-
-	// Jika tidak ada data untuk grup ini, hentikan proses
-	if len(filteredData) == 0 {
-		return "", "", fmt.Errorf("tidak ada data IQ Score untuk grup %s", groupID)
-	}
-
-	// Buat pesan rekap
-	msg := "*Laporan Total Skor Tes IQ*\n\n"
-	for _, iq := range filteredData {
-		msg += fmt.Sprintf("✅ *%s* - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
-	}
-
-	// Pilih perwakilan pertama sebagai nomor yang akan menerima pesan jika private chat
-	perwakilanphone := filteredData[0].PhoneNumber
-
-	return msg, perwakilanphone, nil
-}
-
 func GenerateRekapIqScoreByWeek(db *mongo.Database, groupID string) (string, string, error) {
 	// Ambil semua data IQ
 	dataIqScore, err := GetTotalDataIqMasuk(db)
