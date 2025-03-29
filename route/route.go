@@ -246,6 +246,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetOnePreTestQuestion(w, r)
 	case method == "GET" && path == "/api/pretest/user":
 		controller.GetUserAndPreTestScore(w, r)
+	case method == "GET" && path == "/api/pretest/scoring":
+		controller.GetPreTestScoring(w, r)
 	case method == "POST" && path == "/api/pretest/answer":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostPretestAnswer(w, r)

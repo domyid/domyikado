@@ -47,6 +47,30 @@ func GetOnePreTestQuestion(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, PreTestQuestion)
 }
 
+// GET skor referensi dari koleksi pretestscoring
+func GetPreTestScoring(w http.ResponseWriter, r *http.Request) {
+	collection := config.Mongoconn.Collection("pretestscoring")
+
+	// Ambil semua data skor dari MongoDB
+	cursor, err := collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Println("Gagal mengambil skor referensi:", err)
+		http.Error(w, "Gagal mengambil data", http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	var results model.PreTestScoring
+	if err = cursor.All(context.Background(), &results); err != nil {
+		log.Println("Gagal decode data:", err)
+		http.Error(w, "Gagal memproses data", http.StatusInternalServerError)
+		return
+	}
+
+	// Kirim respons JSON
+	at.WriteJSON(w, http.StatusOK, results)
+}
+
 func GetUserAndPreTestScore(w http.ResponseWriter, r *http.Request) {
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
