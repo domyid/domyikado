@@ -61,6 +61,14 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dataIQ, err := GetAllDataIQScore(config.Mongoconn, authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Data IQ Score tidak ditemukan",
+		})
+		return
+	}
+
 	// dataGTMetrixScore, err := GetGTMetrixScoreForUser(authorization.Id)
 	// if err != nil {
 	// 	at.WriteJSON(w, http.StatusConflict, model.Response{
@@ -76,6 +84,8 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		Strava:      datastravapoin.Strava,
 		Pomokitsesi: dataPomokitScore.Pomokitsesi,
 		Pomokit:     dataPomokitScore.Pomokit,
+		IQ:          dataIQ.IQ,
+		IQresult:    dataIQ.IQresult,
 		// GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
 		// GTMetrix:       dataGTMetrixScore.GTMetrix,
 		WebHookpush:  dataWebhook.WebHookpush,
