@@ -236,7 +236,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.PostAnswer(w, r)
 	case method == "GET" && path == "/api/iq/getall":
-		controller.GetAllDataIQScoreForTest(w, r)
+		controller.HandleGetAllDataIQScore(w, r)
 	case method == "GET" && path == "/refresh/report/iq/score/harian":
 		controller.GetIqScoreDataDaily(w, r)
 	case method == "GET" && path == "/refresh/report/iq/score/mingguan":

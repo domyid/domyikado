@@ -123,6 +123,34 @@ func GetIqScoring(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, results)
 }
 
+// Handler HTTP untuk API GET
+func HandleGetAllDataIQScore(w http.ResponseWriter, r *http.Request) {
+	// Ambil token dari header
+	token := at.GetLoginFromHeader(r)
+	if token == "" {
+		http.Error(w, `{"error": "Token login diperlukan"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Decode token
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
+	if err != nil {
+		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Panggil fungsi logika
+	result, err := GetAllDataIQScoreForWeb(config.Mongoconn, payload.Id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// Kirim response JSON
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 func GetAllDataIQScoreForWeb(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
