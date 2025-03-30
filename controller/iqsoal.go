@@ -164,8 +164,8 @@ func GetAllDataIQScore(db *mongo.Database, phonenumber string) (model.ActivitySc
 	scoreInt, _ := strconv.Atoi(iqDoc.Score)
 	iqInt, _ := strconv.Atoi(iqDoc.IQ)
 
-	activityscore.IQ = scoreInt    // Total skor tes IQ
-	activityscore.IQresult = iqInt // Nilai IQ
+	activityscore.IQ = iqInt          // Total skor tes IQ
+	activityscore.IQresult = scoreInt // Nilai IQ
 	activityscore.PhoneNumber = phonenumber
 	activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
 
