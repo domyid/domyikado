@@ -28,20 +28,31 @@ type CrowdfundingInfo struct {
 }
 
 // Helper function to format MBC amount for display
-// Convert 0.0002 to "2 coin MBC"
+// Convert 0.0002 to "2 koin MBC" with two decimal places
 func formatMBCAmount(amount float64) string {
 	// Convert to coin MBC (multiply by 10000)
 	coinAmount := amount * 10000
 
-	// Format with no decimal places
-	return fmt.Sprintf("%.0f coin MBC", coinAmount)
+	// Format with two decimal places for precise amounts
+	if coinAmount == float64(int(coinAmount)) {
+		// If it's a whole number
+		return fmt.Sprintf("%.0f koin MBC", coinAmount)
+	} else {
+		// If it has decimal places, show two decimal places
+		return fmt.Sprintf("%.2f koin MBC", coinAmount)
+	}
 }
 
 // Helper function to format Ravencoin amount for display
-// Convert 0.5 to "0.5 RVN"
+// Convert 0.5 to "0.5 koin RVN" and 1 to "1 koin RVN"
 func formatRavencoinAmount(amount float64) string {
-	// Format with 8 decimal places maximum
-	return fmt.Sprintf("%.8f RVN", amount)
+	// If it's a whole number
+	if amount == float64(int(amount)) {
+		return fmt.Sprintf("%.0f koin RVN", amount)
+	} else {
+		// If it has decimal places
+		return fmt.Sprintf("%.2f koin RVN", amount)
+	}
 }
 
 // Helper function to format QRIS amount for display
