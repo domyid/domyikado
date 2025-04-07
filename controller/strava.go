@@ -61,7 +61,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 			continue
 		}
 
-		weekYear := getCurrentWeekYear()
+		weekYear := getWeekYear(activity.CreatedAt)
 
 		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
 		distance, err := strconv.ParseFloat(distanceStr, 64)
@@ -209,7 +209,7 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Tentukan minggu dari aktivitas
-	weekYear := getCurrentWeekYear()
+	weekYear := getWeekYear(time.Now())
 
 	// Filter berdasarkan phone_number dan minggu tahun (week_year)
 	filter := bson.M{"phone_number": reqBody.PhoneNumber, "week_year": weekYear}
@@ -290,7 +290,7 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 }
 
 func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	weekYear := getCurrentWeekYear()
+	weekYear := getWeekYear(time.Now())
 
 	// Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu lalu
 	doc, err := atdb.GetOneDoc[model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber, "week_year": weekYear})
@@ -310,7 +310,7 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 	return activityscore, nil
 }
 
-func getCurrentWeekYear() string {
-	year, week := time.Now().ISOWeek()
+func getWeekYear(times time.Time) string {
+	year, week := times.ISOWeek()
 	return fmt.Sprintf("%d_%d", year, week)
 }
