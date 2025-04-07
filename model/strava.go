@@ -22,6 +22,7 @@ type StravaActivity struct {
 	Status       string    `bson:"status" json:"status"`
 	CreatedAt    time.Time `bson:"created_at" json:"created_at"`
 	UpdatedAt    time.Time `bson:"updated_at" json:"updated_at"`
+	WaGroupID    string    `bson:"wagroupid" json:"wagroupid"`
 }
 
 type StravaPoin struct {

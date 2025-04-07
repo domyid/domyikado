@@ -40,4 +40,5 @@ type Config struct {
 	ApproveBimbinganURL    string `json:"approvebimbinganurl,omitempty" bson:"approvebimbinganurl,omitempty"`
 	PomokitUrl             string `json:"pomokiturl,omitempty" bson:"pomokiturl,omitempty"`
 	StravaUrl              string `json:"stravaurl,omitempty" bson:"stravaurl,omitempty"`
+	StravaUrl2             string `json:"stravaurl2,omitempty" bson:"stravaurl2,omitempty"`
 }

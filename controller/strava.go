@@ -40,7 +40,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	scode, activities, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl)
+	scode, activities, err := atapi.Get[[]model.StravaActivity](conf.StravaUrl2)
 	if err != nil || scode != http.StatusOK {
 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to fetch data"})
 		return
@@ -56,13 +56,14 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		NameStrava    string
 	})
 
+	phoneList := make([]string, 0)
+
 	for _, activity := range activities {
 		if activity.Status != "Valid" {
 			continue
 		}
 
 		weekYear := getWeekYear(activity.CreatedAt)
-
 		distanceStr := strings.Replace(activity.Distance, " km", "", -1)
 		distance, err := strconv.ParseFloat(distanceStr, 64)
 		if err != nil {
@@ -88,15 +89,20 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 			ActivityCount: userData[activity.PhoneNumber][weekYear].ActivityCount + 1,
 			NameStrava:    activity.Name,
 		}
+
+		// Jika wagroupid kosong, tambahkan ke daftar pencarian grup ID
+		if activity.WaGroupID == "" {
+			phoneList = append(phoneList, activity.PhoneNumber)
+		}
 	}
 
-	phoneList := make([]string, 0, len(phoneNumbers))
-	for phone := range phoneNumbers {
-		phoneList = append(phoneList, phone)
-	}
-	groupMap, err := report.GetGrupIDFromProject(db, phoneList)
-	if err != nil {
-		log.Println("Error getting group IDs:", err)
+	// Hanya jalankan pencarian jika ada nomor yang perlu dicari grup ID-nya
+	groupMap := make(map[string][]string)
+	if len(phoneList) > 0 {
+		groupMap, err = report.GetGrupIDFromProject(db, phoneList)
+		if err != nil {
+			log.Println("Error getting group IDs:", err)
+		}
 	}
 
 	for phone, weeks := range userData {
