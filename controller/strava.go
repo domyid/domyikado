@@ -255,6 +255,11 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	if _, valid := allowedGroups[reqBody.WaGroupID]; !valid {
+		log.Println("WaGroupID tidak valid atau tidak diizinkan:", reqBody.WaGroupID)
+		reqBody.WaGroupID = "" // Kosongkan jika tidak valid
+	}
+
 	// Hitung poin berdasarkan jarak (distance) baru
 	newPoints := math.Round((reqBody.Distance/6)*100*10) / 10
 
