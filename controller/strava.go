@@ -249,15 +249,15 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			log.Println("Error getting group ID from project:", err)
 		} else {
-			if groupIDs, exists := groupMap[reqBody.PhoneNumber]; exists && len(groupIDs) > 0 {
-				reqBody.WaGroupID = groupIDs[0] // Ambil grup pertama
+			if groupIDs, exists := groupMap[reqBody.PhoneNumber]; exists {
+				for _, groupID := range groupIDs {
+					if _, valid := allowedGroups[groupID]; valid {
+						reqBody.WaGroupID = groupID
+						break // Ambil yang pertama valid
+					}
+				}
 			}
 		}
-	}
-
-	if _, valid := allowedGroups[reqBody.WaGroupID]; !valid {
-		log.Println("WaGroupID tidak valid atau tidak diizinkan:", reqBody.WaGroupID)
-		reqBody.WaGroupID = "" // Kosongkan jika tidak valid
 	}
 
 	// Hitung poin berdasarkan jarak (distance) baru
