@@ -179,6 +179,7 @@ type AddPointsRequest struct {
 	PhoneNumber string  `json:"phone_number"`
 	Distance    float64 `json:"distance"`
 	NameStrava  string  `json:"name_strava"`
+	WaGroupID   string  `json:"wagroupid"`
 }
 
 func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
@@ -229,11 +230,29 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		TotalKm       float64 `bson:"total_km"`
 		Poin          float64 `bson:"poin"`
 		ActivityCount int     `bson:"activity_count"`
+		WaGroupID     string  `bson:"wagroupid,omitempty"`
 	}
 	err = colPoin.FindOne(context.TODO(), filter).Decode(&existingData)
 	if err != nil && err != mongo.ErrNoDocuments {
 		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to retrieve data"})
 		return
+	}
+
+	// Jika WaGroupID kosong, coba ambil dari existingData
+	if reqBody.WaGroupID == "" {
+		reqBody.WaGroupID = existingData.WaGroupID
+	}
+
+	// Jika WaGroupID masih kosong, coba ambil dari GetGrupIDFromProject
+	if reqBody.WaGroupID == "" {
+		groupMap, err := report.GetGrupIDFromProject(db, []string{reqBody.PhoneNumber})
+		if err != nil {
+			log.Println("Error getting group ID from project:", err)
+		} else {
+			if groupIDs, exists := groupMap[reqBody.PhoneNumber]; exists && len(groupIDs) > 0 {
+				reqBody.WaGroupID = groupIDs[0] // Ambil grup pertama
+			}
+		}
 	}
 
 	// Hitung poin berdasarkan jarak (distance) baru
@@ -255,6 +274,7 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 			"name":        user.Name, // Simpan nama dari koleksi user
 			"name_strava": reqBody.NameStrava,
 			"week_year":   weekYear,
+			"wagroupid":   reqBody.WaGroupID,
 		},
 	}
 	opts := options.Update().SetUpsert(true)
