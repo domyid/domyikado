@@ -54,6 +54,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		TotalKm       float64
 		ActivityCount int
 		NameStrava    string
+		WaGroupID     string
 	})
 
 	phoneList := make([]string, 0)
@@ -77,6 +78,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 				TotalKm       float64
 				ActivityCount int
 				NameStrava    string
+				WaGroupID     string
 			})
 		}
 
@@ -84,10 +86,12 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 			TotalKm       float64
 			ActivityCount int
 			NameStrava    string
+			WaGroupID     string
 		}{
 			TotalKm:       userData[activity.PhoneNumber][weekYear].TotalKm + distance,
 			ActivityCount: userData[activity.PhoneNumber][weekYear].ActivityCount + 1,
 			NameStrava:    activity.Name,
+			WaGroupID:     activity.WaGroupID,
 		}
 
 		// Jika wagroupid kosong, tambahkan ke daftar pencarian grup ID
