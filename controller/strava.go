@@ -134,7 +134,7 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 				log.Println("Error fetching user_id:", err)
 			}
 
-			selectedGroup := ""
+			selectedGroup := data.WaGroupID
 			if groupIDs, exists := groupMap[phone]; exists {
 				for _, groupID := range groupIDs {
 					if allowedGroups[groupID] {
