@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -704,8 +705,10 @@ func GetLastWeekPresensiPoin(db *mongo.Database, phonenumber string) (activitysc
 		totalPoin += presensi.Skor
 	}
 
+	poin := int(math.Min(totalPoin*20, 100))
+
 	activityscore.PresensiHari = totalHari
-	activityscore.Presensi = int(totalPoin)
+	activityscore.Presensi = poin
 
 	return activityscore, nil
 }
