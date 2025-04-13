@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -709,6 +710,39 @@ func GetLastWeekPresensiPoin(db *mongo.Database, phonenumber string) (activitysc
 
 	activityscore.PresensiHari = totalHari
 	activityscore.Presensi = poin
+
+	return activityscore, nil
+}
+
+func GetLastWeekWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	docs, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	var username string
+
+	switch {
+	case docs.GithubUsername != "":
+		username = docs.GithubUsername
+	case docs.GitlabUsername != "":
+		username = docs.GitlabUsername
+	case docs.GitHostUsername != "":
+		username = docs.GitHostUsername
+	default:
+		return activityscore, errors.New("no valid username found from GitHub, GitLab, or GitHost")
+	}
+
+	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", bson.M{"_id": report.WeeklyFilter(), "username": username})
+	if err != nil {
+		return activityscore, err
+	}
+
+	totalPush := len(doc)
+	totalPoin := totalPush * 3
+
+	activityscore.WebHookpush = totalPush
+	activityscore.WebHook = int(math.Min(float64(totalPoin), 100))
 
 	return activityscore, nil
 }

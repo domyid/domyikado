@@ -62,6 +62,7 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(authorization.Id))
 	datastravapoin, _ := GetLastWeekDataStravaPoin(config.Mongoconn, authorization.Id)
 	dataPresensi, _ := GetLastWeekPresensiPoin(config.Mongoconn, authorization.Id)
+	dataWebhook, _ := GetLastWeekWebhookPoin(config.Mongoconn, authorization.Id)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(authorization.Id)
 	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(authorization.Id)
 
@@ -76,5 +77,7 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		GTMetrix:       dataGTMetrixScore.GTMetrix,
 		PresensiHari:   dataPresensi.PresensiHari,
 		Presensi:       dataPresensi.Presensi,
+		WebHookpush:    dataWebhook.WebHookpush,
+		WebHook:        dataWebhook.WebHook,
 	})
 }
