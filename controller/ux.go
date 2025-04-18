@@ -700,8 +700,8 @@ func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore mo
 
 	minggu := jumlahMinggu()
 	totalPush := len(doc)
-	totalPoin := (totalPush / minggu) * 3
-	poin := int(math.Min(float64(totalPoin), 100))
+	totalPoin := (float64(totalPush) / float64(minggu)) * 3
+	poin := int(math.Min(totalPoin, 100))
 
 	activityscore.WebHookpush = totalPush
 	activityscore.WebHook = poin
