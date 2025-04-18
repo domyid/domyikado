@@ -37,10 +37,10 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	if lap.Phone == "" || lap.Nama == "" || lap.Solusi == "" {
+	if lap.Phone == "" {
 		var respn model.Response
-		respn.Status = "Error : Telepon atau nama atau solusi tidak diisi"
-		respn.Response = "Isi lebih lengkap dahulu"
+		respn.Status = "Error : No Telepon tidak diisi"
+		respn.Response = "Isi lebih lengkap terlebih dahulu"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
@@ -72,7 +72,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
-	//lojik inputan post
+	//logic inputan post
 	lap.Project = prjuser
 	lap.User = docuser
 	lap.Phone = ValidasiNoHandPhone(lap.Phone)
@@ -89,7 +89,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	idlap, err := atdb.InsertOneDoc(config.Mongoconn, "uxlaporan", lap)
+	idlap, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", lap)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Gagal Insert Database"
@@ -105,7 +105,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusExpectationFailed, resp)
 		return
 	}
-	message := "*Permintaan Feedback*\n" + "Petugas : " + docuser.Name + "\nDeskripsi:" + lap.Solusi + "\n Beri Nilai: " + "https://www.do.my.id/rate/#" + idlap.Hex()
+	message := "*Permintaan Feedback*\n" + "Petugas : " + docuser.Name + "\nDeskripsi:" + lap.Solusi + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idlap.Hex()
 	dt := &whatsauth.TextMessage{
 		To:       lap.Phone,
 		IsGroup:  false,
