@@ -5,11 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
@@ -24,7 +22,6 @@ import (
 	"github.com/whatsauth/itmodel"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func PostTaskList(w http.ResponseWriter, r *http.Request) {
@@ -658,133 +655,4 @@ func GetUXReport(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(logUXReport); err != nil {
 		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
 	}
-}
-
-// func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-// 	doc, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phonenumber})
-// 	if err != nil {
-// 		return activityscore, err
-// 	}
-
-// 	activityscore.WebHookpush = 0
-// 	activityscore.WebHook = int(doc.Poin)
-
-// 	return activityscore, nil
-// }
-
-// func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-// 	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"_id": filterFrom11Maret(), "phonenumber": phonenumber})
-// 	if err != nil {
-// 		return activityscore, err
-// 	}
-
-// 	var totalHari int
-// 	var totalPoin float64
-
-// 	for _, presensi := range doc {
-// 		totalHari++
-// 		totalPoin += presensi.Skor
-// 	}
-
-// 	activityscore.PresensiHari = totalHari
-// 	activityscore.Presensi = int(totalPoin)
-
-// 	return activityscore, nil
-// }
-
-func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", bson.M{"_id": filterFrom11Maret(), "user.phonenumber": phonenumber})
-	if err != nil {
-		return activityscore, err
-	}
-
-	minggu := jumlahMinggu()
-	totalPush := len(doc)
-	totalPoin := (float64(totalPush) / float64(minggu)) * 3
-	poin := int(math.Min(totalPoin, 100))
-
-	activityscore.WebHookpush = totalPush
-	activityscore.WebHook = poin
-
-	return activityscore, nil
-}
-
-func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"_id": filterFrom11Maret(), "phonenumber": phonenumber})
-	if err != nil {
-		return activityscore, err
-	}
-
-	var totalHari int
-	var totalPoin float64
-
-	for _, presensi := range doc {
-		totalHari++
-		totalPoin += presensi.Skor
-	}
-
-	minggu := jumlahMinggu()
-	calTotalPoin := totalPoin / float64(minggu) * 20
-	poin := int(math.Min(calTotalPoin, 100))
-
-	activityscore.PresensiHari = totalHari
-	activityscore.Presensi = poin
-
-	return activityscore, nil
-}
-
-func GetLastWeekPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"_id": report.WeeklyFilter(), "phonenumber": phonenumber})
-	if err != nil {
-		return activityscore, err
-	}
-
-	var totalHari int
-	var totalPoin float64
-
-	for _, presensi := range doc {
-		totalHari++
-		totalPoin += presensi.Skor
-	}
-
-	poin := int(math.Min(totalPoin*20, 100))
-
-	activityscore.PresensiHari = totalHari
-	activityscore.Presensi = poin
-
-	return activityscore, nil
-}
-
-func GetLastWeekWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", bson.M{"_id": report.WeeklyFilter(), "user.phonenumber": phonenumber})
-	if err != nil {
-		return activityscore, err
-	}
-
-	totalPush := len(doc)
-	totalPoin := totalPush * 3
-	poin := int(math.Min(float64(totalPoin), 100))
-
-	activityscore.WebHookpush = totalPush
-	activityscore.WebHook = poin
-
-	return activityscore, nil
-}
-
-func filterFrom11Maret() bson.M {
-	tanggalAwal := time.Date(2025, 3, 11, 0, 0, 0, 0, time.UTC)
-
-	return bson.M{
-		"$gte": primitive.NewObjectIDFromTimestamp(tanggalAwal),
-		"$lt":  primitive.NewObjectIDFromTimestamp(time.Now()),
-	}
-}
-
-func jumlahMinggu() int {
-	tanggalAwal := time.Date(2025, 3, 11, 0, 0, 0, 0, time.UTC)
-	sekarang := time.Now().UTC()
-	selisihHari := sekarang.Sub(tanggalAwal).Hours() / 24
-	jumlahMinggu := int(selisihHari/7) + 1
-
-	return jumlahMinggu
 }
