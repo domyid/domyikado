@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"slices"
 
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
@@ -77,7 +80,7 @@ func GenerateRekapPoinStrava(db *mongo.Database, groupId string) (msg string, pe
 	// Set perwakilan pertama sebagai nomor yang akan menerima pesan jika private
 	if len(filteredDailyData) > 0 {
 		perwakilanphone = filteredDailyData[0].PhoneNumber
-	} 
+	}
 	// else if len(filteredTotalData) > 0 {
 	// 	perwakilanphone = filteredTotalData[0].PhoneNumber
 	// }
@@ -306,6 +309,66 @@ func getStravaActivitiesPerDay(db *mongo.Database) ([]model.StravaActivity, erro
 // 	return filteredActivities, nil
 // }
 
+func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	var totalKm float64
+	var totalPoin float64
+
+	startWeek := 11 // Minggu pertama aktivitas dimulai (10 maret 2025)
+	_, currentWeek := time.Now().ISOWeek()
+	activeWeeks := currentWeek - startWeek + 1 // Total minggu berjalan sejak minggu ke-11
+
+	// Maksimal poin dihitung berdasarkan minggu aktif
+	maxPoin := float64(activeWeeks * 100)
+
+	// Loop untuk menjumlahkan total_km dan total poin
+	for _, doc := range docs {
+		totalKm += doc.TotalKm
+		totalPoin += doc.Poin
+	}
+
+	// Batasi total poin sesuai minggu berjalan
+	// totalPoin = math.Min(totalPoin, maxPoin)
+
+	scaledPoin := (totalPoin / maxPoin) * 100
+	finalPoin := math.Min(scaledPoin, 100)
+
+	activityscore.StravaKM = float32(totalKm)
+	activityscore.Strava = int(finalPoin)
+
+	return activityscore, nil
+}
+
+func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	weekYear := GetWeekYear(time.Now())
+
+	// Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu ini
+	doc, err := atdb.GetOneDoc[model.StravaPoin](db, "stravapoin", bson.M{"phone_number": phonenumber, "week_year": weekYear})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return activityscore, nil
+		}
+		return activityscore, err
+	}
+
+	// Menjamin poin tidak melebihi 100
+	poin := int(math.Min(doc.Poin, 100))
+
+	activityscore.StravaKM = float32(doc.TotalKm)
+	activityscore.Strava = poin
+
+	return activityscore, nil
+}
+
+func GetWeekYear(times time.Time) string {
+	year, week := times.ISOWeek()
+	return fmt.Sprintf("%d_%d", year, week)
+}
+
 func duplicatePhoneNumbersCount(users []StravaInfo) map[string]StravaInfo {
 	phoneNumberCount := make(map[string]StravaInfo)
 
@@ -336,10 +399,5 @@ func getStartAndEndOfYesterday(t time.Time) (time.Time, time.Time) {
 
 // Fungsi bantuan untuk mengecek apakah sebuah nilai ada dalam slice
 func contains(slice []string, value string) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, value)
 }
