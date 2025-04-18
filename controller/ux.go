@@ -693,7 +693,7 @@ func GetUXReport(w http.ResponseWriter, r *http.Request) {
 // }
 
 func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "user", bson.M{"_id": filterFrom11Maret(), "user.phonenumber": phonenumber})
+	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", bson.M{"_id": filterFrom11Maret(), "user.phonenumber": phonenumber})
 	if err != nil {
 		return activityscore, err
 	}
