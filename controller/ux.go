@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
@@ -660,20 +660,57 @@ func GetUXReport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+// 	doc, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phonenumber})
+// 	if err != nil {
+// 		return activityscore, err
+// 	}
+
+// 	activityscore.WebHookpush = 0
+// 	activityscore.WebHook = int(doc.Poin)
+
+// 	return activityscore, nil
+// }
+
+// func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+// 	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"_id": filterFrom11Maret(), "phonenumber": phonenumber})
+// 	if err != nil {
+// 		return activityscore, err
+// 	}
+
+// 	var totalHari int
+// 	var totalPoin float64
+
+// 	for _, presensi := range doc {
+// 		totalHari++
+// 		totalPoin += presensi.Skor
+// 	}
+
+// 	activityscore.PresensiHari = totalHari
+// 	activityscore.Presensi = int(totalPoin)
+
+// 	return activityscore, nil
+// }
+
 func GetAllWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phonenumber})
+	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "user", bson.M{"_id": filterFrom11Maret(), "user.phonenumber": phonenumber})
 	if err != nil {
 		return activityscore, err
 	}
 
-	activityscore.WebHookpush = 0
-	activityscore.WebHook = int(doc.Poin)
+	minggu := jumlahMinggu()
+	totalPush := len(doc)
+	totalPoin := (totalPush / minggu) * 3
+	poin := int(math.Min(float64(totalPoin), 100))
+
+	activityscore.WebHookpush = totalPush
+	activityscore.WebHook = poin
 
 	return activityscore, nil
 }
 
 func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"phonenumber": phonenumber})
+	doc, err := atdb.GetAllDoc[[]report.PresensiDomyikado](db, "presensi", bson.M{"_id": filterFrom11Maret(), "phonenumber": phonenumber})
 	if err != nil {
 		return activityscore, err
 	}
@@ -686,8 +723,12 @@ func GetAllPresensiPoin(db *mongo.Database, phonenumber string) (activityscore m
 		totalPoin += presensi.Skor
 	}
 
+	minggu := jumlahMinggu()
+	calTotalPoin := totalPoin / float64(minggu) * 20
+	poin := int(math.Min(calTotalPoin, 100))
+
 	activityscore.PresensiHari = totalHari
-	activityscore.Presensi = int(totalPoin)
+	activityscore.Presensi = poin
 
 	return activityscore, nil
 }
@@ -715,34 +756,35 @@ func GetLastWeekPresensiPoin(db *mongo.Database, phonenumber string) (activitysc
 }
 
 func GetLastWeekWebhookPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	docs, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": phonenumber})
-	if err != nil {
-		return activityscore, err
-	}
-
-	var username string
-
-	switch {
-	case docs.GithubUsername != "":
-		username = docs.GithubUsername
-	case docs.GitlabUsername != "":
-		username = docs.GitlabUsername
-	case docs.GitHostUsername != "":
-		username = docs.GitHostUsername
-	default:
-		return activityscore, errors.New("no valid username found from GitHub, GitLab, or GitHost")
-	}
-
-	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", bson.M{"_id": report.WeeklyFilter(), "username": username})
+	doc, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", bson.M{"_id": report.WeeklyFilter(), "user.phonenumber": phonenumber})
 	if err != nil {
 		return activityscore, err
 	}
 
 	totalPush := len(doc)
 	totalPoin := totalPush * 3
+	poin := int(math.Min(float64(totalPoin), 100))
 
 	activityscore.WebHookpush = totalPush
-	activityscore.WebHook = int(math.Min(float64(totalPoin), 100))
+	activityscore.WebHook = poin
 
 	return activityscore, nil
+}
+
+func filterFrom11Maret() bson.M {
+	tanggalAwal := time.Date(2025, 3, 11, 0, 0, 0, 0, time.UTC)
+
+	return bson.M{
+		"$gte": primitive.NewObjectIDFromTimestamp(tanggalAwal),
+		"$lt":  primitive.NewObjectIDFromTimestamp(time.Now()),
+	}
+}
+
+func jumlahMinggu() int {
+	tanggalAwal := time.Date(2025, 3, 11, 0, 0, 0, 0, time.UTC)
+	sekarang := time.Now().UTC()
+	selisihHari := sekarang.Sub(tanggalAwal).Hours() / 24
+	jumlahMinggu := int(selisihHari/7) + 1
+
+	return jumlahMinggu
 }
