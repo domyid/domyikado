@@ -23,9 +23,9 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	datatracker, _ := report.GetAllDataTracker(config.Mongoconn, GetHostname(authorization.Id))
-	datastravapoin, _ := GetAllDataStravaPoin(config.Mongoconn, authorization.Id)
-	dataWebhook, _ := GetAllWebhookPoin(config.Mongoconn, authorization.Id)
-	dataPresensi, _ := GetAllPresensiPoin(config.Mongoconn, authorization.Id)
+	datastravapoin, _ := report.GetAllDataStravaPoin(config.Mongoconn, authorization.Id)
+	dataWebhook, _ := report.GetAllWebhookPoin(config.Mongoconn, authorization.Id)
+	dataPresensi, _ := report.GetAllPresensiPoin(config.Mongoconn, authorization.Id)
 	dataPomokitScore, _ := GetPomokitScoreForUser(authorization.Id)
 	dataIQ, _ := GetAllDataIQScore(config.Mongoconn, authorization.Id)
 	dataGTMetrixScore, _ := GetGTMetrixScoreForUser(authorization.Id)
@@ -60,9 +60,9 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(authorization.Id))
-	datastravapoin, _ := GetLastWeekDataStravaPoin(config.Mongoconn, authorization.Id)
-	dataPresensi, _ := GetLastWeekPresensiPoin(config.Mongoconn, authorization.Id)
-	dataWebhook, _ := GetLastWeekWebhookPoin(config.Mongoconn, authorization.Id)
+	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, authorization.Id)
+	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, authorization.Id)
+	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, authorization.Id)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(authorization.Id)
 	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(authorization.Id)
 
