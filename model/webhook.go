@@ -67,7 +67,7 @@ type Userdomyikado struct {
 	Wonpaywallet         string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
 	RVNwallet            string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
 	WeeklyScore          []ActivityScore    `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"` // aktifitas mingguan
-	isDosen              bool               `json:"isdosen,omitempty" bson:"isdosen,omitempty"`
+	IsDosen              bool               `json:"isdosen,omitempty" bson:"isdosen,omitempty"`
 }
 
 // skor asessment proyek1 dan lainnya aktifitas mingguan. ini pengganti kartu bimbingan
