@@ -128,6 +128,29 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
 
+func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
+	id := at.GetParam(req)
+	objectId, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error : ObjectID Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Encode Object ID Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	bimbingan, err := atdb.GetOneLatestDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"_id": objectId})
+	if err != nil {
+		var respn model.Response
+		respn.Status = "Error : Data bimbingan tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		return
+	}
+	at.WriteJSON(respw, http.StatusOK, bimbingan)
+}
+
 func ValidasiNoHandPhone(nomor string) string {
 	nomor = strings.ReplaceAll(nomor, " ", "")
 	nomor = strings.ReplaceAll(nomor, "+", "")

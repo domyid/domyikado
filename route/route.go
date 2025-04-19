@@ -327,6 +327,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	case method == "POST" && path == "/data/proyek/bimbingan":
 		controller.PostDosenAsesor(w, r)
+	case method == "GET" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
+		controller.GetDataBimbingan(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
