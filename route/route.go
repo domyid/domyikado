@@ -325,6 +325,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/api/activityscoreweekly":
 		controller.GetLastWeekActivityScore(w, r)
 
+	case method == "POST" && path == "/data/bimbingan":
+		controller.PostDosenAsesor(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
