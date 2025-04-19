@@ -73,16 +73,16 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//ambil data enroll
-	prjuser, err := atdb.GetOneDoc[model.MasterEnrool](config.Mongoconn, "enroll", primitive.M{"_id": docuser.ID})
-	if err != nil {
-		var respn model.Response
-		respn.Status = "Error : Data enroll tidak di temukan: " + docuser.ID.Hex()
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
-		return
-	}
+	// prjuser, err := atdb.GetOneDoc[model.MasterEnrool](config.Mongoconn, "enroll", primitive.M{"_id": docuser.ID})
+	// if err != nil {
+	// 	var respn model.Response
+	// 	respn.Status = "Error : Data enroll tidak di temukan: " + docuser.ID.Hex()
+	// 	respn.Response = err.Error()
+	// 	at.WriteJSON(respw, http.StatusNotImplemented, respn)
+	// 	return
+	// }
 	//logic inputan post
-	lap.Enroll = prjuser
+	// lap.Enroll = prjuser
 	lap.PhoneNumber = docuser.PhoneNumber
 	lap.Asesor = docasesor
 	lap.CreatedAt = time.Now()
