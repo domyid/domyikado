@@ -28,8 +28,8 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
-	var lap model.ActivityScore
-	err = json.NewDecoder(req.Body).Decode(&lap)
+	var bimbingan model.ActivityScore
+	err = json.NewDecoder(req.Body).Decode(&bimbingan)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Body tidak valid"
@@ -37,10 +37,10 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	if lap.Asesor.PhoneNumber == "" {
+	if bimbingan.Asesor.PhoneNumber == "" {
 		var respn model.Response
 		respn.Status = "Error : No Telepon Asesor tidak diisi"
-		respn.Response = "Isi lebih lengkap terlebih dahulu :" + lap.Asesor.PhoneNumber
+		respn.Response = "Isi lebih lengkap terlebih dahulu"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
@@ -55,8 +55,8 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//validasi nomor telepon asesor
-	lap.Asesor.PhoneNumber = ValidasiNoHandPhone(lap.Asesor.PhoneNumber)
-	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": lap.Asesor.PhoneNumber, "isdosen": true})
+	bimbingan.Asesor.PhoneNumber = ValidasiNoHandPhone(bimbingan.Asesor.PhoneNumber)
+	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Data asesor tidak di temukan"
@@ -73,7 +73,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//ambil data enroll
-	// prjuser, err := atdb.GetOneDoc[model.MasterEnrool](config.Mongoconn, "enroll", primitive.M{"_id": docuser.ID})
+	// enroll, err := atdb.GetOneDoc[model.MasterEnrool](config.Mongoconn, "enroll", primitive.M{"_id": docuser.ID})
 	// if err != nil {
 	// 	var respn model.Response
 	// 	respn.Status = "Error : Data enroll tidak di temukan: " + docuser.ID.Hex()
@@ -81,13 +81,30 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	// 	at.WriteJSON(respw, http.StatusNotImplemented, respn)
 	// 	return
 	// }
-	//logic inputan post
-	// lap.Enroll = prjuser
-	lap.PhoneNumber = docuser.PhoneNumber
-	lap.Asesor = docasesor
-	lap.CreatedAt = time.Now()
 
-	idlap, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", lap)
+	score, _ := GetActivityScoreData(payload.Id)
+
+	// logic inputan post
+	// bimbingan.Enroll = enroll
+	bimbingan.PhoneNumber = docuser.PhoneNumber
+	bimbingan.Asesor = docasesor
+	bimbingan.CreatedAt = time.Now()
+	bimbingan.Trackerdata = score.Trackerdata
+	bimbingan.Tracker = score.Tracker
+	bimbingan.StravaKM = score.StravaKM
+	bimbingan.Strava = score.Strava
+	bimbingan.IQresult = score.IQresult
+	bimbingan.IQ = score.IQ
+	bimbingan.Pomokitsesi = score.Pomokitsesi
+	bimbingan.Pomokit = score.Pomokit
+	bimbingan.GTMetrixResult = score.GTMetrixResult
+	bimbingan.GTMetrix = score.GTMetrix
+	bimbingan.WebHookpush = score.WebHookpush
+	bimbingan.WebHook = score.WebHook
+	bimbingan.PresensiHari = score.PresensiHari
+	bimbingan.Presensi = score.Presensi
+
+	idbimbingan, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Gagal Insert Database"
@@ -95,9 +112,9 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusNotModified, respn)
 		return
 	}
-	message := "*Permintaan Bimbingan*\n" + "Petugas : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idlap.Hex()
+	message := "*Permintaan Bimbingan*\n" + "Petugas : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
 	dt := &whatsauth.TextMessage{
-		To:       lap.Asesor.PhoneNumber,
+		To:       bimbingan.Asesor.PhoneNumber,
 		IsGroup:  false,
 		Messages: message,
 	}
@@ -108,8 +125,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusUnauthorized, resp)
 		return
 	}
-	at.WriteJSON(respw, http.StatusOK, lap)
-
+	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
 
 func ValidasiNoHandPhone(nomor string) string {
