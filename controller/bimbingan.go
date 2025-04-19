@@ -41,6 +41,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		var respn model.Response
 		respn.Status = "Error : No Telepon Asesor tidak diisi"
 		respn.Response = "Isi lebih lengkap terlebih dahulu"
+		respn.Info = lap.Asesor.PhoneNumber
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
