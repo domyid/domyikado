@@ -223,8 +223,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.CheckRavencoinStep2Handler(w, r)
 	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep3/:orderId"):
 		controller.CheckRavencoinStep3Handler(w, r)
-	case method == "POST" && at.URLParam(path, "/api/crowdfunding/ravencoin/confirm/:orderId"):
-		controller.ConfirmRavencoinPayment(w, r)
+	// case method == "POST" && at.URLParam(path, "/api/crowdfunding/ravencoin/confirm/:orderId"):
+	// 	controller.ConfirmRavencoinPayment(w, r)
 	// IQ
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)
