@@ -938,6 +938,7 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 		addressStatus, txid, amount, err := checkRavencoinAddressAPI()
 
 		if err != nil {
+			log.Printf("Error checking Ravencoin address: %v", err)
 			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 				Success:       true,
 				Status:        "pending",
@@ -951,6 +952,7 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if addressStatus && txid != "" {
+			log.Printf("Found Ravencoin transaction: %s with amount: %f", txid, amount)
 			at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 				Success:       true,
 				Status:        "pending",
@@ -2477,24 +2479,33 @@ func checkRavencoinAddressAPI() (bool, string, float64, error) {
 		if len(addressResp.Txids) > 0 {
 			latestTxid := addressResp.Txids[0]
 
-			// Convert unconfirmed balance from string to float
+			// Parse unconfirmed balance
 			unconfirmedBalance, err := strconv.ParseFloat(addressResp.UnconfirmedBalance, 64)
 			if err != nil {
-				return true, latestTxid, 0, nil // Return txid but 0 amount if parsing fails
+				log.Printf("Error parsing unconfirmed balance: %v", err)
+				return true, latestTxid, 0, nil
 			}
 
 			// Convert satoshis to RVN (divide by 100,000,000)
 			unconfirmedBalance = unconfirmedBalance / 100000000
 
+			// Log the details for debugging
+			log.Printf("Found unconfirmed transaction. TxID: %s, Amount: %f RVN", latestTxid, unconfirmedBalance)
+
 			return true, latestTxid, unconfirmedBalance, nil
 		}
 	}
 
+	// No unconfirmed transactions found
+	log.Printf("No unconfirmed transactions found for address: %s", RavencoinWalletAddress)
 	return false, "", 0, nil
 }
 
 // Step 2: Check if transaction is in the blockchain history
 func checkRavencoinTxHistory(txid string) (bool, error) {
+	// Log the search attempt
+	log.Printf("Checking Ravencoin history for transaction: %s", txid)
+
 	// API URL for checking transaction history
 	url := "https://blockbook.ravencoin.org/api/v2/address/" + RavencoinWalletAddress
 
@@ -2515,17 +2526,22 @@ func checkRavencoinTxHistory(txid string) (bool, error) {
 	// Check if the txid is in the list of txids
 	for _, id := range addressResp.Txids {
 		if id == txid {
+			log.Printf("Transaction %s found in history", txid)
 			return true, nil
 		}
 	}
 
+	log.Printf("Transaction %s not found in history", txid)
 	return false, nil
 }
 
 // Step 3: Verify transaction details and get the actual amount
 func checkRavencoinTxDetails(txid string) (bool, float64, error) {
+	// Log the verification attempt
+	log.Printf("Verifying Ravencoin transaction details for: %s", txid)
+
 	// API URL for getting transaction details
-	url := "https://blockbook.ravencoin.org/api/tx/" + txid
+	url := "https://blockbook.ravencoin.org/api/v2/tx/" + txid
 
 	// Make the request
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -2553,6 +2569,7 @@ func checkRavencoinTxDetails(txid string) (bool, float64, error) {
 					continue
 				}
 				amount = outputAmount
+				log.Printf("Found output to our address with amount: %f RVN", amount)
 				break
 			}
 		}
@@ -2562,10 +2579,16 @@ func checkRavencoinTxDetails(txid string) (bool, float64, error) {
 	}
 
 	// Transaction is valid if we found our address with some value
-	return amount > 0, amount, nil
+	if amount > 0 {
+		log.Printf("Verified transaction %s with amount: %f RVN", txid, amount)
+		return true, amount, nil
+	}
+
+	log.Printf("Could not verify transaction %s or amount is 0", txid)
+	return false, 0, nil
 }
 
-// CheckRavencoinStep2Handler checks transaction history after 7-minute delay
+// CheckRavencoinStep2Handler checks transaction history after 7-minute wait
 func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 	orderID := at.GetParam(r)
 	txid := r.URL.Query().Get("txid")
@@ -2600,9 +2623,13 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log the check
+	log.Printf("Checking Ravencoin Step 2 for order %s, txid %s", orderID, txid)
+
 	// Step 2: Check history with the txid from step 1
 	historyStatus, err := checkRavencoinTxHistory(txid)
 	if err != nil {
+		log.Printf("Error in Ravencoin Step 2 check: %v", err)
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 			Success:       true,
 			Status:        "pending",
@@ -2618,6 +2645,7 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 
 	if historyStatus {
 		// Transaction found in history, step 2 complete
+		log.Printf("Ravencoin Step 2 complete for order %s", orderID)
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 			Success:       true,
 			Status:        "pending",
@@ -2632,6 +2660,7 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Transaction not found in history
+	log.Printf("Ravencoin Step 2 not complete yet for order %s", orderID)
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success:       true,
 		Status:        "pending",
@@ -2679,9 +2708,13 @@ func CheckRavencoinStep3Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log the check
+	log.Printf("Checking Ravencoin Step 3 for order %s, txid %s", orderID, txid)
+
 	// Step 3: Verify transaction details and get the actual amount
 	txDetails, actualAmount, err := checkRavencoinTxDetails(txid)
 	if err != nil {
+		log.Printf("Error in Ravencoin Step 3 check: %v", err)
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 			Success:       true,
 			Status:        "pending",
@@ -2696,6 +2729,7 @@ func CheckRavencoinStep3Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !txDetails {
+		log.Printf("Ravencoin Step 3 verification failed for order %s", orderID)
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 			Success:       true,
 			Status:        "pending",
@@ -2711,6 +2745,7 @@ func CheckRavencoinStep3Handler(w http.ResponseWriter, r *http.Request) {
 
 	// Now that we have verified the transaction and gotten the actual amount,
 	// update the order status to success with the final amount from Step 3
+	log.Printf("Ravencoin payment verified for order %s, amount: %f RVN", orderID, actualAmount)
 	_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
 		context.Background(),
 		bson.M{"orderId": orderID},
@@ -2722,6 +2757,7 @@ func CheckRavencoinStep3Handler(w http.ResponseWriter, r *http.Request) {
 		}},
 	)
 	if err != nil {
+		log.Printf("Error updating Ravencoin order status: %v", err)
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 			Success:       true,
 			Status:        "pending",
@@ -2769,6 +2805,7 @@ func CheckRavencoinStep3Handler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Return success response with the actual amount from Step 3
+	log.Printf("Ravencoin Step 3 complete for order %s", orderID)
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success:       true,
 		Status:        "success",
