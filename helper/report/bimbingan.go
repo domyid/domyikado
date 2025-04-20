@@ -10,32 +10,42 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func ReportBimbinganToOrangTua(db *mongo.Database) (msg string, perwakilanphone string, err error) {
+func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
 	var allBimbingan []model.ActivityScore
-	allBimbingan, err = atdb.GetAllDoc[[]model.ActivityScore](db, "bimbingan", bson.M{})
+	allBimbingan, err := atdb.GetAllDoc[[]model.ActivityScore](db, "bimbingan", bson.M{})
 	if err != nil || len(allBimbingan) == 0 {
-		return "Belum ada bimbingan sama sekali.", "", err
+		return map[string]string{"": "Belum ada bimbingan sama sekali."}, err
 	}
 
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", bson.M{"phonenumber": allBimbingan[0].PhoneNumber})
-	if err != nil {
-		return "", "", err
-	}
-
-	weekMap := make(map[string]bool)
+	// Buat map[phonenumber][]time
+	mahasiswaWeekMap := make(map[string]map[string]bool)
 	for _, b := range allBimbingan {
 		year, week := b.CreatedAt.ISOWeek()
 		key := fmt.Sprintf("%d-%02d", year, week)
-		weekMap[key] = true
+		if _, ok := mahasiswaWeekMap[b.PhoneNumber]; !ok {
+			mahasiswaWeekMap[b.PhoneNumber] = make(map[string]bool)
+		}
+		mahasiswaWeekMap[b.PhoneNumber][key] = true
+	}
+
+	// Ambil semua mahasiswa yang punya sponsor
+	allMahasiswa, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{"sponsorphonenumber": bson.M{"$ne": ""}})
+	if err != nil {
+		return nil, err
 	}
 
 	nowYear, nowWeek := time.Now().ISOWeek()
 	thisWeekKey := fmt.Sprintf("%d-%02d", nowYear, nowWeek)
-	if !weekMap[thisWeekKey] {
-		msg += "\n⚠️ *Minggu ini belum ada bimbingan!* "
-	} else {
-		msg += "\n✅ Minggu ini sudah melakukan bimbingan."
+
+	// Siapkan laporan per sponsor
+	laporan := make(map[string]string)
+	for _, mhs := range allMahasiswa {
+		mhsWeekMap := mahasiswaWeekMap[mhs.PhoneNumber]
+		if !mhsWeekMap[thisWeekKey] {
+			msg := fmt.Sprintf("⚠️ *%s* belum melakukan bimbingan minggu ini.", mhs.Name)
+			laporan[mhs.SponsorPhoneNumber] += msg + "\n"
+		}
 	}
 
-	return msg, docuser.SponsorPhoneNumber, nil
+	return laporan, nil
 }
