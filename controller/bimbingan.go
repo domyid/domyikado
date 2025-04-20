@@ -119,7 +119,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// kirim pesan ke asesor
-	message := "*Permintaan Bimbingan*\n" + "Petugas : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
+	message := "*Permintaan Bimbingan*\n" + "Mahasiswa : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
 	dt := &whatsauth.TextMessage{
 		To:       bimbingan.Asesor.PhoneNumber,
 		IsGroup:  false,
