@@ -681,32 +681,32 @@ func RekapCrowdfundingMingguanJob(db *mongo.Database) error {
 }
 
 func RekapToOrangTua(db *mongo.Database) error {
-	laporan, err := ReportBimbinganToOrangTua(db)
+	msg, perwakilan, err := ReportBimbinganToOrangTua(db)
 	if err != nil {
 		return fmt.Errorf("gagal mengirim laporan ke orang tua: %v", err)
 	}
 
-	for nomor, pesan := range laporan {
-		if nomor == "" || pesan == "" {
-			continue
-		}
-		// kirim pesan WA ke orang tua
-		fmt.Println("Kirim ke:", nomor)
-		fmt.Println(pesan)
+	// for nomor, pesan := range laporan {
+	// 	if nomor == "" || pesan == "" {
+	// 		continue
+	// 	}
+	// 	// kirim pesan WA ke orang tua
+	// 	fmt.Println("Kirim ke:", nomor)
+	// 	fmt.Println(pesan)
 
-		// Siapkan pesan
-		dt := &whatsauth.TextMessage{
-			To:       nomor,
-			IsGroup:  false,
-			Messages: pesan,
-		}
-
-		// Kirim pesan ke API WhatsApp
-		_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-		if err != nil {
-			return fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
-		}
+	// Siapkan pesan
+	dt := &whatsauth.TextMessage{
+		To:       perwakilan,
+		IsGroup:  false,
+		Messages: msg,
 	}
+
+	// Kirim pesan ke API WhatsApp
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		return fmt.Errorf("gagal mengirim pesan: %v, info: %s", err, resp.Info)
+	}
+	// }
 
 	return nil
 }
