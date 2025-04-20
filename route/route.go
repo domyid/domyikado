@@ -329,7 +329,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostDosenAsesor(w, r)
 	case method == "GET" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.GetDataBimbingan(w, r)
-	case method == "PUT" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
+	case method == "POST" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.ReplaceDataBimbingan(w, r)
 	default:
 		controller.NotFound(w, r)
