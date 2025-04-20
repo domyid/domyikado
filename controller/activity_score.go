@@ -54,6 +54,8 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataIQ, _ := GetAllDataIQScore(config.Mongoconn, userID)
 	dataGTMetrixScore, _ := GetGTMetrixScoreForUser(userID)
 
+	totalScore := HitungTotalScore(&score)
+
 	score = model.ActivityScore{
 		Sponsordata:    datasponsor.Sponsordata,
 		Sponsor:        datasponsor.Sponsor,
@@ -71,6 +73,7 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 		WebHook:        dataWebhook.WebHook,
 		PresensiHari:   dataPresensi.PresensiHari,
 		Presensi:       dataPresensi.Presensi,
+		TotalScore:     totalScore,
 	}
 
 	return score, nil
@@ -86,6 +89,8 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
 	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(userID)
 
+	totalScore := HitungTotalScore(&score)
+
 	score = model.ActivityScore{
 		Trackerdata:    datatracker.Trackerdata,
 		Tracker:        datatracker.Tracker,
@@ -99,7 +104,28 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 		Presensi:       dataPresensi.Presensi,
 		WebHookpush:    dataWebhook.WebHookpush,
 		WebHook:        dataWebhook.WebHook,
+		TotalScore:     totalScore,
 	}
 
 	return score, nil
+}
+
+func HitungTotalScore(a *model.ActivityScore) int {
+	total := 0
+
+	total += a.Sponsor
+	total += a.Strava
+	total += a.IQ
+	total += a.Pomokit
+	total += a.BlockChain
+	total += a.Rupiah
+	total += a.QRIS
+	total += int(a.Tracker)
+	total += a.BukPed
+	total += a.Jurnal
+	total += a.GTMetrix
+	total += a.WebHook
+	total += a.Presensi
+
+	return total
 }
