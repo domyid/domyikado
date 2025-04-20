@@ -3,7 +3,6 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gocroot/config"
@@ -52,17 +51,17 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//validasi nomor telepon asesor
-	bimbingan.Asesor.PhoneNumber = ValidasiNoHandPhone(bimbingan.Asesor.PhoneNumber)
+	bimbingan.Asesor.PhoneNumber = ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
-	if err != nil {
+	if !docasesor.IsDosen {
 		respn.Status = "Error : Data asesor tidak di temukan"
-		respn.Response = err.Error()
+		respn.Response = "Data asesor bukan dosen"
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
-	if !docasesor.IsDosen {
-		respn.Status = "Error : Data asesor bukan dosen"
-		respn.Response = "Data asesor bukan dosen"
+	if err != nil {
+		respn.Status = "Error : Data asesor tidak di temukan"
+		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
@@ -183,11 +182,4 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
-}
-
-func ValidasiNoHandPhone(nomor string) string {
-	nomor = strings.ReplaceAll(nomor, " ", "")
-	nomor = strings.ReplaceAll(nomor, "+", "")
-	nomor = strings.ReplaceAll(nomor, "-", "")
-	return nomor
 }
