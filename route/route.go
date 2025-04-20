@@ -334,6 +334,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 
 	case method == "GET" && path == "/refresh/fororangtua":
 		controller.ForOrangTua(w, r)
+	case method == "GET" && path == "/refresh/laporankeorangtua":
+		controller.LaporanKeOrangTua(w, r)
 	default:
 		controller.NotFound(w, r)
 	}

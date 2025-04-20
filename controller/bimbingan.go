@@ -10,6 +10,7 @@ import (
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
@@ -218,4 +219,11 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
+}
+
+func LaporanKeOrangTua(w http.ResponseWriter, r *http.Request) {
+	report.RekapToOrangTua(config.Mongoconn)
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: "Berhasil rekap data",
+	})
 }
