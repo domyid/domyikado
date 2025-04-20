@@ -17,7 +17,7 @@ func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
 		return map[string]string{"": "Belum ada bimbingan sama sekali."}, err
 	}
 
-	// Buat map[phonenumber][]time
+	// Buat map[phonenumber] => week map
 	mahasiswaWeekMap := make(map[string]map[string]bool)
 	for _, b := range allBimbingan {
 		year, week := b.CreatedAt.ISOWeek()
@@ -28,8 +28,17 @@ func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
 		mahasiswaWeekMap[b.PhoneNumber][key] = true
 	}
 
-	// Ambil semua mahasiswa yang punya sponsor
-	allMahasiswa, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{"sponsorphonenumber": bson.M{"$ne": ""}})
+	// Ambil phoneNumber yang unik dari mahasiswa yang ada di bimbingan
+	uniquePhones := make([]string, 0, len(mahasiswaWeekMap))
+	for phone := range mahasiswaWeekMap {
+		uniquePhones = append(uniquePhones, phone)
+	}
+
+	// Ambil data mahasiswa berdasarkan phone number yang sudah pernah bimbingan
+	allMahasiswa, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{
+		"phonenumber":        bson.M{"$in": uniquePhones},
+		"sponsorphonenumber": bson.M{"$ne": ""},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +46,6 @@ func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
 	nowYear, nowWeek := time.Now().ISOWeek()
 	thisWeekKey := fmt.Sprintf("%d-%02d", nowYear, nowWeek)
 
-	// Siapkan laporan per sponsor
 	laporan := make(map[string]string)
 	for _, mhs := range allMahasiswa {
 		mhsWeekMap := mahasiswaWeekMap[mhs.PhoneNumber]
