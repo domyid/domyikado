@@ -46,7 +46,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		respn.Status = "Error : Data user tidak di temukan"
 		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
@@ -56,7 +56,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		respn.Status = "Error : Data asesor tidak di temukan"
 		respn.Response = "Nomor Telepon bukan milik Dosen Asesor"
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
@@ -132,7 +132,7 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		respn.Status = "Error : Data bimbingan tidak di temukan"
 		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
@@ -163,7 +163,7 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		respn.Status = "Error : Data bimbingan tidak di temukan"
 		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
