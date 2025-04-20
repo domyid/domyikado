@@ -140,12 +140,53 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	bimbingan, err := atdb.GetOneLatestDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"_id": objectId})
+	bimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"_id": objectId})
 	if err != nil {
 		var respn model.Response
 		respn.Status = "Error : Data bimbingan tidak di temukan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		return
+	}
+	at.WriteJSON(respw, http.StatusOK, bimbingan)
+}
+
+func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+
+	id := at.GetParam(req)
+	objectId, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		respn.Status = "Error : ObjectID Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Encode Object ID Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	var bim model.ActivityScore
+	err = json.NewDecoder(req.Body).Decode(&bim)
+	if err != nil {
+		respn.Status = "Error : Body tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	bimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"_id": objectId})
+	if err != nil {
+		respn.Status = "Error : Data bimbingan tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotImplemented, respn)
+		return
+	}
+
+	bimbingan.Validasi = bim.Validasi
+	bimbingan.Komentar = bim.Komentar
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": objectId}, bimbingan)
+	if err != nil {
+		respn.Response = "Gagal replaceonedoc"
+		respn.Info = err.Error()
+		at.WriteJSON(respw, http.StatusConflict, respn)
 		return
 	}
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
