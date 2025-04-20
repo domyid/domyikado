@@ -76,7 +76,7 @@ type NotificationRequest struct {
 	NotificationText string `json:"notification_text"`
 }
 
-// Updated CrowdfundingPaymentResponse struct with PreviousTxids field
+// Make sure your struct definition includes both fields for compatibility
 type CrowdfundingPaymentResponse struct {
 	Success       bool          `json:"success"`
 	Message       string        `json:"message,omitempty"`
@@ -96,7 +96,6 @@ type CrowdfundingPaymentResponse struct {
 	Step3Complete bool    `json:"step3Complete,omitempty"`
 	TxID          string  `json:"txid,omitempty"`
 	Amount        float64 `json:"amount,omitempty"`
-	PreviousTxids string  `json:"previousTxids,omitempty"` // Added for storing previous txids
 }
 
 // MicroBitcoin API response structures
@@ -243,4 +242,13 @@ type RavencoinTransactionVout struct {
 type RavencoinScriptPubKey struct {
 	Hex       string   `json:"hex"`
 	Addresses []string `json:"addresses"`
+}
+
+// Add this new struct to modcrowdfunding.go after the other structs
+
+// RavencoinLastTransactions struct to track the last transaction count
+type RavencoinLastTransactions struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	LastTxCount int                `json:"lastTxCount" bson:"lastTxCount"`
+	LastUpdated time.Time          `json:"lastUpdated" bson:"lastUpdated"`
 }
