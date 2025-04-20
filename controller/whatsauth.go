@@ -210,27 +210,28 @@ func NotFound(respw http.ResponseWriter, req *http.Request) {
 }
 
 func ForOrangTua(respw http.ResponseWriter, req *http.Request) {
+	var resp model.Response
+	httpstatus := http.StatusServiceUnavailable
+
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(2) // Menambahkan jumlah goroutine yang akan dijalankan
 
-	// Untuk menyimpan error dan response dari masing-masing proses
-	var (
-		refreshErr error
-		refreshRes string
+	// Mutex untuk mengamankan akses ke variabel resp dan httpstatus
+	var mu sync.Mutex
+	// Variabel untuk menyimpan kesalahan terakhir
+	var lastErr error
 
-		rekapErr error
-	)
-
-	// 1. Refresh Token
+	// 1. Refresh token
 	go func() {
-		defer wg.Done()
+		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
 		profs, err := atdb.GetAllDoc[[]model.Profile](config.Mongoconn, "profile", bson.M{})
 		if err != nil {
-			refreshErr = err
+			mu.Lock()
+			lastErr = err
+			resp.Response = err.Error()
+			mu.Unlock()
 			return
 		}
-
-		var totalModified int64
 		for _, prof := range profs {
 			dt := &whatsauth.WebHookInfo{
 				URL:    prof.URL,
@@ -238,38 +239,38 @@ func ForOrangTua(respw http.ResponseWriter, req *http.Request) {
 			}
 			res, err := whatsauth.RefreshToken(dt, prof.Phonenumber, config.WAAPIGetToken, config.Mongoconn)
 			if err != nil {
-				refreshErr = err // hanya menyimpan error terakhir
-				continue
+				mu.Lock()
+				lastErr = err
+				resp.Response = err.Error()
+				httpstatus = http.StatusInternalServerError
+				mu.Unlock()
+				continue // Lanjutkan ke iterasi berikutnya
 			}
-			totalModified += res.ModifiedCount
+			mu.Lock()
+			resp.Response = at.Jsonstr(res.ModifiedCount)
+			httpstatus = http.StatusOK
+			mu.Unlock()
 		}
-
-		refreshRes = at.Jsonstr(totalModified)
 	}()
 
-	// 2. Rekap ke Orang Tua
+	// 2. Menjalankan fungsi RekapToOrangTua dalam goroutine
 	go func() {
-		defer wg.Done()
-		rekapErr = report.RekapToOrangTua(config.Mongoconn)
+		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
+		if err := report.RekapToOrangTua(config.Mongoconn); err != nil {
+			mu.Lock()
+			lastErr = err
+			resp.Response = err.Error()
+			httpstatus = http.StatusInternalServerError
+			mu.Unlock()
+		}
 	}()
 
-	wg.Wait()
+	wg.Wait() // Menunggu sampai semua goroutine selesai
 
-	// Evaluasi hasil
-	if refreshErr != nil {
-		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
-			Response: "Gagal refresh token: " + refreshErr.Error(),
-		})
-		return
+	// Menggunakan status yang benar dari kesalahan terakhir jika ada
+	if lastErr != nil {
+		at.WriteJSON(respw, httpstatus, resp)
+	} else {
+		at.WriteJSON(respw, http.StatusOK, resp)
 	}
-	if rekapErr != nil {
-		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{
-			Response: "Gagal rekap ke orang tua: " + rekapErr.Error(),
-		})
-		return
-	}
-
-	at.WriteJSON(respw, http.StatusOK, model.Response{
-		Response: refreshRes + "\n✅ Rekap ke orang tua berhasil.",
-	})
 }
