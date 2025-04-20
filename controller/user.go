@@ -663,3 +663,27 @@ func GetGroupByPhoneNumberFromMember(respw http.ResponseWriter, req *http.Reques
 	// Kirimkan respons sukses dengan data grup
 	at.WriteJSON(respw, http.StatusOK, groups)
 }
+
+func GetAllDataSponsorPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](db, "user", primitive.M{"phonenumber": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	hasValidName := docuser.SponsorName != "" && docuser.SponsorName != "undefined"
+	hasValidPhone := docuser.SponsorPhoneNumber != "" && docuser.SponsorPhoneNumber != "undefined"
+
+	switch {
+	case hasValidName && hasValidPhone:
+		activityscore.Sponsordata = 2
+		activityscore.Sponsor = 100
+	case hasValidName || hasValidPhone:
+		activityscore.Sponsordata = 1
+		activityscore.Sponsor = 50
+	default:
+		activityscore.Sponsordata = 0
+		activityscore.Sponsor = 0
+	}
+
+	return activityscore, nil
+}

@@ -22,13 +22,30 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	score, _ := GetActivityScoreData(authorization.Id)
+	score, _ := GetAllActivityScoreData(authorization.Id)
 	at.WriteJSON(w, http.StatusOK, score)
 }
 
-func GetActivityScoreData(userID string) (model.ActivityScore, error) {
+func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	score, _ := GetLastWeekActivityScoreData(authorization.Id)
+	at.WriteJSON(w, http.StatusOK, score)
+}
+
+func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 	var score model.ActivityScore
 
+	datasponsor, _ := GetAllDataSponsorPoin(config.Mongoconn, userID)
 	datatracker, _ := report.GetAllDataTracker(config.Mongoconn, GetHostname(userID))
 	datastravapoin, _ := report.GetAllDataStravaPoin(config.Mongoconn, userID)
 	dataWebhook, _ := report.GetAllWebhookPoin(config.Mongoconn, userID)
@@ -38,6 +55,8 @@ func GetActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataGTMetrixScore, _ := GetGTMetrixScoreForUser(userID)
 
 	score = model.ActivityScore{
+		Sponsordata:    datasponsor.Sponsordata,
+		Sponsor:        datasponsor.Sponsor,
 		Trackerdata:    datatracker.Trackerdata,
 		Tracker:        datatracker.Tracker,
 		StravaKM:       datastravapoin.StravaKM,
@@ -57,63 +76,17 @@ func GetActivityScoreData(userID string) (model.ActivityScore, error) {
 	return score, nil
 }
 
-// func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
-// 	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-// 	if err != nil {
-// 		at.WriteJSON(w, http.StatusForbidden, model.Response{
-// 			Status:   "Error: Invalid Token",
-// 			Info:     at.GetSecretFromHeader(r),
-// 			Location: "Token Validation",
-// 			Response: err.Error(),
-// 		})
-// 		return
-// 	}
+func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
+	var score model.ActivityScore
 
-// 	datatracker, _ := report.GetAllDataTracker(config.Mongoconn, GetHostname(authorization.Id))
-// 	datastravapoin, _ := report.GetAllDataStravaPoin(config.Mongoconn, authorization.Id)
-// 	dataWebhook, _ := report.GetAllWebhookPoin(config.Mongoconn, authorization.Id)
-// 	dataPresensi, _ := report.GetAllPresensiPoin(config.Mongoconn, authorization.Id)
-// 	dataPomokitScore, _ := GetPomokitScoreForUser(authorization.Id)
-// 	dataIQ, _ := GetAllDataIQScore(config.Mongoconn, authorization.Id)
-// 	dataGTMetrixScore, _ := GetGTMetrixScoreForUser(authorization.Id)
+	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(userID))
+	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID)
+	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, userID)
+	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, userID)
+	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
+	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(userID)
 
-// 	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
-// 		Trackerdata:    datatracker.Trackerdata,
-// 		Tracker:        datatracker.Tracker,
-// 		StravaKM:       datastravapoin.StravaKM,
-// 		Strava:         datastravapoin.Strava,
-// 		IQresult:       dataIQ.IQresult,
-// 		IQ:             dataIQ.IQ,
-// 		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
-// 		Pomokit:        dataPomokitScore.Pomokit,
-// 		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
-// 		GTMetrix:       dataGTMetrixScore.GTMetrix,
-// 		WebHookpush:    dataWebhook.WebHookpush,
-// 		WebHook:        dataWebhook.WebHook,
-// 		PresensiHari:   dataPresensi.PresensiHari,
-// 		Presensi:       dataPresensi.Presensi,
-// 	})
-// }
-
-func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
-	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-	if err != nil {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
-			Info:     at.GetSecretFromHeader(r),
-			Location: "Token Validation",
-			Response: err.Error(),
-		})
-		return
-	}
-	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(authorization.Id))
-	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, authorization.Id)
-	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, authorization.Id)
-	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, authorization.Id)
-	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(authorization.Id)
-	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(authorization.Id)
-
-	at.WriteJSON(w, http.StatusOK, model.ActivityScore{
+	score = model.ActivityScore{
 		Trackerdata:    datatracker.Trackerdata,
 		Tracker:        datatracker.Tracker,
 		StravaKM:       datastravapoin.StravaKM,
@@ -126,5 +99,7 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		Presensi:       dataPresensi.Presensi,
 		WebHookpush:    dataWebhook.WebHookpush,
 		WebHook:        dataWebhook.WebHook,
-	})
+	}
+
+	return score, nil
 }

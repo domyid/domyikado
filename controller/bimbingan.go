@@ -82,7 +82,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	// 	return
 	// }
 
-	score, _ := GetActivityScoreData(payload.Id)
+	score, _ := GetAllActivityScoreData(payload.Id)
 
 	// logic inputan post
 	// bimbingan.Enroll = enroll
