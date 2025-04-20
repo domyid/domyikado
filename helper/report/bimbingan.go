@@ -43,8 +43,7 @@ func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
 		return nil, err
 	}
 
-	nowYear, nowWeek := time.Now().ISOWeek()
-	thisWeekKey := fmt.Sprintf("%d-%02d", nowYear, nowWeek)
+	thisWeekKey := GetWeekYear(time.Now())
 
 	laporan := make(map[string]string)
 	for _, mhs := range allMahasiswa {
