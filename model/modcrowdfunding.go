@@ -76,7 +76,7 @@ type NotificationRequest struct {
 	NotificationText string `json:"notification_text"`
 }
 
-// Make sure your struct definition includes both fields for compatibility
+// Updated CrowdfundingPaymentResponse struct with PreviousTxids field
 type CrowdfundingPaymentResponse struct {
 	Success       bool          `json:"success"`
 	Message       string        `json:"message,omitempty"`
@@ -96,6 +96,7 @@ type CrowdfundingPaymentResponse struct {
 	Step3Complete bool    `json:"step3Complete,omitempty"`
 	TxID          string  `json:"txid,omitempty"`
 	Amount        float64 `json:"amount,omitempty"`
+	PreviousTxids string  `json:"previousTxids,omitempty"` // Added for storing previous txids
 }
 
 // MicroBitcoin API response structures
