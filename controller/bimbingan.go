@@ -74,6 +74,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 
 	// logic inputan post
 	// bimbingan.Enroll = enroll
+	bimbingan.Approved = false
 	bimbingan.PhoneNumber = docuser.PhoneNumber
 	bimbingan.Asesor = docasesor
 	bimbingan.CreatedAt = time.Now()
