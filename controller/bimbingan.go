@@ -55,7 +55,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
 	if err != nil {
 		respn.Status = "Error : Data asesor tidak di temukan"
-		respn.Response = "Nomor Telepon bukan milik Dosen Asesor \n" + err.Error()
+		respn.Response = "Nomor Telepon bukan milik Dosen Asesor"
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
