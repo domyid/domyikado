@@ -18,9 +18,9 @@ import (
 
 func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	//otorisasi dan validasi inputan
+	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Error : Token Tidak Valid"
 		respn.Info = at.GetSecretFromHeader(req)
 		respn.Location = "Decode Token Error"
@@ -31,14 +31,12 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	var bimbingan model.ActivityScore
 	err = json.NewDecoder(req.Body).Decode(&bimbingan)
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Error : Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 	if bimbingan.Asesor.PhoneNumber == "" {
-		var respn model.Response
 		respn.Status = "Error : No Telepon Asesor tidak diisi"
 		respn.Response = "Isi lebih lengkap terlebih dahulu"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
@@ -47,7 +45,6 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	//validasi eksistensi user di db
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Error : Data user tidak di temukan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
@@ -58,14 +55,12 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.Asesor.PhoneNumber = ValidasiNoHandPhone(bimbingan.Asesor.PhoneNumber)
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Error : Data asesor tidak di temukan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
 		return
 	}
 	if !docasesor.IsDosen {
-		var respn model.Response
 		respn.Status = "Error : Data asesor bukan dosen"
 		respn.Response = "Data asesor bukan dosen"
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
@@ -106,7 +101,6 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 
 	idbimbingan, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Gagal Insert Database"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotModified, respn)
@@ -129,10 +123,10 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 }
 
 func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
 	id := at.GetParam(req)
 	objectId, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Error : ObjectID Tidak Valid"
 		respn.Info = at.GetSecretFromHeader(req)
 		respn.Location = "Encode Object ID Error"
@@ -142,7 +136,6 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	}
 	bimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"_id": objectId})
 	if err != nil {
-		var respn model.Response
 		respn.Status = "Error : Data bimbingan tidak di temukan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotImplemented, respn)
@@ -153,7 +146,6 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 
 func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
-
 	id := at.GetParam(req)
 	objectId, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
