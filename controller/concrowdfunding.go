@@ -991,7 +991,7 @@ func CheckPayment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Step 1: Check Ravencoin address for unconfirmed transactions and store all existing txids
+// Step 1: Check Ravencoin address for transactions and focus only on txids
 func checkRavencoinAddressAPI() (bool, string, float64, []string, error) {
 	// API URL for checking Ravencoin address
 	url := "https://blockbook.ravencoin.org/api/v2/address/" + RavencoinWalletAddress
@@ -1011,28 +1011,17 @@ func checkRavencoinAddressAPI() (bool, string, float64, []string, error) {
 	}
 
 	// Store all current txids
-	existingTxids := addressResp.Txids
+	currentTxids := addressResp.Txids
 
-	// Check if there are unconfirmed transactions
-	if addressResp.UnconfirmedTxs > 0 {
-		// Get the latest transaction ID (first in the list)
-		if len(addressResp.Txids) > 0 {
-			latestTxid := addressResp.Txids[0]
-
-			// Convert unconfirmed balance from string to float
-			unconfirmedBalance, err := strconv.ParseFloat(addressResp.UnconfirmedBalance, 64)
-			if err != nil {
-				return true, latestTxid, 0, existingTxids, nil // Return txid but 0 amount if parsing fails
-			}
-
-			// Convert satoshis to RVN (divide by 100,000,000)
-			unconfirmedBalance = unconfirmedBalance / 100000000
-
-			return true, latestTxid, unconfirmedBalance, existingTxids, nil
-		}
+	// Always return the first txid if available
+	if len(currentTxids) > 0 {
+		latestTxid := currentTxids[0]
+		// At this point, we just identify that there's a transaction to check
+		// The actual amount will be determined in Step 3
+		return true, latestTxid, 0, currentTxids, nil
 	}
 
-	return false, "", 0, existingTxids, nil
+	return false, "", 0, currentTxids, nil
 }
 
 // Step 1: Check mempool for transactions and extract txid properly
@@ -1131,25 +1120,16 @@ func checkRavencoinTxHistory(txid string, previousTxids []string) (bool, string,
 	}
 
 	// Look for new txids that weren't in the previous list
-	var newTxid string
-	for _, id := range addressResp.Txids {
-		if !previousTxidMap[id] {
-			// Found a new transaction
-			newTxid = id
-			break
-		}
-	}
+	if len(addressResp.Txids) > 0 {
+		currentTxid := addressResp.Txids[0]
 
-	// If we found a new txid, consider this successful
-	if newTxid != "" {
-		return true, newTxid, nil
-	}
-
-	// If the original txid is in the list, also consider successful
-	for _, id := range addressResp.Txids {
-		if id == txid {
-			return true, txid, nil
+		// If the current txid isn't in the previous list, it's a new transaction
+		if !previousTxidMap[currentTxid] {
+			return true, currentTxid, nil
 		}
+
+		// Even if it's the same txid as before, consider it found for verification purposes
+		return true, txid, nil
 	}
 
 	return false, "", nil
@@ -1331,15 +1311,7 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 	txid := r.URL.Query().Get("txid")
 	previousTxidsStr := r.URL.Query().Get("previousTxids")
 
-	if txid == "" {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success: false,
-			Message: "Transaction ID is required",
-		})
-		return
-	}
-
-	// Parse the previous txids
+	// Parse previous txids
 	var previousTxids []string
 	if previousTxidsStr != "" {
 		if err := json.Unmarshal([]byte(previousTxidsStr), &previousTxids); err != nil {
@@ -1358,18 +1330,7 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify this is a Ravencoin payment
-	if order.PaymentMethod != model.Ravencoin {
-		at.WriteJSON(w, http.StatusBadRequest, model.CrowdfundingPaymentResponse{
-			Success:       true,
-			Status:        order.Status,
-			Message:       "This endpoint is only for Ravencoin payments",
-			PaymentMethod: order.PaymentMethod,
-		})
-		return
-	}
-
-	// Step 2: Check history with the txid from step 1 and previous txids
+	// Check history with the txid from step 1 and previous txids
 	historyStatus, newTxid, err := checkRavencoinTxHistory(txid, previousTxids)
 	if err != nil {
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
@@ -1386,8 +1347,7 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if historyStatus {
-		// Transaction found in history, step 2 complete
-		// If we found a new txid, use that instead
+		// Use the txid found in Step 1 or use the new txid if found
 		responseTxid := txid
 		if newTxid != "" && newTxid != txid {
 			responseTxid = newTxid
@@ -1406,7 +1366,6 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Transaction not found in history
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success:       true,
 		Status:        "pending",
