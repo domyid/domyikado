@@ -1294,6 +1294,9 @@ func CheckStep3Handler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error resetting crowdfunding queue: %v", err)
 	}
 
+	// Calculate payment points after successful payment
+	RecalculatePointsAfterPayment()
+
 	sendCrowdfundingDiscordEmbed(
 		"✅ MicroBitcoin Payment Successful",
 		"A MicroBitcoin payment has been confirmed automatically.",
@@ -1410,6 +1413,9 @@ func ConfirmQRISPayment(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Calculate payment points after successful payment
+	RecalculatePointsAfterPayment()
 
 	sendCrowdfundingDiscordEmbed(
 		"✅ Manual QRIS Payment Confirmation",
@@ -1530,8 +1536,7 @@ func ConfirmMicroBitcoinPayment(w http.ResponseWriter, r *http.Request) {
 	_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
 		context.Background(),
 		bson.M{},
-		bson.M{"$set": bson.M{
-			"isProcessing":   false,
+		bson.M{"$set": bson.M{"isProcessing": false,
 			"currentOrderId": "",
 			"paymentMethod":  "",
 			"expiryTime":     time.Time{},
@@ -1552,6 +1557,9 @@ func ConfirmMicroBitcoinPayment(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Calculate payment points after successful payment
+	RecalculatePointsAfterPayment()
 
 	sendCrowdfundingDiscordEmbed(
 		"✅ Manual MicroBitcoin Payment Confirmation",
@@ -1774,6 +1782,9 @@ func ProcessQRISNotification(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Calculate payment points after successful payment
+	RecalculatePointsAfterPayment()
 
 	// Log successful confirmation
 	log.Printf("QRIS Payment confirmed from notification for amount: Rp%v, Order ID: %s", amount, order.OrderID)
@@ -2788,6 +2799,9 @@ func CheckRavencoinStep3Handler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error resetting crowdfunding queue: %v", err)
 	}
 
+	// Calculate payment points after successful payment
+	RecalculatePointsAfterPayment()
+
 	sendCrowdfundingDiscordEmbed(
 		"✅ Ravencoin Payment Successful",
 		"A Ravencoin payment has been confirmed automatically.",
@@ -2938,6 +2952,9 @@ func ConfirmRavencoinPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Calculate payment points after successful payment
+	RecalculatePointsAfterPayment()
+
 	sendCrowdfundingDiscordEmbed(
 		"✅ Manual Ravencoin Payment Confirmation",
 		"A Ravencoin payment has been confirmed manually.",
@@ -3040,4 +3057,194 @@ func InitializeRavencoinLastTransactions() {
 			)
 		}
 	}
+}
+
+// RecalculatePointsAfterPayment recalculates all user payment points
+func RecalculatePointsAfterPayment() {
+	// Run the calculation in a goroutine to not block the current request
+	go func() {
+		err := CalculatePaymentPoints()
+		if err != nil {
+			log.Printf("Error recalculating payment points after new payment: %v", err)
+		} else {
+			log.Println("Successfully recalculated payment points after new payment")
+		}
+	}()
+}
+
+// CalculatePaymentPoints recalculates all payment points and updates the database
+func CalculatePaymentPoints() error {
+	log.Println("Starting payment points calculation...")
+
+	ctx := context.Background()
+	db := config.Mongoconn
+
+	// Get all successful payments
+	filter := bson.M{"status": "success"}
+	cursor, err := db.Collection("crowdfundingorders").Find(ctx, filter)
+	if err != nil {
+		log.Printf("Error fetching crowdfunding orders: %v", err)
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	// Group payments by user and payment method
+	userPaymentsMap := make(map[string]*struct {
+		Name            string
+		PhoneNumber     string
+		QRISAmount      float64
+		QRISCount       int
+		MBCAmount       float64
+		MBCCount        int
+		RavencoinAmount float64
+		RavencoinCount  int
+		TotalCount      int
+	})
+
+	var allPayments []model.CrowdfundingOrder
+
+	// Process each payment
+	for cursor.Next(ctx) {
+		var payment model.CrowdfundingOrder
+		if err := cursor.Decode(&payment); err != nil {
+			log.Printf("Error decoding payment: %v", err)
+			continue
+		}
+
+		allPayments = append(allPayments, payment)
+
+		// Get or create user data
+		userData, exists := userPaymentsMap[payment.PhoneNumber]
+		if !exists {
+			userData = &struct {
+				Name            string
+				PhoneNumber     string
+				QRISAmount      float64
+				QRISCount       int
+				MBCAmount       float64
+				MBCCount        int
+				RavencoinAmount float64
+				RavencoinCount  int
+				TotalCount      int
+			}{
+				Name:        payment.Name,
+				PhoneNumber: payment.PhoneNumber,
+			}
+			userPaymentsMap[payment.PhoneNumber] = userData
+		}
+
+		// Update user data based on payment method
+		switch payment.PaymentMethod {
+		case model.QRIS:
+			userData.QRISAmount += payment.Amount
+			userData.QRISCount++
+		case model.MicroBitcoin:
+			userData.MBCAmount += payment.Amount
+			userData.MBCCount++
+		case model.Ravencoin:
+			userData.RavencoinAmount += payment.Amount
+			userData.RavencoinCount++
+		}
+
+		// Update total
+		userData.TotalCount++
+	}
+
+	if cursor.Err() != nil {
+		log.Printf("Cursor error: %v", cursor.Err())
+		return cursor.Err()
+	}
+
+	// Calculate averages for each payment method
+	var qrisTotal, mbcTotal, ravencoinTotal float64
+	var qrisCount, mbcCount, ravencoinCount int
+
+	for _, payment := range allPayments {
+		switch payment.PaymentMethod {
+		case model.QRIS:
+			qrisTotal += payment.Amount
+			qrisCount++
+		case model.MicroBitcoin:
+			mbcTotal += payment.Amount
+			mbcCount++
+		case model.Ravencoin:
+			ravencoinTotal += payment.Amount
+			ravencoinCount++
+		}
+	}
+
+	// Calculate averages
+	qrisAvg := 0.0
+	if qrisCount > 0 {
+		qrisAvg = qrisTotal / float64(qrisCount)
+	}
+
+	mbcAvg := 0.0
+	if mbcCount > 0 {
+		mbcAvg = mbcTotal / float64(mbcCount)
+	}
+
+	ravencoinAvg := 0.0
+	if ravencoinCount > 0 {
+		ravencoinAvg = ravencoinTotal / float64(ravencoinCount)
+	}
+
+	log.Printf("Averages - QRIS: %f, MBC: %f, Ravencoin: %f", qrisAvg, mbcAvg, ravencoinAvg)
+
+	// Calculate points for each user and update the database
+	pointsCollection := db.Collection("crowdfundingpoints")
+
+	// For each user, update or insert their points
+	for phoneNumber, userData := range userPaymentsMap {
+		// Calculate points for each payment method
+		qrisPoints := 0.0
+		if userData.QRISCount > 0 && qrisAvg > 0 {
+			qrisPoints = (userData.QRISAmount / qrisAvg) * 100
+		}
+
+		mbcPoints := 0.0
+		if userData.MBCCount > 0 && mbcAvg > 0 {
+			mbcPoints = (userData.MBCAmount / mbcAvg) * 100
+		}
+
+		ravencoinPoints := 0.0
+		if userData.RavencoinCount > 0 && ravencoinAvg > 0 {
+			ravencoinPoints = (userData.RavencoinAmount / ravencoinAvg) * 100
+		}
+
+		// Calculate total points
+		totalPoints := qrisPoints + mbcPoints + ravencoinPoints
+
+		// Prepare data for update/insert
+		pointsData := bson.M{
+			"phoneNumber":     phoneNumber,
+			"name":            userData.Name,
+			"qrisPoints":      qrisPoints,
+			"qrisAmount":      userData.QRISAmount,
+			"qrisCount":       userData.QRISCount,
+			"mbcPoints":       mbcPoints,
+			"mbcAmount":       userData.MBCAmount,
+			"mbcCount":        userData.MBCCount,
+			"ravencoinPoints": ravencoinPoints,
+			"ravencoinAmount": userData.RavencoinAmount,
+			"ravencoinCount":  userData.RavencoinCount,
+			"totalPoints":     totalPoints,
+			"totalCount":      userData.TotalCount,
+			"lastUpdated":     time.Now(),
+		}
+
+		// Update or insert
+		filter := bson.M{"phoneNumber": phoneNumber}
+		update := bson.M{"$set": pointsData}
+		opts := options.Update().SetUpsert(true)
+
+		_, err := pointsCollection.UpdateOne(ctx, filter, update, opts)
+		if err != nil {
+			log.Printf("Error updating points for user %s: %v", phoneNumber, err)
+			continue
+		}
+	}
+
+	log.Printf("Successfully updated payment points for %d users", len(userPaymentsMap))
+	return nil
 }

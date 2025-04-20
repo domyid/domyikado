@@ -252,3 +252,22 @@ type RavencoinLastTransactions struct {
 	LastTxCount int                `json:"lastTxCount" bson:"lastTxCount"`
 	LastUpdated time.Time          `json:"lastUpdated" bson:"lastUpdated"`
 }
+
+// PaymentPointsData struct to store calculated points
+type PaymentPointsData struct {
+	PhoneNumber     string    `json:"phoneNumber" bson:"phoneNumber"`
+	Name            string    `json:"name" bson:"name"`
+	QRISPoints      float64   `json:"qrisPoints" bson:"qrisPoints"`
+	QRISAmount      float64   `json:"qrisAmount" bson:"qrisAmount"`
+	QRISCount       int       `json:"qrisCount" bson:"qrisCount"`
+	MBCPoints       float64   `json:"mbcPoints" bson:"mbcPoints"`
+	MBCAmount       float64   `json:"mbcAmount" bson:"mbcAmount"`
+	MBCCount        int       `json:"mbcCount" bson:"mbcCount"`
+	RavencoinPoints float64   `json:"ravencoinPoints" bson:"ravencoinPoints"`
+	RavencoinAmount float64   `json:"ravencoinAmount" bson:"ravencoinAmount"`
+	RavencoinCount  int       `json:"ravencoinCount" bson:"ravencoinCount"`
+	TotalPoints     float64   `json:"totalPoints" bson:"totalPoints"`
+	TotalAmount     float64   `json:"totalAmount" bson:"totalAmount"`
+	TotalCount      int       `json:"totalCount" bson:"totalCount"`
+	LastUpdated     time.Time `json:"lastUpdated" bson:"lastUpdated"`
+}
