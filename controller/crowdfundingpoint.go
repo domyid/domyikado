@@ -228,7 +228,7 @@ func GeneratePaymentPointsReport() (string, error) {
 	msg += "*Cara Perhitungan Poin*\n"
 	msg += "1. Untuk setiap jenis pembayaran (QRIS, MBC, RVN), jumlah pembayaran dibagi dengan rata-rata pembayaran jenis tersebut, kemudian dikalikan 100.\n"
 	msg += "2. Poin total adalah jumlah dari semua poin jenis pembayaran.\n\n"
-	msg += "Terima kasih kepada semua yang telah berkontribusi! 💖\n"
+	msg += "Terima kasih ! 💖\n"
 
 	return msg, nil
 }
