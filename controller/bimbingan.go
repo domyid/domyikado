@@ -61,6 +61,15 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Cek apakah sudah pernah di-approve
+	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": docuser.PhoneNumber, "approved": true})
+	if err == nil {
+		respn.Status = "Error : Data bimbingan sudah di approve"
+		respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang."
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
 	score, _ := GetAllActivityScoreData(payload.Id)
 
 	// logic inputan post
@@ -85,11 +94,11 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.TotalScore = score.TotalScore
 
 	// Cari apakah ada data existing yang belum approved
-	var idbimbingan primitive.ObjectID
 	existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
+	var idbimbingan primitive.ObjectID
 	if err == nil {
 		// Update data yang belum di-approve
-		bimbingan.CreatedAt = time.Now()
+		bimbingan.ID = existing.ID
 		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
 		if err != nil {
 			respn.Status = "Gagal Update Database"
@@ -97,6 +106,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 			at.WriteJSON(respw, http.StatusNotModified, respn)
 			return
 		}
+		idbimbingan = existing.ID
 	} else {
 		// Insert data baru
 		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
@@ -190,9 +200,9 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	// kirim pesan ke mahasiswa
 	var message string
 	if bimbingan.Approved {
-		message = "Bimbingan Kamu telah di approve oleh Dosen " + bimbingan.Asesor.Name + "\n" + "Rate : " + strconv.Itoa(bim.Validasi) + "\n" + "Komentar : " + bim.Komentar
+		message = "Bimbingan Kamu *TELAH DI APPROVE* oleh Dosen " + bimbingan.Asesor.Name + "\n" + "Rate : " + strconv.Itoa(bim.Validasi) + "\n" + "Komentar : " + bim.Komentar + "\n" + "Silahkan lanjutkan bimbingan ke sesi berikutnya."
 	} else {
-		message = "Bimbingan Kamu belum di approve oleh Dosen " + bimbingan.Asesor.Name + "\n" + "Rate : " + strconv.Itoa(bim.Validasi) + "\n" + "Komentar : " + bim.Komentar
+		message = "Bimbingan Kamu *BELUM DI APPROVE* oleh Dosen " + bimbingan.Asesor.Name + "\n" + "Rate : " + strconv.Itoa(bim.Validasi) + "\n" + "Komentar : " + bim.Komentar + "\n" + "Silahkan mengajukan ulang bimbingan setelah perbaikan."
 	}
 
 	dt := &whatsauth.TextMessage{
