@@ -102,7 +102,7 @@ type ActivityScore struct {
 	PresensiHari   int                `bson:"presensihari,omitempty" json:"presensihari,omitempty"`     //jumlah ari presensi
 	Presensi       int                `bson:"presensi,omitempty" json:"presensi,omitempty"`             //5*lengkap masuk dan pulang = 100
 	TotalScore     int                `bson:"total,omitempty" json:"total,omitempty"`
-	Approved       bool               `bson:"approved,omitempty" json:"approved,omitempty"`
+	Approved       bool               `bson:"approved" json:"approved"`
 	Asesor         Userdomyikado      `bson:"asesor,omitempty" json:"asesor,omitempty"`
 	Validasi       int                `bson:"validasi,omitempty" json:"validasi,omitempty"` // rate bintang validasi
 	Komentar       string             `bson:"komentar,omitempty" json:"komentar,omitempty"` //komentar dari asesor
