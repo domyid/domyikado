@@ -216,15 +216,15 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetCrowdfundingTotalReport(w, r)
 	case method == "GET" && path == "/api/crowdfunding/user":
 		controller.GetCrowdfundingUserData(w, r)
-		// Ravencoin Payment Routes
+	// Ravencoin Payment Routes
 	case method == "POST" && path == "/api/crowdfunding/ravencoin/createOrder":
 		controller.CreateRavencoinOrder(w, r)
 	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep2/:orderId"):
 		controller.CheckRavencoinStep2Handler(w, r)
 	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep3/:orderId"):
 		controller.CheckRavencoinStep3Handler(w, r)
-	// case method == "POST" && at.URLParam(path, "/api/crowdfunding/ravencoin/confirm/:orderId"):
-	// 	controller.ConfirmRavencoinPayment(w, r)
+	case method == "POST" && at.URLParam(path, "/api/crowdfunding/ravencoin/confirm/:orderId"):
+		controller.ConfirmRavencoinPayment(w, r)
 	// IQ
 	case method == "GET" && strings.HasPrefix(path, "/api/iq/question/"):
 		controller.GetOneIqQuestion(w, r)
