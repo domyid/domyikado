@@ -174,6 +174,7 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 
 	bimbingan.Validasi = bim.Validasi
 	bimbingan.Komentar = bim.Komentar
+	bimbingan.Approved = bim.Approved
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": objectId}, bimbingan)
 	if err != nil {
 		respn.Response = "Gagal replaceonedoc"
