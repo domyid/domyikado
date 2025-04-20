@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gocroot/config"
@@ -60,20 +61,9 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	//ambil data enroll
-	// enroll, err := atdb.GetOneDoc[model.MasterEnrool](config.Mongoconn, "enroll", primitive.M{"_id": docuser.ID})
-	// if err != nil {
-	// 	var respn model.Response
-	// 	respn.Status = "Error : Data enroll tidak di temukan: " + docuser.ID.Hex()
-	// 	respn.Response = err.Error()
-	// 	at.WriteJSON(respw, http.StatusNotImplemented, respn)
-	// 	return
-	// }
-
 	score, _ := GetAllActivityScoreData(payload.Id)
 
 	// logic inputan post
-	// bimbingan.Enroll = enroll
 	bimbingan.Approved = false
 	bimbingan.PhoneNumber = docuser.PhoneNumber
 	bimbingan.Asesor = docasesor
@@ -92,14 +82,33 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.WebHook = score.WebHook
 	bimbingan.PresensiHari = score.PresensiHari
 	bimbingan.Presensi = score.Presensi
+	bimbingan.TotalScore = score.TotalScore
 
-	idbimbingan, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
-	if err != nil {
-		respn.Status = "Gagal Insert Database"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotModified, respn)
-		return
+	// Cari apakah ada data existing yang belum approved
+	var idbimbingan primitive.ObjectID
+	existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
+	if err == nil {
+		// Update data yang belum di-approve
+		bimbingan.CreatedAt = time.Now()
+		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
+		if err != nil {
+			respn.Status = "Gagal Update Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+	} else {
+		// Insert data baru
+		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
+		if err != nil {
+			respn.Status = "Gagal Insert Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
 	}
+
+	// kirim pesan ke asesor
 	message := "*Permintaan Bimbingan*\n" + "Petugas : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
 	dt := &whatsauth.TextMessage{
 		To:       bimbingan.Asesor.PhoneNumber,
@@ -175,6 +184,27 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 		respn.Response = "Gagal replaceonedoc"
 		respn.Info = err.Error()
 		at.WriteJSON(respw, http.StatusConflict, respn)
+		return
+	}
+
+	// kirim pesan ke mahasiswa
+	var message string
+	if bimbingan.Approved {
+		message = "Bimbingan Kamu telah di approve oleh Dosen " + bimbingan.Asesor.Name + "\n" + "Rate : " + strconv.Itoa(bim.Validasi) + "\n" + "Komentar : " + bim.Komentar
+	} else {
+		message = "Bimbingan Kamu belum di approve oleh Dosen " + bimbingan.Asesor.Name + "\n" + "Rate : " + strconv.Itoa(bim.Validasi) + "\n" + "Komentar : " + bim.Komentar
+	}
+
+	dt := &whatsauth.TextMessage{
+		To:       bimbingan.PhoneNumber,
+		IsGroup:  false,
+		Messages: message,
+	}
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Info = "Tidak berhak"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusUnauthorized, resp)
 		return
 	}
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
