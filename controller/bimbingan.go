@@ -74,7 +74,6 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 
 	// logic inputan post
 	// bimbingan.Enroll = enroll
-	bimbingan.Approved = score.Approved
 	bimbingan.PhoneNumber = docuser.PhoneNumber
 	bimbingan.Asesor = docasesor
 	bimbingan.CreatedAt = time.Now()
@@ -168,7 +167,7 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 
 	bimbingan.Validasi = bim.Validasi
 	bimbingan.Komentar = bim.Komentar
-	bimbingan.Approved = bim.Approved
+	bimbingan.Approved = bim.Approved 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": objectId}, bimbingan)
 	if err != nil {
 		respn.Response = "Gagal replaceonedoc"
