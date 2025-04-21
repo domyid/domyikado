@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/gocroot/helper/atdb"
@@ -38,6 +39,47 @@ func ReportBimbinganToOrangTua(db *mongo.Database) (msg string, perwakilanphone 
 	}
 
 	return msg, docuser.SponsorPhoneNumber, nil
+}
+
+func GetRiwayatBimbinganPerMinggu(db *mongo.Database, phonenumber string) (string, error) {
+	// Ambil semua bimbingan berdasarkan nomor telepon
+	filter := bson.M{"phonenumber": phonenumber}
+	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](db, "bimbingan", filter)
+	if err != nil {
+		return "", err
+	}
+
+	if len(bimbinganList) == 0 {
+		return "Belum ada riwayat bimbingan.", nil
+	}
+
+	// Map untuk mengelompokkan data berdasarkan minggu
+	riwayat := make(map[string][]model.ActivityScore)
+	var mingguKeys []string
+
+	for _, b := range bimbinganList {
+		year, week := b.CreatedAt.ISOWeek()
+		key := fmt.Sprintf("%d-%02d", year, week)
+		if _, found := riwayat[key]; !found {
+			mingguKeys = append(mingguKeys, key)
+		}
+		riwayat[key] = append(riwayat[key], b)
+	}
+
+	sort.Strings(mingguKeys)
+
+	output := "📚 *Riwayat Bimbingan per Minggu:*\n"
+	for i, key := range mingguKeys {
+		tanggal := riwayat[key][0].CreatedAt.Format("02 Jan 2006")
+		jumlah := len(riwayat[key])
+		status := "✅ Sudah bimbingan"
+		if jumlah == 0 {
+			status = "⚠️ Belum ada bimbingan"
+		}
+		output += fmt.Sprintf("🗓️ Week %d (%s): %s (%d kali)\n", i+1, tanggal, status, jumlah)
+	}
+
+	return output, nil
 }
 
 // func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
