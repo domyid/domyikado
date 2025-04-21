@@ -72,40 +72,42 @@ type Userdomyikado struct {
 
 // skor asessment proyek1 dan lainnya aktifitas mingguan. ini pengganti kartu bimbingan
 type ActivityScore struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	CreatedAt      time.Time          `bson:"createdAt"` //kalo lebih dari seminggu auto hapus
-	PhoneNumber    string             `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
-	Enroll         MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
-	Sponsordata    int                `bson:"sponsordata,omitempty" json:"sponsordata,omitempty"`
-	Sponsor        int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
-	StravaKM       float32            `bson:"stravakm,omitempty" json:"stravakm,omitempty"`
-	Strava         int                `bson:"strava,omitempty" json:"strava,omitempty"` //perminggu dibagi 6KM dikali 100
-	IQresult       int                `bson:"iqresult,omitempty" json:"iqresult,omitempty"`
-	IQ             int                `bson:"iq,omitempty" json:"iq,omitempty"`
-	Pomokitsesi    int                `bson:"pomokitsesi,omitempty" json:"pomokitsesi,omitempty"`
-	Pomokit        int                `bson:"pomokit,omitempty" json:"pomokit,omitempty"`               //20 per cycle
-	MBC            float32            `bson:"mbc,omitempty" json:"mbc,omitempty"`                       //jumlah total mbc
-	RVN            float32            `bson:"rvn,omitempty" json:"rvn,omitempty"`                       //jumlah total rvn
-	BlockChain     int                `bson:"blockchain,omitempty" json:"blockchain,omitempty"`         // dibagi rata2 kelas dikali 100
-	Rupiah         int                `bson:"rupiah,omitempty" json:"rupiah,omitempty"`                 //total nilai rupiah yang disetorkan
-	QRIS           int                `bson:"qris,omitempty" json:"qris,omitempty"`                     // dibagi rata2 kelas dikali 100
-	Trackerdata    int                `bson:"trackerdata,omitempty" json:"trackerdata,omitempty"`       //jumlah total visitor
-	Tracker        float64            `bson:"tracker,omitempty" json:"tracker,omitempty"`               //rata2 10 unique visitor sehari 100
-	BukuKatalog    string             `bson:"bukukatalog,omitempty" json:"bukukatalog,omitempty"`       //url katalog buku
-	BukPed         int                `bson:"bukped,omitempty" json:"bukped,omitempty"`                 //upload 25;approve 50;resi 75;deposit 100
-	JurnalWeb      string             `bson:"jurnalweb,omitempty" json:"jurnalweb,omitempty"`           //Alamat web jurnal
-	Jurnal         int                `bson:"jurnal,omitempty" json:"jurnal,omitempty"`                 //score jurnal
-	GTMetrixResult string             `bson:"gtmetrixresult,omitempty" json:"gtmetrixresult,omitempty"` //detaul score gtmetrix
-	GTMetrix       int                `bson:"gtmetrix,omitempty" json:"gtmetrix,omitempty"`             //A 100;B 75;C 50;D 25; E 0
-	WebHookpush    int                `bson:"webhookpush,omitempty" json:"webhookpush,omitempty"`       // jumlah push ke webhook
-	WebHook        int                `bson:"webhook,omitempty" json:"webhook,omitempty"`               //maksimal 100 dari push github diambil dari seminggu terakhir
-	PresensiHari   int                `bson:"presensihari,omitempty" json:"presensihari,omitempty"`     //jumlah ari presensi
-	Presensi       int                `bson:"presensi,omitempty" json:"presensi,omitempty"`             //5*lengkap masuk dan pulang = 100
-	TotalScore     int                `bson:"total,omitempty" json:"total,omitempty"`
-	Approved       bool               `bson:"approved" json:"approved"`
-	Asesor         Userdomyikado      `bson:"asesor,omitempty" json:"asesor,omitempty"`
-	Validasi       int                `bson:"validasi,omitempty" json:"validasi,omitempty"` // rate bintang validasi
-	Komentar       string             `bson:"komentar,omitempty" json:"komentar,omitempty"` //komentar dari asesor
+	ID                  primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	CreatedAt           time.Time          `bson:"createdAt"` //kalo lebih dari seminggu auto hapus
+	PhoneNumber         string             `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
+	Enroll              MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
+	Sponsordata         int                `bson:"sponsordata,omitempty" json:"sponsordata,omitempty"`
+	Sponsor             int                `bson:"sponsor,omitempty" json:"sponsor,omitempty"` // lengkap 100, nomor 50, nama 50
+	StravaKM            float32            `bson:"stravakm,omitempty" json:"stravakm,omitempty"`
+	Strava              int                `bson:"strava,omitempty" json:"strava,omitempty"` //perminggu dibagi 6KM dikali 100
+	IQresult            int                `bson:"iqresult,omitempty" json:"iqresult,omitempty"`
+	IQ                  int                `bson:"iq,omitempty" json:"iq,omitempty"`
+	Pomokitsesi         int                `bson:"pomokitsesi,omitempty" json:"pomokitsesi,omitempty"`
+	Pomokit             int                `bson:"pomokit,omitempty" json:"pomokit,omitempty"`               //20 per cycle
+	MBC                 float32            `bson:"mbc,omitempty" json:"mbc,omitempty"`                       //jumlah total mbc
+	RVN                 float32            `bson:"rvn,omitempty" json:"rvn,omitempty"`                       //jumlah total rvn
+	BlockChain          int                `bson:"blockchain,omitempty" json:"blockchain,omitempty"`         // dibagi rata2 kelas dikali 100
+	Rupiah              int                `bson:"rupiah,omitempty" json:"rupiah,omitempty"`                 //total nilai rupiah yang disetorkan
+	QRIS                int                `bson:"qris,omitempty" json:"qris,omitempty"`                     // dibagi rata2 kelas dikali 100
+	BlockChainMBC       int                `json:"blockchainmbc" bson:"blockchainmbc"`                       // dibagi rata2 kelas dikali 100
+	BlockChainRavencoin int                `json:"blockchainrvc" bson:"blockchainrvc"`                       // dibagi rata2 kelas dikali 100
+	Trackerdata         int                `bson:"trackerdata,omitempty" json:"trackerdata,omitempty"`       //jumlah total visitor
+	Tracker             float64            `bson:"tracker,omitempty" json:"tracker,omitempty"`               //rata2 10 unique visitor sehari 100
+	BukuKatalog         string             `bson:"bukukatalog,omitempty" json:"bukukatalog,omitempty"`       //url katalog buku
+	BukPed              int                `bson:"bukped,omitempty" json:"bukped,omitempty"`                 //upload 25;approve 50;resi 75;deposit 100
+	JurnalWeb           string             `bson:"jurnalweb,omitempty" json:"jurnalweb,omitempty"`           //Alamat web jurnal
+	Jurnal              int                `bson:"jurnal,omitempty" json:"jurnal,omitempty"`                 //score jurnal
+	GTMetrixResult      string             `bson:"gtmetrixresult,omitempty" json:"gtmetrixresult,omitempty"` //detaul score gtmetrix
+	GTMetrix            int                `bson:"gtmetrix,omitempty" json:"gtmetrix,omitempty"`             //A 100;B 75;C 50;D 25; E 0
+	WebHookpush         int                `bson:"webhookpush,omitempty" json:"webhookpush,omitempty"`       // jumlah push ke webhook
+	WebHook             int                `bson:"webhook,omitempty" json:"webhook,omitempty"`               //maksimal 100 dari push github diambil dari seminggu terakhir
+	PresensiHari        int                `bson:"presensihari,omitempty" json:"presensihari,omitempty"`     //jumlah ari presensi
+	Presensi            int                `bson:"presensi,omitempty" json:"presensi,omitempty"`             //5*lengkap masuk dan pulang = 100
+	TotalScore          int                `bson:"total,omitempty" json:"total,omitempty"`
+	Approved            bool               `bson:"approved" json:"approved"`
+	Asesor              Userdomyikado      `bson:"asesor,omitempty" json:"asesor,omitempty"`
+	Validasi            int                `bson:"validasi,omitempty" json:"validasi,omitempty"` // rate bintang validasi
+	Komentar            string             `bson:"komentar,omitempty" json:"komentar,omitempty"` //komentar dari asesor
 }
 
 type Task struct {

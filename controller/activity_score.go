@@ -53,27 +53,46 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataPomokitScore, _ := GetPomokitScoreForUser(userID)
 	dataIQ, _ := GetAllDataIQScore(config.Mongoconn, userID)
 	dataGTMetrixScore, _ := GetGTMetrixScoreForUser(userID)
+	// crowndfunding
+	dataCrowdfundingPoints, _ := GetPaymentPoints(userID)
+
+	qrisPoints := 0
+	mbcPoints := 0
+	ravencoinPoints := 0
+
+	if dataCrowdfundingPoints != nil {
+		qrisPoints = int(dataCrowdfundingPoints.QRISPoints)
+		mbcPoints = int(dataCrowdfundingPoints.MBCPoints)
+		ravencoinPoints = int(dataCrowdfundingPoints.RavencoinPoints)
+	}
+
+	score.QRIS = qrisPoints
+	score.BlockChainMBC = mbcPoints
+	score.BlockChainRavencoin = ravencoinPoints
 
 	totalScore := HitungTotalScore(&score)
 
 	score = model.ActivityScore{
-		Sponsordata:    datasponsor.Sponsordata,
-		Sponsor:        datasponsor.Sponsor,
-		Trackerdata:    datatracker.Trackerdata,
-		Tracker:        datatracker.Tracker,
-		StravaKM:       datastravapoin.StravaKM,
-		Strava:         datastravapoin.Strava,
-		IQresult:       dataIQ.IQresult,
-		IQ:             dataIQ.IQ,
-		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
-		Pomokit:        dataPomokitScore.Pomokit,
-		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
-		GTMetrix:       dataGTMetrixScore.GTMetrix,
-		WebHookpush:    dataWebhook.WebHookpush,
-		WebHook:        dataWebhook.WebHook,
-		PresensiHari:   dataPresensi.PresensiHari,
-		Presensi:       dataPresensi.Presensi,
-		TotalScore:     totalScore,
+		Sponsordata:         datasponsor.Sponsordata,
+		Sponsor:             datasponsor.Sponsor,
+		Trackerdata:         datatracker.Trackerdata,
+		Tracker:             datatracker.Tracker,
+		StravaKM:            datastravapoin.StravaKM,
+		Strava:              datastravapoin.Strava,
+		IQresult:            dataIQ.IQresult,
+		IQ:                  dataIQ.IQ,
+		Pomokitsesi:         dataPomokitScore.Pomokitsesi,
+		Pomokit:             dataPomokitScore.Pomokit,
+		GTMetrixResult:      dataGTMetrixScore.GTMetrixResult,
+		GTMetrix:            dataGTMetrixScore.GTMetrix,
+		WebHookpush:         dataWebhook.WebHookpush,
+		WebHook:             dataWebhook.WebHook,
+		PresensiHari:        dataPresensi.PresensiHari,
+		Presensi:            dataPresensi.Presensi,
+		QRIS:                qrisPoints,
+		BlockChainMBC:       mbcPoints,
+		BlockChainRavencoin: ravencoinPoints,
+		TotalScore:          totalScore,
 	}
 
 	return score, nil
@@ -88,23 +107,42 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, userID)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
 	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(userID)
+	//crowdfunding
+	dataCrowdfundingPoints, _ := GetPaymentPoints(userID)
+
+	qrisPoints := 0
+	mbcPoints := 0
+	ravencoinPoints := 0
+
+	if dataCrowdfundingPoints != nil {
+		qrisPoints = int(dataCrowdfundingPoints.QRISPoints)
+		mbcPoints = int(dataCrowdfundingPoints.MBCPoints)
+		ravencoinPoints = int(dataCrowdfundingPoints.RavencoinPoints)
+	}
+
+	score.QRIS = qrisPoints
+	score.BlockChainMBC = mbcPoints
+	score.BlockChainRavencoin = ravencoinPoints
 
 	totalScore := HitungTotalScore(&score)
 
 	score = model.ActivityScore{
-		Trackerdata:    datatracker.Trackerdata,
-		Tracker:        datatracker.Tracker,
-		StravaKM:       datastravapoin.StravaKM,
-		Strava:         datastravapoin.Strava,
-		Pomokitsesi:    dataPomokitScore.Pomokitsesi,
-		Pomokit:        dataPomokitScore.Pomokit,
-		GTMetrixResult: dataGTMetrixScore.GTMetrixResult,
-		GTMetrix:       dataGTMetrixScore.GTMetrix,
-		PresensiHari:   dataPresensi.PresensiHari,
-		Presensi:       dataPresensi.Presensi,
-		WebHookpush:    dataWebhook.WebHookpush,
-		WebHook:        dataWebhook.WebHook,
-		TotalScore:     totalScore,
+		Trackerdata:         datatracker.Trackerdata,
+		Tracker:             datatracker.Tracker,
+		StravaKM:            datastravapoin.StravaKM,
+		Strava:              datastravapoin.Strava,
+		Pomokitsesi:         dataPomokitScore.Pomokitsesi,
+		Pomokit:             dataPomokitScore.Pomokit,
+		GTMetrixResult:      dataGTMetrixScore.GTMetrixResult,
+		GTMetrix:            dataGTMetrixScore.GTMetrix,
+		PresensiHari:        dataPresensi.PresensiHari,
+		Presensi:            dataPresensi.Presensi,
+		WebHookpush:         dataWebhook.WebHookpush,
+		WebHook:             dataWebhook.WebHook,
+		QRIS:                qrisPoints,
+		BlockChainMBC:       mbcPoints,
+		BlockChainRavencoin: ravencoinPoints,
+		TotalScore:          totalScore,
 	}
 
 	return score, nil
@@ -120,6 +158,8 @@ func HitungTotalScore(a *model.ActivityScore) int {
 	total += a.BlockChain
 	total += a.Rupiah
 	total += a.QRIS
+	total += a.BlockChainMBC
+	total += a.BlockChainRavencoin
 	total += int(a.Tracker)
 	total += a.BukPed
 	total += a.Jurnal
