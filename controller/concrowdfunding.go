@@ -3249,6 +3249,7 @@ func CalculatePaymentPoints() error {
 	return nil
 }
 
+// point semuanya
 // GetAllDataMicroBitcoinScore retrieves the MicroBitcoin (MBC) payments and calculates score
 func GetAllDataMicroBitcoinScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
 	var activityScore model.ActivityScore
@@ -3279,11 +3280,14 @@ func GetAllDataMicroBitcoinScore(db *mongo.Database, phoneNumber string) (model.
 	}
 
 	// Calculate blockchain score based on total MBC
-	// Simple scoring: divide by average MBC donation and multiply by 100, max 100 points
 	blockchainScore := calculateBlockchainScore(db, totalMBC, model.MicroBitcoin)
+
+	// Calculate MBC points - we'll use a similar approach as in PaymentPointsData
+	mbcPoints := calculateMBCPoints(db, totalMBC)
 
 	// Set the activity score values
 	activityScore.MBC = totalMBC
+	activityScore.MBCPoints = mbcPoints
 	activityScore.BlockChain = blockchainScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
@@ -3329,8 +3333,12 @@ func GetLastWeekDataMicroBitcoinScore(db *mongo.Database, phoneNumber string) (m
 	// Calculate blockchain score based on total MBC
 	blockchainScore := calculateBlockchainScore(db, totalMBC, model.MicroBitcoin)
 
+	// Calculate MBC points
+	mbcPoints := calculateMBCPoints(db, totalMBC)
+
 	// Set the activity score values
 	activityScore.MBC = totalMBC
+	activityScore.MBCPoints = mbcPoints
 	activityScore.BlockChain = blockchainScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
@@ -3367,8 +3375,12 @@ func GetAllDataRavencoinScore(db *mongo.Database, phoneNumber string) (model.Act
 		totalRVN += float32(payment.Amount)
 	}
 
+	// Calculate Ravencoin points
+	ravencoinPoints := calculateRavencoinPoints(db, totalRVN)
+
 	// Set the activity score values
 	activityScore.RVN = totalRVN
+	activityScore.RavencoinPoints = ravencoinPoints
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
@@ -3410,8 +3422,12 @@ func GetLastWeekDataRavencoinScore(db *mongo.Database, phoneNumber string) (mode
 		totalRVN += float32(payment.Amount)
 	}
 
+	// Calculate Ravencoin points
+	ravencoinPoints := calculateRavencoinPoints(db, totalRVN)
+
 	// Set the activity score values
 	activityScore.RVN = totalRVN
+	activityScore.RavencoinPoints = ravencoinPoints
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
@@ -3450,8 +3466,12 @@ func GetAllDataQRISScore(db *mongo.Database, phoneNumber string) (model.Activity
 	// Calculate QRIS score based on total amount
 	qrisScore := calculateQRISScore(db, totalRupiah)
 
+	// Calculate QRIS points
+	qrisPoints := calculateQRISPoints(db, totalRupiah)
+
 	// Set the activity score values
 	activityScore.Rupiah = totalRupiah
+	activityScore.QRISPoints = qrisPoints
 	activityScore.QRIS = qrisScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
@@ -3497,8 +3517,12 @@ func GetLastWeekDataQRISScore(db *mongo.Database, phoneNumber string) (model.Act
 	// Calculate QRIS score based on total amount
 	qrisScore := calculateQRISScore(db, totalRupiah)
 
+	// Calculate QRIS points
+	qrisPoints := calculateQRISPoints(db, totalRupiah)
+
 	// Set the activity score values
 	activityScore.Rupiah = totalRupiah
+	activityScore.QRISPoints = qrisPoints
 	activityScore.QRIS = qrisScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
@@ -3506,25 +3530,210 @@ func GetLastWeekDataQRISScore(db *mongo.Database, phoneNumber string) (model.Act
 	return activityScore, nil
 }
 
+// Helper function to calculate MBC points
+func calculateMBCPoints(db *mongo.Database, amount float32) float64 {
+	// Get average MBC amount
+	var avgAmount float64
+
+	// Aggregate to find average - using properly keyed fields
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"paymentMethod": model.MicroBitcoin,
+			"status":        "success",
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":       nil,
+			"avgAmount": bson.M{"$avg": "$amount"},
+		}}},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		avgAmount = 0.001 // Default average for MBC
+	}
+
+	// Calculate points: (user's amount / average amount) * 100
+	points := (float64(amount) / avgAmount) * 100
+
+	return points
+}
+
+// Helper function to calculate Ravencoin points
+func calculateRavencoinPoints(db *mongo.Database, amount float32) float64 {
+	// Get average Ravencoin amount
+	var avgAmount float64
+
+	// Aggregate to find average - using properly keyed fields
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"paymentMethod": model.Ravencoin,
+			"status":        "success",
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":       nil,
+			"avgAmount": bson.M{"$avg": "$amount"},
+		}}},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		avgAmount = 1 // Default average for Ravencoin
+	}
+
+	// Calculate points: (user's amount / average amount) * 100
+	points := (float64(amount) / avgAmount) * 100
+
+	return points
+}
+
+// Helper function to calculate QRIS points
+func calculateQRISPoints(db *mongo.Database, amount int) float64 {
+	// Get average QRIS payment amount
+	var avgAmount float64
+
+	// Aggregate to find average - using properly keyed fields
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"paymentMethod": model.QRIS,
+			"status":        "success",
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":       nil,
+			"avgAmount": bson.M{"$avg": "$amount"},
+		}}},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		avgAmount = 10000 // Default average QRIS amount (IDR)
+	}
+
+	// Calculate points: (user's amount / average amount) * 100
+	points := (float64(amount) / avgAmount) * 100
+
+	return points
+}
+
+// Helper function to calculate QRIS score based on payment amount
+func calculateQRISScore(db *mongo.Database, amount int) int {
+	// Get average QRIS payment amount
+	var avgAmount float64
+
+	// Aggregate to find average - using properly keyed fields
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"paymentMethod": model.QRIS,
+			"status":        "success",
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":       nil,
+			"avgAmount": bson.M{"$avg": "$amount"},
+		}}},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		avgAmount = 10000 // Default average QRIS amount (IDR)
+	}
+
+	// Calculate score: (user's amount / average amount) * 100, max 100
+	score := int((float64(amount) / avgAmount) * 100)
+
+	// Cap score at 100
+	if score > 100 {
+		score = 100
+	}
+
+	return score
+}
+
 // Helper function to calculate blockchain score based on payment amount
 func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod model.PaymentMethod) int {
 	// Get average payment amount for this payment method
 	var avgAmount float64
 
-	// Aggregate to find average
+	// Aggregate to find average - using properly keyed fields
 	pipeline := mongo.Pipeline{
-		bson.D{
-			{Key: "$match", Value: bson.M{
-				"paymentMethod": paymentMethod,
-				"status":        "success",
-			}},
-		},
-		bson.D{
-			{Key: "$group", Value: bson.M{
-				"_id":       nil,
-				"avgAmount": bson.M{"$avg": "$amount"},
-			}},
-		},
+		{{Key: "$match", Value: bson.M{
+			"paymentMethod": paymentMethod,
+			"status":        "success",
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":       nil,
+			"avgAmount": bson.M{"$avg": "$amount"},
+		}}},
 	}
 
 	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
@@ -3552,61 +3761,6 @@ func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod 
 		} else {
 			avgAmount = 1 // Default average for other methods
 		}
-	}
-
-	// Calculate score: (user's amount / average amount) * 100, max 100
-	score := int((float64(amount) / avgAmount) * 100)
-
-	// Cap score at 100
-	if score > 100 {
-		score = 100
-	}
-
-	return score
-}
-
-// Helper function to calculate QRIS score based on payment amount
-func calculateQRISScore(db *mongo.Database, amount int) int {
-	// Get average QRIS payment amount
-	var avgAmount float64
-
-	// Aggregate to find average
-	pipeline := mongo.Pipeline{
-		bson.D{
-			{Key: "$match", Value: bson.M{
-				"paymentMethod": model.QRIS, // Use model.QRIS directly
-				"status":        "success",
-			}},
-		},
-		bson.D{
-			{Key: "$group", Value: bson.M{
-				"_id":       nil,
-				"avgAmount": bson.M{"$avg": "$amount"},
-			}},
-		},
-	}
-
-	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
-	if err != nil {
-		return 0
-	}
-	defer cursor.Close(context.Background())
-
-	// Extract result
-	var result struct {
-		AvgAmount float64 `bson:"avgAmount"`
-	}
-
-	if cursor.Next(context.Background()) {
-		if err := cursor.Decode(&result); err != nil {
-			return 0
-		}
-		avgAmount = result.AvgAmount
-	}
-
-	// If no average found or it's zero, use a default value
-	if avgAmount <= 0 {
-		avgAmount = 10000 // Default average QRIS amount (IDR)
 	}
 
 	// Calculate score: (user's amount / average amount) * 100, max 100
