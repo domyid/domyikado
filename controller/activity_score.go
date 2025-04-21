@@ -53,6 +53,9 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataPomokitScore, _ := GetPomokitScoreForUser(userID)
 	dataIQ, _ := GetAllDataIQScore(config.Mongoconn, userID)
 	dataGTMetrixScore, _ := GetGTMetrixScoreForUser(userID)
+	dataMicroBitcoin, _ := GetAllDataMicroBitcoinScore(config.Mongoconn, userID)
+	dataRavencoin, _ := GetAllDataRavencoinScore(config.Mongoconn, userID)
+	dataQRIS, _ := GetAllDataQRISScore(config.Mongoconn, userID)
 
 	totalScore := HitungTotalScore(&score)
 
@@ -73,6 +76,11 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 		WebHook:        dataWebhook.WebHook,
 		PresensiHari:   dataPresensi.PresensiHari,
 		Presensi:       dataPresensi.Presensi,
+		MBC:            dataMicroBitcoin.MBC,
+		BlockChain:     dataMicroBitcoin.BlockChain,
+		RVN:            dataRavencoin.RVN,
+		Rupiah:         dataQRIS.Rupiah,
+		QRIS:           dataQRIS.QRIS,
 		TotalScore:     totalScore,
 	}
 
@@ -88,6 +96,9 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, userID)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
 	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(userID)
+	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
+	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
+	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
 
 	totalScore := HitungTotalScore(&score)
 
@@ -104,6 +115,11 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 		Presensi:       dataPresensi.Presensi,
 		WebHookpush:    dataWebhook.WebHookpush,
 		WebHook:        dataWebhook.WebHook,
+		MBC:            dataMicroBitcoin.MBC,
+		BlockChain:     dataMicroBitcoin.BlockChain,
+		RVN:            dataRavencoin.RVN,
+		Rupiah:         dataQRIS.Rupiah,
+		QRIS:           dataQRIS.QRIS,
 		TotalScore:     totalScore,
 	}
 

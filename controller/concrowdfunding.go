@@ -3248,3 +3248,374 @@ func CalculatePaymentPoints() error {
 	log.Printf("Successfully updated payment points for %d users", len(userPaymentsMap))
 	return nil
 }
+
+// GetAllDataMicroBitcoinScore retrieves the MicroBitcoin (MBC) payments and calculates score
+func GetAllDataMicroBitcoinScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Query successful MicroBitcoin payments for this user
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.MicroBitcoin,
+		"status":        "success",
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalMBC float32 = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return activityScore, err
+	}
+
+	// Sum up the total MBC amount
+	for _, payment := range payments {
+		totalMBC += float32(payment.Amount)
+	}
+
+	// Calculate blockchain score based on total MBC
+	// Simple scoring: divide by average MBC donation and multiply by 100, max 100 points
+	blockchainScore := calculateBlockchainScore(db, totalMBC, model.MicroBitcoin)
+
+	// Set the activity score values
+	activityScore.MBC = totalMBC
+	activityScore.BlockChain = blockchainScore
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return activityScore, nil
+}
+
+// GetLastWeekDataMicroBitcoinScore gets MBC data for the last week only
+func GetLastWeekDataMicroBitcoinScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Calculate the date one week ago
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query successful MicroBitcoin payments for this user from the last week
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.MicroBitcoin,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalMBC float32 = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return activityScore, err
+	}
+
+	// Sum up the total MBC amount
+	for _, payment := range payments {
+		totalMBC += float32(payment.Amount)
+	}
+
+	// Calculate blockchain score based on total MBC
+	blockchainScore := calculateBlockchainScore(db, totalMBC, model.MicroBitcoin)
+
+	// Set the activity score values
+	activityScore.MBC = totalMBC
+	activityScore.BlockChain = blockchainScore
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return activityScore, nil
+}
+
+// GetAllDataRavencoinScore retrieves the Ravencoin (RVN) payments and calculates score
+func GetAllDataRavencoinScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Query successful Ravencoin payments for this user
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.Ravencoin,
+		"status":        "success",
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalRVN float32 = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return activityScore, err
+	}
+
+	// Sum up the total RVN amount
+	for _, payment := range payments {
+		totalRVN += float32(payment.Amount)
+	}
+
+	// Set the activity score values
+	activityScore.RVN = totalRVN
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return activityScore, nil
+}
+
+// GetLastWeekDataRavencoinScore gets RVN data for the last week only
+func GetLastWeekDataRavencoinScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Calculate the date one week ago
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query successful Ravencoin payments for this user from the last week
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.Ravencoin,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalRVN float32 = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return activityScore, err
+	}
+
+	// Sum up the total RVN amount
+	for _, payment := range payments {
+		totalRVN += float32(payment.Amount)
+	}
+
+	// Set the activity score values
+	activityScore.RVN = totalRVN
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return activityScore, nil
+}
+
+// GetAllDataQRISScore retrieves the QRIS payments and calculates score
+func GetAllDataQRISScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Query successful QRIS payments for this user
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.QRIS,
+		"status":        "success",
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalRupiah int = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return activityScore, err
+	}
+
+	// Sum up the total QRIS amount
+	for _, payment := range payments {
+		totalRupiah += int(payment.Amount)
+	}
+
+	// Calculate QRIS score based on total amount
+	qrisScore := calculateQRISScore(db, totalRupiah)
+
+	// Set the activity score values
+	activityScore.Rupiah = totalRupiah
+	activityScore.QRIS = qrisScore
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return activityScore, nil
+}
+
+// GetLastWeekDataQRISScore gets QRIS data for the last week only
+func GetLastWeekDataQRISScore(db *mongo.Database, phoneNumber string) (model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Calculate the date one week ago
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query successful QRIS payments for this user from the last week
+	filter := bson.M{
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.QRIS,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalRupiah int = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return activityScore, err
+	}
+
+	// Sum up the total QRIS amount
+	for _, payment := range payments {
+		totalRupiah += int(payment.Amount)
+	}
+
+	// Calculate QRIS score based on total amount
+	qrisScore := calculateQRISScore(db, totalRupiah)
+
+	// Set the activity score values
+	activityScore.Rupiah = totalRupiah
+	activityScore.QRIS = qrisScore
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return activityScore, nil
+}
+
+// Helper function to calculate blockchain score based on payment amount
+func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod model.PaymentMethod) int {
+	// Get average payment amount for this payment method
+	var avgAmount float64
+
+	// Aggregate to find average
+	pipeline := mongo.Pipeline{
+		bson.D{
+			{Key: "$match", Value: bson.M{
+				"paymentMethod": paymentMethod,
+				"status":        "success",
+			}},
+		},
+		bson.D{
+			{Key: "$group", Value: bson.M{
+				"_id":       nil,
+				"avgAmount": bson.M{"$avg": "$amount"},
+			}},
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		if paymentMethod == model.MicroBitcoin {
+			avgAmount = 0.001 // Default average for MBC
+		} else {
+			avgAmount = 1 // Default average for other methods
+		}
+	}
+
+	// Calculate score: (user's amount / average amount) * 100, max 100
+	score := int((float64(amount) / avgAmount) * 100)
+
+	// Cap score at 100
+	if score > 100 {
+		score = 100
+	}
+
+	return score
+}
+
+// Helper function to calculate QRIS score based on payment amount
+func calculateQRISScore(db *mongo.Database, amount int) int {
+	// Get average QRIS payment amount
+	var avgAmount float64
+
+	// Aggregate to find average
+	pipeline := mongo.Pipeline{
+		bson.D{
+			{Key: "$match", Value: bson.M{
+				"paymentMethod": model.QRIS, // Use model.QRIS directly
+				"status":        "success",
+			}},
+		},
+		bson.D{
+			{Key: "$group", Value: bson.M{
+				"_id":       nil,
+				"avgAmount": bson.M{"$avg": "$amount"},
+			}},
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		avgAmount = 10000 // Default average QRIS amount (IDR)
+	}
+
+	// Calculate score: (user's amount / average amount) * 100, max 100
+	score := int((float64(amount) / avgAmount) * 100)
+
+	// Cap score at 100
+	if score > 100 {
+		score = 100
+	}
+
+	return score
+}
