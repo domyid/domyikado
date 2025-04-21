@@ -41,7 +41,7 @@ func ReportBimbinganToOrangTua(db *mongo.Database) (msg string, perwakilanphone 
 	return msg, docuser.SponsorPhoneNumber, nil
 }
 
-func GetRiwayatBimbinganPerMinggu(db *mongo.Database, phonenumber string) (string, error) {
+func RiwayatBimbinganPerMinggu(db *mongo.Database, phonenumber string) (string, error) {
 	// Ambil semua bimbingan berdasarkan nomor telepon
 	filter := bson.M{"phonenumber": phonenumber}
 	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](db, "bimbingan", filter)
