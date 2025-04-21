@@ -227,3 +227,10 @@ func LaporanKeOrangTua(w http.ResponseWriter, r *http.Request) {
 		Response: "Berhasil rekap data",
 	})
 }
+
+func LaporanRiwayatBimbinganPerMinggu(w http.ResponseWriter, r *http.Request) {
+	report.GetRiwayatBimbinganPerMinggu(config.Mongoconn, "6282117252716")
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: "Berhasil kirim Riwayat bimbingan data",
+	})
+}
