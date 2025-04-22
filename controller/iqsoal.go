@@ -19,6 +19,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
@@ -165,10 +166,10 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cari skor IQ berdasarkan `name` di koleksi `iqscore`
+	// Cari skor IQ berdasarkan `name` di koleksi `iqscore` dengan pengurutan berdasarkan id
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	var iqScore model.IqScore
-	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": user.Name}).Decode(&iqScore)
+	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": user.Name}, options.FindOne().SetSort(bson.M{"id": 1})).Decode(&iqScore)
 
 	var userScore, userIQ string
 
@@ -180,7 +181,7 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 		// Jika tidak ditemukan, cek `iqscoring`
 		iqScoringCollection := config.Mongoconn.Collection("iqscoring")
 		var iqScoring model.IqScoring
-		err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": userScore}).Decode(&iqScoring)
+		err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": userScore}, options.FindOne().SetSort(bson.M{"id": 1})).Decode(&iqScoring)
 
 		if err == nil {
 			userIQ = iqScoring.IQ
@@ -246,9 +247,9 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		userAnswer.Name = docuser.Name
 	}
 
-	// Ambil Jawaban Benar dari MongoDB
+	// Ambil Jawaban Benar dari MongoDB dengan pengurutan berdasarkan id
 	collection := config.Mongoconn.Collection("iqquestion")
-	cursor, err := collection.Find(context.TODO(), bson.M{})
+	cursor, err := collection.Find(context.TODO(), bson.M{}, options.Find().SetSort(bson.M{"id": 1})) // Mengurutkan berdasarkan ID
 	if err != nil {
 		http.Error(w, `{"error": "Gagal mengambil data dari database"}`, http.StatusInternalServerError)
 		return
@@ -271,10 +272,10 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Ambil IQ Berdasarkan Skor dari koleksi `iqscoring`
+	// Ambil IQ Berdasarkan Skor dari koleksi `iqscoring` dengan pengurutan berdasarkan id
 	iqScoringCollection := config.Mongoconn.Collection("iqscoring")
 	var iqScoring model.IqScoring
-	err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}).Decode(&iqScoring)
+	err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}, options.FindOne().SetSort(bson.M{"id": 1})).Decode(&iqScoring)
 	if err != nil {
 		http.Error(w, `{"error": "Gagal mendapatkan data IQ dari database"}`, http.StatusInternalServerError)
 		return
