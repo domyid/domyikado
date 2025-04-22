@@ -84,6 +84,12 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.Strava = score.Strava
 	bimbingan.IQresult = score.IQresult
 	bimbingan.IQ = score.IQ
+	bimbingan.MBC = score.MBC
+	bimbingan.MBCPoints = score.MBCPoints
+	bimbingan.RVN = score.RVN
+	bimbingan.RavencoinPoints = score.RavencoinPoints
+	bimbingan.QRIS = score.QRIS
+	bimbingan.QRISPoints = score.QRISPoints
 	bimbingan.Pomokitsesi = score.Pomokitsesi
 	bimbingan.Pomokit = score.Pomokit
 	bimbingan.GTMetrixResult = score.GTMetrixResult
