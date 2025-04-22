@@ -306,12 +306,12 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetDataBimbingan(w, r)
 	case method == "POST" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.ReplaceDataBimbingan(w, r)
-	case method == "GET" && path == "/refresh/fororangtua":
-		controller.ForOrangTua(w, r)
-	case method == "GET" && path == "/refresh/laporankeorangtua":
-		controller.LaporanKeOrangTua(w, r)
-	case method == "GET" && path == "/refresh/laporan/riwayat/bimbingan/per/week":
-		controller.LaporanRiwayatBimbinganPerMinggu(w, r)
+	// case method == "GET" && path == "/refresh/fororangtua":
+	// 	controller.ForOrangTua(w, r)
+	// case method == "GET" && path == "/refresh/laporankeorangtua":
+	// 	controller.LaporanKeOrangTua(w, r)
+	// case method == "GET" && path == "/refresh/laporan/riwayat/bimbingan/per/week":
+	// 	controller.LaporanRiwayatBimbinganPerMinggu(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
