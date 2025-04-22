@@ -21,55 +21,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// Struct SoalIQ sesuai dengan koleksi iqquestion di db MongoDB
-type SoalIQ struct {
-	ID        string  `json:"id" bson:"id"`
-	Question  string  `json:"question" bson:"question"`
-	Image     string  `json:"image" bson:"image"`
-	AnswerKey *string `json:"answer_key,omitempty" bson:"answer_key,omitempty"` // Pakai pointer agar bisa nil
-	CreatedAt string  `json:"created_at" bson:"created_at"`
-	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
-	DeletedAt *string `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
-}
-
-// Struct untuk menyimpan skor referensi dari iqscoring
-type IqScoring struct {
-	ID        string  `json:"id" bson:"id"`
-	Score     string  `json:"score" bson:"score"`
-	IQ        string  `json:"iq" bson:"iq"`
-	CreatedAt string  `json:"created_at" bson:"created_at"`
-	UpdatedAt *string `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
-}
-
-// Struct untuk menyimpan data gabungan User + Score IQ
-type UserWithIqScore struct {
-	ID          primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
-	Name        string             `json:"name,omitempty"`
-	PhoneNumber string             `json:"phonenumber,omitempty"`
-	Email       string             `json:"email,omitempty"`
-	Poin        float64            `json:"poin,omitempty"`
-	Score       string             `json:"score,omitempty"`
-	IQ          string             `json:"iq,omitempty"`
-	CreatedAt   string             `json:"created_at,omitempty"`
-}
-
-// Struct untuk menyimpan hasil tes pengguna ke iqscore
-type IqScore struct {
-	ID          primitive.ObjectID `json:"id,omitempty" bson:"id,omitempty"`
-	Name        string             `json:"name,omitempty" bson:"name,omitempty"`
-	PhoneNumber string             `json:"phonenumber,omitempty" bson:"phonenumber,omitempty"`
-	Score       string             `json:"score" bson:"score"`
-	IQ          string             `json:"iq" bson:"iq"`
-	WaGroupID   string             `bson:"wagroupid"`
-	CreatedAt   string             `json:"created_at" bson:"created_at"`
-	UpdatedAt   *time.Time         `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
-}
-
-type UserAnswer struct {
-	Name    string   `json:"name"`
-	Answers []string `json:"answers"` // Contoh: ["4", "2", "3", "TIDAK"]
-}
-
 // GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
 func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
 	// Mendapatkan ID dari URL
@@ -85,7 +36,7 @@ func GetOneIqQuestion(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	var iqQuestion SoalIQ
+	var iqQuestion model.SoalIQ
 	err := config.Mongoconn.Collection("iqquestion").FindOne(context.Background(), filter).Decode(&iqQuestion)
 	if err != nil {
 		log.Printf("Error querying IQ question with ID %s: %v", id, err)
@@ -112,7 +63,7 @@ func GetIqScoring(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.Background())
 
-	var results []IqScoring
+	var results []model.IqScoring
 	if err = cursor.All(context.Background(), &results); err != nil {
 		log.Println("Gagal decode data:", err)
 		http.Error(w, "Gagal memproses data", http.StatusInternalServerError)
@@ -216,7 +167,7 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 
 	// Cari skor IQ berdasarkan `name` di koleksi `iqscore`
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
-	var iqScore IqScore
+	var iqScore model.IqScore
 	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": user.Name}).Decode(&iqScore)
 
 	var userScore, userIQ string
@@ -228,7 +179,7 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 	} else {
 		// Jika tidak ditemukan, cek `iqscoring`
 		iqScoringCollection := config.Mongoconn.Collection("iqscoring")
-		var iqScoring IqScoring
+		var iqScoring model.IqScoring
 		err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": userScore}).Decode(&iqScoring)
 
 		if err == nil {
@@ -240,7 +191,7 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Gabungkan data user dan skor IQ dalam satu response JSON
-	response := UserWithIqScore{
+	response := model.UserWithIqScore{
 		ID:          user.ID,
 		Name:        user.Name,
 		PhoneNumber: user.PhoneNumber,
@@ -283,7 +234,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Decode JSON Request dari body
-	var userAnswer UserAnswer
+	var userAnswer model.UserAnswer
 	err = json.NewDecoder(r.Body).Decode(&userAnswer)
 	if err != nil {
 		http.Error(w, `{"error": "Gagal membaca data"}`, http.StatusBadRequest)
@@ -304,7 +255,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.TODO())
 
-	var correctAnswers []SoalIQ
+	var correctAnswers []model.SoalIQ
 	if err = cursor.All(context.TODO(), &correctAnswers); err != nil {
 		http.Error(w, `{"error": "Gagal membaca jawaban dari database"}`, http.StatusInternalServerError)
 		return
@@ -322,7 +273,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 
 	// Ambil IQ Berdasarkan Skor dari koleksi `iqscoring`
 	iqScoringCollection := config.Mongoconn.Collection("iqscoring")
-	var iqScoring IqScoring
+	var iqScoring model.IqScoring
 	err = iqScoringCollection.FindOne(context.TODO(), bson.M{"score": fmt.Sprintf("%d", correctCount)}).Decode(&iqScoring)
 	if err != nil {
 		http.Error(w, `{"error": "Gagal mendapatkan data IQ dari database"}`, http.StatusInternalServerError)
@@ -344,7 +295,7 @@ func PostAnswer(w http.ResponseWriter, r *http.Request) {
 
 	// Simpan Hasil ke MongoDB
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
-	newIqScore := IqScore{
+	newIqScore := model.IqScore{
 		ID:          primitive.NewObjectID(),
 		Name:        userAnswer.Name,
 		PhoneNumber: docuser.PhoneNumber,
