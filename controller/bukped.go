@@ -22,14 +22,12 @@ var (
     tokenCacheMutex sync.RWMutex
 )
 
-// Fungsi untuk menyimpan token
 func StoreToken(phoneNumber, token string) {
     tokenCacheMutex.Lock()
     defer tokenCacheMutex.Unlock()
     tokenCache[phoneNumber] = token
 }
 
-// Fungsi untuk mengambil token
 func GetCachedToken(phoneNumber string) string {
     tokenCacheMutex.RLock()
     defer tokenCacheMutex.RUnlock()
@@ -48,19 +46,16 @@ func GetBukpedMemberScoreForUser(phoneNumber string, token string) (int, string,
         return 0, "", nil, fmt.Errorf("Config Not Found: %v", err)
     }
     
-    // Pastikan URL BukpedAPI ada dalam konfigurasi
     if conf.DataMemberBukped == "" {
         return 0, "", nil, errors.New("Bukped API URL not configured")
     }
     
-    // HTTP Client request ke API Bukped
     client := &http.Client{Timeout: 30 * time.Second}
     req, err := http.NewRequest("GET", conf.DataMemberBukped, nil)
     if err != nil {
         return 0, "", nil, fmt.Errorf("failed to create request: %v", err)
     }
     
-    // Gunakan token yang diberikan
     if token != "" {
         req.Header.Set("login", token)
     }
@@ -79,18 +74,15 @@ func GetBukpedMemberScoreForUser(phoneNumber string, token string) (int, string,
         return 0, "", nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
     }
     
-    // Baca dan parse response
     body, err := io.ReadAll(resp.Body)
     if err != nil {
         return 0, "", nil, fmt.Errorf("failed to read API response: %v", err)
     }
 
-    // Parse JSON data ke dalam slice BukpedBook
     if err := json.Unmarshal(body, &bukpedBooks); err != nil {
         return 0, "", nil, fmt.Errorf("failed to parse Bukupedia data: %v", err)
     }
 
-    // Look for user's books
     var userBooks []model.BukpedBook
     var catalogURL string
     var bukpedScore int
@@ -99,16 +91,13 @@ func GetBukpedMemberScoreForUser(phoneNumber string, token string) (int, string,
     for _, book := range bukpedBooks {
         var isUserInvolved bool
         
-        // Check if user is the owner
         if book.Owner.PhoneNumber == phoneNumber {
             isUserInvolved = true
-            // Set catalog URL if not set yet
             if catalogURL == "" {
                 catalogURL = book.PathKatalog
             }
         }
 
-        // Check if user is a member
         if !isUserInvolved {
             for _, member := range book.Members {
                 if member.PhoneNumber == phoneNumber {
@@ -122,25 +111,20 @@ func GetBukpedMemberScoreForUser(phoneNumber string, token string) (int, string,
             }
         }
         
-        // If user is involved with this book
         if isUserInvolved {
             found = true
             userBooks = append(userBooks, book)
             
-            // Base score for having a book: 25 points
             bukpedScore += 25
             
-            // Additional 25 points if book is approved
             if book.IsApproved {
                 bukpedScore += 25
             }
             
-            // Additional 25 points if book has ISBN
             if book.ISBN != "" {
                 bukpedScore += 25
             }
             
-            // Additional 25 points if book has NoResiISBN
             if book.NoResiISBN != "" {
                 bukpedScore += 25
             }
@@ -159,7 +143,6 @@ func GetLastWeekBukpedMemberScoreForUser(phoneNumber string, token string) (int,
 }
 
 func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
-    // Validasi token
     payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
     if err != nil {
         at.WriteJSON(w, http.StatusForbidden, model.Response{
@@ -170,13 +153,12 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
         return
     }
     
-    // Test phone number from query param (optional)
+
     phoneNumber := r.URL.Query().Get("phonenumber")
     if phoneNumber == "" {
-        phoneNumber = payload.Id // Default to authenticated user
+        phoneNumber = payload.Id 
     }
     
-    // Get Bukped score data dengan meneruskan token dari request asli
     bukpedScore, catalogURL, userBooks, err := GetBukpedMemberScoreForUser(phoneNumber, at.GetLoginFromHeader(r))
     if err != nil {
         at.WriteJSON(w, http.StatusInternalServerError, model.Response{
@@ -187,7 +169,6 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
         return
     }
     
-    // Count book statistics
     totalBooks := len(userBooks)
     var booksWithISBN, booksWithResiISBN, approvedBooks int
     var isOwner bool
@@ -210,7 +191,6 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
         }
     }
     
-    // Prepare response with detailed information
     response := struct {
         PhoneNumber  string `json:"phone_number"`
         BukpedScore  int    `json:"bukped_score"`
@@ -238,13 +218,11 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
         Books:       userBooks,
     }
     
-    // Determine score breakdown
     response.ScoreDetails.HasBook = totalBooks > 0
     response.ScoreDetails.IsApproved = approvedBooks > 0
     response.ScoreDetails.HasISBN = booksWithISBN > 0
     response.ScoreDetails.HasResiISBN = booksWithResiISBN > 0
     
-    // Book details
     response.BookDetails.BooksWithISBN = booksWithISBN
     response.BookDetails.BooksWithResiISBN = booksWithResiISBN
     response.BookDetails.ApprovedBooks = approvedBooks
@@ -257,13 +235,21 @@ func GetBukpedScoreForUser(phoneNumber string) (model.ActivityScore, error) {
 
     token := GetCachedToken(phoneNumber)
     
-    bukpedScore, catalogURL, userBooks, err := GetBukpedMemberScoreForUser(phoneNumber, token)
+    bukpedScore, _, userBooks, err := GetBukpedMemberScoreForUser(phoneNumber, token)
     if err != nil {
         return score, fmt.Errorf("gagal mendapatkan data Bukped: %v", err)
     }
     
     score.BukPed = bukpedScore
-    score.BukuKatalog = catalogURL
+    
+    catalogCount := 0
+    for _, book := range userBooks {
+        if book.PathKatalog != "" {
+            catalogCount++
+        }
+    }
+    
+    score.BukuKatalog = fmt.Sprintf("%d", catalogCount)
     
     if len(userBooks) > 0 {
         var hasISBN, hasResiISBN, isApproved bool
@@ -279,17 +265,12 @@ func GetBukpedScoreForUser(phoneNumber string) (model.ActivityScore, error) {
                 isApproved = true
             }
         }
-        
-        // Ini bisa digunakan untuk memberikan info tambahan tentang status buku
-        // yang bisa diakses dari kode lain jika diperlukan
+
         if hasISBN {
-            // Optional: Tambahkan data tambahan jika diperlukan
         }
         if hasResiISBN {
-            // Optional: Tambahkan data tambahan jika diperlukan
         }
         if isApproved {
-            // Optional: Tambahkan data tambahan jika diperlukan
         }
     }
     
