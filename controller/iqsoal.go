@@ -19,6 +19,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // GetOneIqQuestion retrieves a single IQ question from the MongoDB collection by ID
@@ -109,20 +110,35 @@ func HandleGetAllDataIQScore(w http.ResponseWriter, r *http.Request) {
 func GetAllDataIQScore(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
-	// Ambil data IQ Score berdasarkan nomor telepon
-	iqDoc, err := atdb.GetOneDoc[model.UserWithIqScore](db, "iqscore", bson.M{"phonenumber": phonenumber})
+	// Ambil data IQ Score berdasarkan nomor telepon dan urutkan berdasarkan created_at (terlama)
+	filter := bson.M{"phonenumber": phonenumber}
+	sort := bson.M{"created_at": 1} // Sort by created_at in ascending order (terlama)
+
+	// Ambil data pertama (terlama)
+	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter, options.Find().SetSort(sort).SetLimit(1))
 	if err != nil {
 		return activityscore, err
 	}
+	defer cursor.Close(context.TODO())
 
-	// Konversi score dan iq dari string ke int
-	scoreInt, _ := strconv.Atoi(iqDoc.Score)
-	iqInt, _ := strconv.Atoi(iqDoc.IQ)
+	// Pastikan data ditemukan
+	if cursor.Next(context.TODO()) {
+		var iqDoc model.UserWithIqScore
+		if err := cursor.Decode(&iqDoc); err != nil {
+			return activityscore, err
+		}
 
-	activityscore.IQ = iqInt          // Total skor tes IQ
-	activityscore.IQresult = scoreInt // Nilai IQ
-	activityscore.PhoneNumber = phonenumber
-	activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
+		// Konversi score dan iq dari string ke int
+		scoreInt, _ := strconv.Atoi(iqDoc.Score)
+		iqInt, _ := strconv.Atoi(iqDoc.IQ)
+
+		activityscore.IQ = iqInt          // Total skor tes IQ
+		activityscore.IQresult = scoreInt // Nilai IQ
+		activityscore.PhoneNumber = phonenumber
+		activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
+	} else {
+		return activityscore, fmt.Errorf("data IQ tidak ditemukan untuk nomor telepon %s", phonenumber)
+	}
 
 	return activityscore, nil
 }
