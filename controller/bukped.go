@@ -10,229 +10,191 @@ import (
 	"time"
 
 	"github.com/gocroot/config"
+	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-// BookInfo represents a book in the Bukupedia response
-type BookInfo struct {
-	ID          string               `json:"_id" bson:"_id"`
-	Secret      string               `json:"secret" bson:"secret"`
-	Name        string               `json:"name" bson:"name"`
-	Title       string               `json:"title" bson:"title"`
-	Description string               `json:"description" bson:"description"`
-	Owner       model.Userdomyikado  `json:"owner" bson:"owner"`
-	Editor      model.Userdomyikado  `json:"editor" bson:"editor"`
-	Manager     model.Userdomyikado  `json:"manager" bson:"manager"`
-	IsApproved  bool                 `json:"isapproved" bson:"isapproved"`
-	Members     []model.Userdomyikado `json:"members" bson:"members"`
-	CoverBuku   string               `json:"coverbuku" bson:"coverbuku"`
-	PathKatalog string               `json:"pathkatalog" bson:"pathkatalog"`
-	ISBN        string               `json:"isbn" bson:"isbn"`
-	Terbit      string               `json:"terbit" bson:"terbit"`
-	JumlahHalaman string             `json:"jumlahhalaman" bson:"jumlahhalaman"`
-}
-
-// getBukupediaData fetches book data from API
-func getBukupediaData() ([]BookInfo, error) {
-	// Get configuration
+func GetBukpedMemberScoreForUser(phoneNumber string) (model.ActivityScore, error) {
+	var score model.ActivityScore
+	
 	var conf model.Config
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err := config.Mongoconn.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
 	if err != nil {
-		return nil, errors.New("Config Not Found: " + err.Error())
+		return score, fmt.Errorf("Config Not Found: %v", err)
 	}
 	
-	// HTTP Client request to Bukupedia API
+	// Pastikan URL BukpedAPI ada dalam konfigurasi
+	if conf.DataMemberBukped == "" {
+		return score, errors.New("Bukped API URL not configured")
+	}
+	
+	// HTTP Client request ke API Bukped
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(conf.DataMemberBukped)
 	if err != nil {
-		return nil, errors.New("API Connection Failed: " + err.Error())
+		return score, fmt.Errorf("failed to connect to Bukped API: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API Returned Status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return score, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 	
-	// Process response body
+	// Baca dan parse response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.New("Failed to Read Response: " + err.Error())
+		return score, fmt.Errorf("failed to read API response: %v", err)
 	}
-	
-	// Decode response into BookInfo array
-	var bukupediaBooks []BookInfo
-	err = json.Unmarshal(body, &bukupediaBooks)
-	if err != nil {
-		return nil, fmt.Errorf("Invalid API Response: %v", err)
-	}
-	
-	return bukupediaBooks, nil
-}
 
-// Calculate points based on book participation
-func calculateBukupediaPoints(books []BookInfo, phoneNumber string) int {
-	ownerCount := 0
-	memberCount := 0
-	approvedCount := 0
-	
-	for _, book := range books {
-		// Check if approved
-		if book.IsApproved {
-			approvedCount++
+	// Parse JSON data
+	var bukpedData []map[string]interface{}
+	if err := json.Unmarshal(body, &bukpedData); err != nil {
+		return score, fmt.Errorf("failed to parse Bukupedia data: %v", err)
+	}
+
+	// Look for user's data
+	var bukpedScore int
+	var catalogURL string
+	var found bool
+
+	for _, data := range bukpedData {
+		// Check owner data
+		owner, ownerExists := data["owner"].(map[string]interface{})
+		if ownerExists && owner["phonenumber"] == phoneNumber {
+			found = true
+			catalogURL, _ = data["pathkatalog"].(string)
+			bukpedScore = calculateBukpedScore(data)
+			break
 		}
-		
-		// Check if owner
-		if book.Owner.PhoneNumber == phoneNumber {
-			ownerCount++
-		} else {
-			// Check if member
-			for _, member := range book.Members {
-				if member.PhoneNumber == phoneNumber {
-					memberCount++
+
+		// Check members data
+		members, membersExist := data["members"].([]interface{})
+		if membersExist {
+			for _, member := range members {
+				memberData, ok := member.(map[string]interface{})
+				if ok && memberData["phonenumber"] == phoneNumber {
+					found = true
+					catalogURL, _ = data["pathkatalog"].(string)
+					bukpedScore = calculateBukpedScore(data)
 					break
 				}
 			}
 		}
-	}
-	
-	totalPoints := (ownerCount * 50) + (memberCount * 25) + (approvedCount * 10)
-	
-	// Cap at 100 points
-	if totalPoints > 100 {
-		return 100
-	}
-	
-	return totalPoints
-}
 
-// Get all books associated with a user
-func getUserBooks(books []BookInfo, phoneNumber string) []BookInfo {
-	var userBooks []BookInfo
-	
-	for _, book := range books {
-		// Check if owner
-		if book.Owner.PhoneNumber == phoneNumber {
-			userBooks = append(userBooks, book)
-			continue
-		}
-		
-		// Check if member
-		for _, member := range book.Members {
-			if member.PhoneNumber == phoneNumber {
-				userBooks = append(userBooks, book)
-				break
-			}
+		if found {
+			break
 		}
 	}
-	
-	return userBooks
+
+	if !found {
+		return score, errors.New("user not found in Bukupedia data")
+	}
+
+	// Populate activity score
+	score.BukuKatalog = catalogURL
+	score.BukPed = bukpedScore
+
+	return score, nil
 }
 
-
-func GetBukpedMemberScoreForUser(phoneNumber string) (model.ActivityScore, error) {
-    var score model.ActivityScore
-    
-    // Get configuration
-    var conf model.Config
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-
-    err := config.Mongoconn.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
-    if err != nil {
-        return score, errors.New("Config Not Found: " + err.Error())
-    }
-    
-    // HTTP Client request to Bukupedia API
-    client := &http.Client{Timeout: 15 * time.Second}
-    resp, err := client.Get(conf.DataMemberBukped) // Make sure this URL is set in your config
-    if err != nil {
-        return score, errors.New("API Connection Failed: " + err.Error())
-    }
-    defer resp.Body.Close()
-
-    // Process response body
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return score, errors.New("Failed to Read Response: " + err.Error())
-    }
-    
-    // Decode response into BookInfo array
-    var bukupediaBooks []BookInfo
-    err = json.Unmarshal(body, &bukupediaBooks)
-    if err != nil {
-        return score, fmt.Errorf("Invalid API Response: %v", err)
-    }
-    
-    // Filter books for this user
-    var userBooks []BookInfo
-    for _, book := range bukupediaBooks {
-        // Check if owner
-        if book.Owner.PhoneNumber == phoneNumber {
-            userBooks = append(userBooks, book)
-            continue
-        }
-        
-        // Check if member
-        for _, member := range book.Members {
-            if member.PhoneNumber == phoneNumber {
-                userBooks = append(userBooks, book)
-                break
-            }
-        }
-    }
-    
-    // Count ownership and membership
-    ownerCount := 0
-    memberCount := 0
-    approvedCount := 0
-    
-    for _, book := range userBooks {
-        // Check if approved
-        if book.IsApproved {
-            approvedCount++
-        }
-        
-        // Check if owner
-        if book.Owner.PhoneNumber == phoneNumber {
-            ownerCount++
-        } else {
-            // Must be a member
-            memberCount++
-        }
-    }
-    
-    totalPoints := (ownerCount * 50) + (memberCount * 25) + (approvedCount * 10)
-    
-    // Cap at 100 points
-    if totalPoints > 100 {
-        totalPoints = 100
-    }
-    
-    // Set the score
-    score.BukPed = totalPoints
-    
-    // Add catalog URL if applicable
-    if len(userBooks) > 0 {
-        // Use the latest book's catalog URL
-        var latestBook BookInfo
-        for _, book := range userBooks {
-            if book.ID > latestBook.ID {
-                latestBook = book
-            }
-        }
-        
-        if latestBook.PathKatalog != "" {
-            score.BukuKatalog = latestBook.PathKatalog
-        }
-    }
-    
-    return score, nil
-}
-
+// GetLastWeekBukpedMemberScoreForUser retrieves the Bukupedia score for a given user
+// for the last week. Since there's no specific timestamp in the provided data,
+// we'll use the same logic as the regular function but we could add time-based
+// filtering if needed in the future.
 func GetLastWeekBukpedMemberScoreForUser(phoneNumber string) (model.ActivityScore, error) {
-    return GetBukpedMemberScoreForUser(phoneNumber)
+	// Currently, we'll use the same implementation as GetBukpedMemberScoreForUser
+	// This could be enhanced to filter by date if such data becomes available
+	return GetBukpedMemberScoreForUser(phoneNumber)
+}
+
+// calculateBukpedScore computes the score based on the book data
+// Scoring criteria:
+// - Has a book entry: 25 points
+// - Book is approved: +25 points (total 50)
+// - Has ISBN: +25 points (total 75)
+// - Has NoResiISBN: +25 points (total 100)
+func calculateBukpedScore(data map[string]interface{}) int {
+	score := 25 // Base score for having a book
+
+	// Check if book is approved
+	isApproved, exists := data["isapproved"].(bool)
+	if exists && isApproved {
+		score += 25 // Total: 50
+	}
+
+	// Check if book has ISBN
+	isbn, hasISBN := data["isbn"].(string)
+	if hasISBN && isbn != "" {
+		score += 25 // Total: 75
+	}
+
+	// Check if book has NoResiISBN
+	noresiISBN, hasResi := data["noresiisbn"].(string)
+	if hasResi && noresiISBN != "" {
+		score += 25 // Total: 100
+	}
+
+	return score
+}
+
+func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
+    // Validasi token
+    payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+    if err != nil {
+        at.WriteJSON(w, http.StatusForbidden, model.Response{
+            Status:   "Error: Invalid Token",
+            Info:     at.GetSecretFromHeader(r),
+            Location: "Token Validation",
+            Response: err.Error(),
+        })
+        return
+    }
+    
+    // Test phone number from query param (optional)
+    phoneNumber := r.URL.Query().Get("phonenumber")
+    if phoneNumber == "" {
+        phoneNumber = payload.Id // Default to authenticated user
+    }
+    
+    // Get Bukped score data
+    scoreData, err := GetBukpedMemberScoreForUser(phoneNumber)
+    if err != nil {
+        at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Failed to fetch Bukped data",
+            Location: "Bukped API",
+            Response: err.Error(),
+        })
+        return
+    }
+    
+    // Prepare response with detailed information
+    response := struct {
+        PhoneNumber  string `json:"phone_number"`
+        BukpedScore  int    `json:"bukped_score"`
+        CatalogURL   string `json:"catalog_url,omitempty"`
+        ScoreDetails struct {
+            HasBook     bool `json:"has_book"`
+            IsApproved  bool `json:"is_approved"`
+            HasISBN     bool `json:"has_isbn"`
+            HasResiISBN bool `json:"has_resi_isbn"`
+        } `json:"score_details"`
+    }{
+        PhoneNumber: phoneNumber,
+        BukpedScore: scoreData.BukPed,
+        CatalogURL:  scoreData.BukuKatalog,
+    }
+    
+    // Determine score breakdown
+    response.ScoreDetails.HasBook = scoreData.BukPed >= 25
+    response.ScoreDetails.IsApproved = scoreData.BukPed >= 50
+    response.ScoreDetails.HasISBN = scoreData.BukPed >= 75
+    response.ScoreDetails.HasResiISBN = scoreData.BukPed >= 100
+    
+    at.WriteJSON(w, http.StatusOK, response)
 }

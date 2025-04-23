@@ -288,6 +288,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/refresh/report/gtmetrixmingguan":
 		controller.RefreshGTMetrixMingguanReport(w, r)
 
+	case method == "GET" && path == "/report/bukped/user":
+		controller.GetBukpedDataUserAPI(w, r)
+
 
 	//strava coba
 	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
