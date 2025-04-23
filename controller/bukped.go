@@ -149,7 +149,6 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
     if err != nil {
         at.WriteJSON(w, http.StatusForbidden, model.Response{
             Status:   "Error: Invalid Token",
-            Info:     at.GetSecretFromHeader(r),
             Location: "Token Validation",
             Response: err.Error(),
         })
@@ -162,18 +161,144 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
         phoneNumber = payload.Id // Default to authenticated user
     }
     
-    // Get Bukped score data
-    scoreData, err := GetBukpedMemberScoreForUser(phoneNumber)
+    // Ambil konfigurasi dengan token yang digunakan untuk autentikasi
+    var conf model.Config
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+
+    // Gunakan filter yang sesuai untuk mendapatkan konfigurasi
+    // Opsi 1: Gunakan ID dari payload token jika sesuai dengan phonenumber
+    filter := bson.M{"phonenumber": payload.Id}
+    
+    err = config.Mongoconn.Collection("config").FindOne(ctx, filter).Decode(&conf)
+    if err != nil {
+        // Jika tidak ditemukan dengan ID token, coba gunakan default config
+        err = config.Mongoconn.Collection("config").FindOne(ctx, bson.M{"phonenumber": "62895601060000"}).Decode(&conf)
+        if err != nil {
+            at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+                Status:   "Error: Failed to load configuration",
+                Location: "Database Config",
+                Response: err.Error(),
+            })
+            return
+        }
+    }
+    
+    // Pastikan URL BukpedAPI ada dalam konfigurasi
+    if conf.DataMemberBukped == "" {
+        at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Missing API Configuration",
+            Location: "Bukped API",
+            Response: "Bukped API URL not configured",
+        })
+        return
+    }
+    
+    // Buat request ke API Bukped dengan menyertakan token dari request asli
+    client := &http.Client{Timeout: 30 * time.Second}
+    req, err := http.NewRequest("GET", conf.DataMemberBukped, nil)
     if err != nil {
         at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-            Status:   "Error: Failed to fetch Bukped data",
+            Status:   "Error: Failed to create request",
             Location: "Bukped API",
             Response: err.Error(),
         })
         return
     }
     
-    // Prepare response with detailed information
+    // Teruskan token asli ke API Bukped
+    req.Header.Set("login", at.GetLoginFromHeader(r))
+    req.Header.Set("Content-Type", "application/json")
+    
+    // Lakukan request
+    resp, err := client.Do(req)
+    if err != nil {
+        at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Failed to connect to Bukped API",
+            Location: "Bukped API",
+            Response: err.Error(),
+        })
+        return
+    }
+    defer resp.Body.Close()
+    
+    // Cek status response
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Failed to fetch Bukped data",
+            Location: "Bukped API",
+            Response: fmt.Sprintf("API returned status %d: %s", resp.StatusCode, string(body)),
+        })
+        return
+    }
+    
+    // Baca response
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Failed to read API response",
+            Location: "Bukped API",
+            Response: err.Error(),
+        })
+        return
+    }
+    
+    // Parse JSON data
+    var bukpedData []map[string]interface{}
+    if err := json.Unmarshal(body, &bukpedData); err != nil {
+        at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+            Status:   "Error: Failed to parse Bukped data",
+            Location: "Bukped API",
+            Response: err.Error(),
+        })
+        return
+    }
+    
+    // Cari data user
+    var bukpedScore int
+    var catalogURL string
+    var found bool
+    
+    for _, data := range bukpedData {
+        // Check owner data
+        owner, ownerExists := data["owner"].(map[string]interface{})
+        if ownerExists && owner["phonenumber"] == phoneNumber {
+            found = true
+            catalogURL, _ = data["pathkatalog"].(string)
+            bukpedScore = calculateBukpedScore(data)
+            break
+        }
+        
+        // Check members data
+        members, membersExist := data["members"].([]interface{})
+        if membersExist {
+            for _, member := range members {
+                memberData, ok := member.(map[string]interface{})
+                if ok && memberData["phonenumber"] == phoneNumber {
+                    found = true
+                    catalogURL, _ = data["pathkatalog"].(string)
+                    bukpedScore = calculateBukpedScore(data)
+                    break
+                }
+            }
+        }
+        
+        if found {
+            break
+        }
+    }
+    
+    if !found {
+        at.WriteJSON(w, http.StatusNotFound, model.Response{
+            Status:   "Error: User not found",
+            Location: "Bukped API",
+            Response: "User not found in Bukupedia data",
+        })
+        return
+    }
+    
+    // Prepare response
     response := struct {
         PhoneNumber  string `json:"phone_number"`
         BukpedScore  int    `json:"bukped_score"`
@@ -186,15 +311,15 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
         } `json:"score_details"`
     }{
         PhoneNumber: phoneNumber,
-        BukpedScore: scoreData.BukPed,
-        CatalogURL:  scoreData.BukuKatalog,
+        BukpedScore: bukpedScore,
+        CatalogURL:  catalogURL,
     }
     
     // Determine score breakdown
-    response.ScoreDetails.HasBook = scoreData.BukPed >= 25
-    response.ScoreDetails.IsApproved = scoreData.BukPed >= 50
-    response.ScoreDetails.HasISBN = scoreData.BukPed >= 75
-    response.ScoreDetails.HasResiISBN = scoreData.BukPed >= 100
+    response.ScoreDetails.HasBook = bukpedScore >= 25
+    response.ScoreDetails.IsApproved = bukpedScore >= 50
+    response.ScoreDetails.HasISBN = bukpedScore >= 75
+    response.ScoreDetails.HasResiISBN = bukpedScore >= 100
     
     at.WriteJSON(w, http.StatusOK, response)
 }
