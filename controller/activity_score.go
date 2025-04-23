@@ -72,7 +72,7 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
 		Pomokit:         dataPomokitScore.Pomokit,
 		GTMetrixResult:  dataGTMetrixScore.GTMetrixResult,
-		BukPed:          int(bukpedMemberScore),
+		BukPed:          bukpedMemberScore,
 		GTMetrix:        dataGTMetrixScore.GTMetrix,
 		WebHookpush:     dataWebhook.WebHookpush,
 		WebHook:         dataWebhook.WebHook,
@@ -100,7 +100,7 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, userID)
 	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, userID)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
-	bukpedMemberScore, _ := GetBukpedMemberScoreForUser(userID)
+	bukpedMemberScore, _ := GetLastWeekBukpedMemberScoreForUser(userID)
 	dataGTMetrixScore, _ := GetLastWeekGTMetrixScoreForUser(userID)
 	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
 	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
@@ -116,7 +116,7 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
 		Pomokit:         dataPomokitScore.Pomokit,
 		GTMetrixResult:  dataGTMetrixScore.GTMetrixResult,
-		BukPed:          int(bukpedMemberScore),  // Skor buku dari Bukped
+		BukPed:          bukpedMemberScore,
 		GTMetrix:        dataGTMetrixScore.GTMetrix,
 		PresensiHari:    dataPresensi.PresensiHari,
 		Presensi:        dataPresensi.Presensi,

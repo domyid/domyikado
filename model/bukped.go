@@ -2,7 +2,6 @@ package model
 
 import "time"
 
-// BukpedBook representasi data buku dari API Bukped
 type BukpedBook struct {
 	ID          string        `json:"_id" bson:"_id"`
 	Secret      string        `json:"secret" bson:"secret"`
@@ -27,12 +26,11 @@ type BukpedBook struct {
 	Tebal       string        `json:"tebal" bson:"tebal,omitempty"`
 	NoResiISBN  string        `json:"noresiisbn" bson:"noresiisbn,omitempty"`
 	Members     []BukpedMember `json:"members" bson:"members"`
-	CreatedAt   time.Time     `json:"created_at,omitempty" bson:"created_at,omitempty"`
-	UpdatedAt   time.Time     `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
-	Points      float64       `json:"points,omitempty" bson:"-"` // Untuk menyimpan poin per buku
+	CreatedAt   time.Time     `json:"created_at" bson:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at" bson:"updated_at"`
+	Points      float64       `json:"points" bson:"points"` 
 }
 
-// BukpedMember representasi data anggota/penulis buku
 type BukpedMember struct {
 	ID          string `json:"_id" bson:"_id"`
 	Name        string `json:"name" bson:"name"`
@@ -50,10 +48,9 @@ type BukpedMember struct {
 	IsManager   bool   `json:"ismanager,omitempty" bson:"ismanager,omitempty"`
 }
 
-// BukpedUserInfo representasi data ringkas pengguna Bukped
 type BukpedUserInfo struct {
 	PhoneNumber string  `json:"phone_number" bson:"phone_number"`
 	Name        string  `json:"name" bson:"name"`
 	TotalBooks  int     `json:"total_books" bson:"total_books"`
-	TotalPoints float64 `json:"total_points" bson:"total_points"`
+	TotalPoints int     `json:"total_points" bson:"total_points"`
 }

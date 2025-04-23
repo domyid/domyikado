@@ -16,7 +16,6 @@ import (
 func GetDataBukpedMember() ([]model.BukpedBook, error) {
     var bukpedBooks []model.BukpedBook
 
-    // Ambil konfigurasi untuk URL API
     var conf model.Config
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -26,7 +25,6 @@ func GetDataBukpedMember() ([]model.BukpedBook, error) {
         return nil, fmt.Errorf("Config not found: %v", err)
     }
 
-    // HTTP request ke API Bukped untuk mendapatkan data buku
     client := &http.Client{Timeout: 15 * time.Second}
     resp, err := client.Get(conf.DataMemberBukped)
     if err != nil {
@@ -45,7 +43,6 @@ func GetDataBukpedMember() ([]model.BukpedBook, error) {
         return nil, fmt.Errorf("Failed to read response: %v", err)
     }
 
-    // Decode JSON ke dalam struktur BukpedBook
     err = json.Unmarshal(body, &bukpedBooks)
     if err != nil {
         var apiResponse struct {
@@ -54,7 +51,6 @@ func GetDataBukpedMember() ([]model.BukpedBook, error) {
             Message string              `json:"message,omitempty"`
         }
         
-        // Coba format respons alternatif jika unmarshal gagal
         err = json.Unmarshal(body, &apiResponse)
         if err != nil {
             return nil, fmt.Errorf("Invalid API response format: %v", err)
@@ -62,61 +58,105 @@ func GetDataBukpedMember() ([]model.BukpedBook, error) {
         bukpedBooks = apiResponse.Data
     }
 
+    for i := range bukpedBooks {
+        bukpedBooks[i].Points = bookToPoints(bukpedBooks[i])
+        
+        if bukpedBooks[i].CreatedAt.IsZero() {
+            bukpedBooks[i].CreatedAt = time.Now() // Default ke waktu sekarang jika tidak ada
+        }
+        if bukpedBooks[i].UpdatedAt.IsZero() {
+            bukpedBooks[i].UpdatedAt = bukpedBooks[i].CreatedAt
+        }
+    }
+
     return bukpedBooks, nil
 }
 
 func isUserMember(members []model.BukpedMember, phoneNumber string) bool {
-	for _, member := range members {
-		if member.PhoneNumber == phoneNumber {
-			return true
-		}
-	}
-	return false
+    for _, member := range members {
+        if member.PhoneNumber == phoneNumber {
+            return true
+        }
+    }
+    return false
 }
 
-// Fungsi untuk mendapatkan skor berdasarkan data buku dari API BukpedMember
-func GetBukpedMemberScoreForUser(userID string) (float64, error) {
+// GetBukpedMemberScoreForUser mengambil skor total pengguna Bukped
+func GetBukpedMemberScoreForUser(userID string) (int, error) {
     var totalScore float64
 
-    // Ambil data buku dari API BukpedMember
     bukpedBooks, err := GetDataBukpedMember()
     if err != nil {
         return 0, fmt.Errorf("Failed to get Bukped books: %v", err)
     }
 
-    // Iterasi data buku untuk menghitung poin
     for _, book := range bukpedBooks {
-        // Cek apakah user adalah owner atau anggota dari buku ini
         if book.Owner.PhoneNumber == userID || isUserMember(book.Members, userID) {
-            // Tambahkan poin berdasarkan kriteria
-            points := bookToPoints(book)
-            totalScore += points
+            totalScore += book.Points
         }
     }
 
-    return totalScore, nil
+    return int(totalScore), nil
 }
 
+// GetLastWeekBukpedMemberScoreForUser mengambil skor Bukped seminggu terakhir
+func GetLastWeekBukpedMemberScoreForUser(userID string) (int, error) {
+    var totalScore float64
 
-// Fungsi untuk mengkonversi status buku ke poin
+    bukpedBooks, err := GetDataBukpedMember()
+    if err != nil {
+        return 0, fmt.Errorf("Failed to get Bukped books: %v", err)
+    }
+
+    // Tanggal seminggu yang lalu
+    weekAgo := time.Now().AddDate(0, 0, -7)
+
+    for _, book := range bukpedBooks {
+        // Hanya hitung buku yang user adalah pemilik atau anggota
+        if book.Owner.PhoneNumber == userID || isUserMember(book.Members, userID) {
+            // Dan yang dibuat/diupdate dalam seminggu terakhir
+            if book.CreatedAt.After(weekAgo) || book.UpdatedAt.After(weekAgo) {
+                totalScore += book.Points
+            }
+        }
+    }
+
+    return int(totalScore), nil
+}
+
+func GetBukpedBooksCount(userID string) (int, error) {
+    bukpedBooks, err := GetDataBukpedMember()
+    if err != nil {
+        return 0, fmt.Errorf("failed to get bukped books: %v", err)
+    }
+
+    var count int
+
+    for _, book := range bukpedBooks {
+        if book.Owner.PhoneNumber == userID || isUserMember(book.Members, userID) {
+            if book.PathKatalog != "" {
+                count++
+            }
+        }
+    }
+
+    return count, nil
+}
+
 func bookToPoints(book model.BukpedBook) float64 {
-	// Basis: ada buku = 25 poin
-	points := 25.0
-	
-	// IsApproved true = 50 poin
-	if book.IsApproved {
-		points = 50.0
-	}
-	
-	// Ada ISBN = 75 poin
-	if book.ISBN != "" {
-		points = 75.0
-	}
-	
-	// Ada NoResiISBN = 100 poin
-	if book.NoResiISBN != "" {
-		points = 100.0
-	}
-	
-	return points
+    points := 25.0 
+    
+    if book.IsApproved {
+        points = 50.0
+    }
+    
+    if book.ISBN != "" {
+        points = 75.0
+    }
+    
+    if book.NoResiISBN != "" {
+        points = 100.0
+    }
+    
+    return points
 }
