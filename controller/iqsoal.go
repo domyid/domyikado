@@ -185,10 +185,12 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Cari IQ terbaru berdasarkan nomor telepon
 	iqScoreCollection := config.Mongoconn.Collection("iqscore")
 	var iqScore model.IqScore
-	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"name": user.Name}).Decode(&iqScore)
 
+	// Mengambil IQ Score yang terbaru berdasarkan 'created_at'
+	err = iqScoreCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}, options.FindOne().SetSort(bson.D{{Key: "created_at", Value: -1}})).Decode(&iqScore)
 	var userScore, userIQ string
 
 	if err == nil {
