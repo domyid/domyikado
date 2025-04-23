@@ -22,6 +22,8 @@ func GetAllActivityScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	StoreToken(authorization.Id, at.GetLoginFromHeader(r))
+
 	score, _ := GetAllActivityScoreData(authorization.Id)
 	at.WriteJSON(w, http.StatusOK, score)
 }
@@ -37,6 +39,8 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	StoreToken(authorization.Id, at.GetLoginFromHeader(r))
 
 	score, _ := GetLastWeekActivityScoreData(authorization.Id)
 	at.WriteJSON(w, http.StatusOK, score)
