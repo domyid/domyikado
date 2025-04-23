@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gocroot/config"
@@ -15,6 +16,25 @@ import (
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+var (
+    tokenCache      = make(map[string]string) // map[phoneNumber]token
+    tokenCacheMutex sync.RWMutex
+)
+
+// Fungsi untuk menyimpan token
+func StoreToken(phoneNumber, token string) {
+    tokenCacheMutex.Lock()
+    defer tokenCacheMutex.Unlock()
+    tokenCache[phoneNumber] = token
+}
+
+// Fungsi untuk mengambil token
+func GetCachedToken(phoneNumber string) string {
+    tokenCacheMutex.RLock()
+    defer tokenCacheMutex.RUnlock()
+    return tokenCache[phoneNumber]
+}
 
 func GetBukpedMemberScoreForUser(phoneNumber string, token string) (int, string, []model.BukpedBook, error) {
     var bukpedBooks []model.BukpedBook
@@ -138,31 +158,6 @@ func GetLastWeekBukpedMemberScoreForUser(phoneNumber string, token string) (int,
 	return GetBukpedMemberScoreForUser(phoneNumber, token)
 }
 
-
-func calculateBukpedScore(data map[string]interface{}) int {
-	score := 25 // Base score for having a book
-
-	// Check if book is approved
-	isApproved, exists := data["isapproved"].(bool)
-	if exists && isApproved {
-		score += 25 // Total: 50
-	}
-
-	// Check if book has ISBN
-	isbn, hasISBN := data["isbn"].(string)
-	if hasISBN && isbn != "" {
-		score += 25 // Total: 75
-	}
-
-	// Check if book has NoResiISBN
-	noresiISBN, hasResi := data["noresiisbn"].(string)
-	if hasResi && noresiISBN != "" {
-		score += 25 // Total: 100
-	}
-
-	return score
-}
-
 func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
     // Validasi token
     payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
@@ -259,18 +254,17 @@ func GetBukpedDataUserAPI(w http.ResponseWriter, r *http.Request) {
 
 func GetBukpedScoreForUser(phoneNumber string) (model.ActivityScore, error) {
     var score model.ActivityScore
+
+    token := GetCachedToken(phoneNumber)
     
-    // Mendapatkan skor Bukped dengan token kosong (karena digunakan secara internal)
-    bukpedScore, catalogURL, userBooks, err := GetBukpedMemberScoreForUser(phoneNumber, "")
+    bukpedScore, catalogURL, userBooks, err := GetBukpedMemberScoreForUser(phoneNumber, token)
     if err != nil {
         return score, fmt.Errorf("gagal mendapatkan data Bukped: %v", err)
     }
     
-    // Masukkan data ke dalam ActivityScore
     score.BukPed = bukpedScore
     score.BukuKatalog = catalogURL
     
-    // Tambahkan informasi tambahan jika diperlukan
     if len(userBooks) > 0 {
         var hasISBN, hasResiISBN, isApproved bool
         
@@ -302,11 +296,6 @@ func GetBukpedScoreForUser(phoneNumber string) (model.ActivityScore, error) {
     return score, nil
 }
 
-// Fungsi untuk mendapatkan skor Bukped untuk minggu terakhir
 func GetLastWeekBukpedScoreForUser(phoneNumber string) (model.ActivityScore, error) {
-    // Karena data buku tidak memiliki fitur filter berdasarkan waktu, 
-    // kita menggunakan implementasi yang sama dengan fungsi utama.
-    // Jika di masa depan ingin menambahkan filtering berdasarkan waktu,
-    // kita bisa memodifikasinya di sini.
     return GetBukpedScoreForUser(phoneNumber)
 }
