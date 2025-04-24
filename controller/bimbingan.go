@@ -17,7 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
+func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	//otorisasi dan validasi inputan
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
@@ -53,7 +53,7 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//validasi nomor telepon asesor
-	bimbingan.Asesor.PhoneNumber = ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
+	bimbingan.Asesor.PhoneNumber = report.ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
 	if err != nil {
 		respn.Status = "Error : Data asesor tidak di temukan"
@@ -142,7 +142,148 @@ func PostDosenAsesor(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
 
-func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
+func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
+	//otorisasi dan validasi inputan
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+	var bimbingan model.ActivityScore
+	err = json.NewDecoder(req.Body).Decode(&bimbingan)
+	if err != nil {
+		respn.Status = "Error : Body tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	if bimbingan.Asesor.PhoneNumber == "" {
+		respn.Status = "Error : No Telepon Asesor tidak diisi"
+		respn.Response = "Isi lebih lengkap terlebih dahulu"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	//validasi eksistensi user di db
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Data user tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	//validasi nomor telepon asesor
+	bimbingan.Asesor.PhoneNumber = report.ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
+	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
+	if err != nil {
+		respn.Status = "Error : Data asesor tidak di temukan"
+		respn.Response = "Nomor Telepon bukan milik Dosen Asesor"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Cek apakah minggu ini sudah pernah di-approve
+	now := time.Now()
+	weekday := int(now.Weekday())
+	if weekday == 0 { // Minggu
+		weekday = 7
+	}
+	monday := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour) // Senin jam 00:00
+	sunday := monday.AddDate(0, 0, 6) // Minggu jam 23:59:59
+
+	filter := primitive.M{
+		"phonenumber": docuser.PhoneNumber,
+		"approved": true,
+		"createdAt": primitive.M{
+			"$gte": monday,
+			"$lt":  sunday,
+		},
+	}
+	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
+	if err == nil {
+		respn.Status = "Error : Data bimbingan sudah di approve"
+		respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang."
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	score, _ := GetLastWeekActivityScoreData(payload.Id)
+
+	// logic inputan post
+	bimbingan.Approved = false
+	bimbingan.PhoneNumber = docuser.PhoneNumber
+	bimbingan.Asesor = docasesor
+	bimbingan.CreatedAt = time.Now()
+	bimbingan.Trackerdata = score.Trackerdata
+	bimbingan.Tracker = score.Tracker
+	bimbingan.StravaKM = score.StravaKM
+	bimbingan.Strava = score.Strava
+	bimbingan.IQresult = score.IQresult
+	bimbingan.IQ = score.IQ
+	bimbingan.MBC = score.MBC
+	bimbingan.MBCPoints = score.MBCPoints
+	bimbingan.RVN = score.RVN
+	bimbingan.RavencoinPoints = score.RavencoinPoints
+	bimbingan.QRIS = score.QRIS
+	bimbingan.QRISPoints = score.QRISPoints
+	bimbingan.Pomokitsesi = score.Pomokitsesi
+	bimbingan.Pomokit = score.Pomokit
+	bimbingan.GTMetrixResult = score.GTMetrixResult
+	bimbingan.GTMetrix = score.GTMetrix
+	bimbingan.WebHookpush = score.WebHookpush
+	bimbingan.WebHook = score.WebHook
+	bimbingan.PresensiHari = score.PresensiHari
+	bimbingan.Presensi = score.Presensi
+	bimbingan.TotalScore = score.TotalScore
+
+	// Cari apakah ada data existing yang belum approved
+	existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
+	var idbimbingan primitive.ObjectID
+	if err == nil {
+		// Update data yang belum di-approve
+		bimbingan.ID = existing.ID
+		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
+		if err != nil {
+			respn.Status = "Gagal Update Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+		idbimbingan = existing.ID
+	} else {
+		// Insert data baru
+		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
+		if err != nil {
+			respn.Status = "Gagal Insert Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+	}
+
+	// kirim pesan ke asesor
+	message := "*Permintaan Bimbingan*\n" + "Mahasiswa : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
+	dt := &whatsauth.TextMessage{
+		To:       bimbingan.Asesor.PhoneNumber,
+		IsGroup:  false,
+		Messages: message,
+	}
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	if err != nil {
+		resp.Info = "Tidak berhak"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusUnauthorized, resp)
+		return
+	}
+	at.WriteJSON(respw, http.StatusOK, bimbingan)
+}
+
+func GetDataBimbinganById(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	id := at.GetParam(req)
 	objectId, err := primitive.ObjectIDFromHex(id)
@@ -162,6 +303,56 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
+}
+
+func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+
+	// Ambil query string: ?week=1
+	weekStr := req.URL.Query().Get("week")
+	if weekStr == "" {
+		respn.Status = "Error : Parameter week harus diisi"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	weekOffset, err := strconv.Atoi(weekStr)
+	if err != nil || weekOffset < 1 {
+		respn.Status = "Error : Parameter week tidak valid, harus >= 1"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Hitung awal minggu ini (Senin)
+	now := time.Now()
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Ubah Minggu jadi 7
+	}
+	currentWeekStart := now.AddDate(0, 0, -weekday+1) // mundur ke Senin
+
+	// Hitung awal dan akhir minggu relatif
+	start := currentWeekStart.AddDate(0, 0, (weekOffset-1)*7)
+	end := start.AddDate(0, 0, 7)
+
+	// Filter MongoDB
+	filter := primitive.M{
+		"created_at": primitive.M{
+			"$gte": start,
+			"$lt":  end,
+		},
+	}
+
+	bimbinganList, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data bimbingan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	at.WriteJSON(respw, http.StatusOK, bimbinganList)
 }
 
 func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
@@ -227,16 +418,16 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
 
-func LaporanKeOrangTua(w http.ResponseWriter, r *http.Request) {
-	report.RekapToOrangTua(config.Mongoconn)
-	at.WriteJSON(w, http.StatusOK, model.Response{
-		Response: "Berhasil rekap data",
-	})
-}
+// func LaporanKeOrangTua(w http.ResponseWriter, r *http.Request) {
+// 	report.RekapToOrangTua(config.Mongoconn)
+// 	at.WriteJSON(w, http.StatusOK, model.Response{
+// 		Response: "Berhasil rekap data",
+// 	})
+// }
 
-func LaporanRiwayatBimbinganPerMinggu(w http.ResponseWriter, r *http.Request) {
-	report.RiwayatBimbinganPerMinggu(config.Mongoconn, "6282117252716")
-	at.WriteJSON(w, http.StatusOK, model.Response{
-		Response: "Berhasil kirim Riwayat bimbingan data",
-	})
-}
+// func LaporanRiwayatBimbinganPerMinggu(w http.ResponseWriter, r *http.Request) {
+// 	report.RiwayatBimbinganPerMinggu(config.Mongoconn, "6282117252716")
+// 	at.WriteJSON(w, http.StatusOK, model.Response{
+// 		Response: "Berhasil kirim Riwayat bimbingan data",
+// 	})
+// }
