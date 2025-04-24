@@ -10,7 +10,6 @@ import (
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
-	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
@@ -53,7 +52,7 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//validasi nomor telepon asesor
-	bimbingan.Asesor.PhoneNumber = report.ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
+	bimbingan.Asesor.PhoneNumber = ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
 	if err != nil {
 		respn.Status = "Error : Data asesor tidak di temukan"
@@ -178,7 +177,7 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	//validasi nomor telepon asesor
-	bimbingan.Asesor.PhoneNumber = report.ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
+	bimbingan.Asesor.PhoneNumber = ValidasiNoHP(bimbingan.Asesor.PhoneNumber)
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": bimbingan.Asesor.PhoneNumber, "isdosen": true})
 	if err != nil {
 		respn.Status = "Error : Data asesor tidak di temukan"
@@ -194,11 +193,11 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		weekday = 7
 	}
 	monday := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour) // Senin jam 00:00
-	sunday := monday.AddDate(0, 0, 6) // Minggu jam 23:59:59
+	sunday := monday.AddDate(0, 0, 6)                                // Minggu jam 23:59:59
 
 	filter := primitive.M{
 		"phonenumber": docuser.PhoneNumber,
-		"approved": true,
+		"approved":    true,
 		"createdAt": primitive.M{
 			"$gte": monday,
 			"$lt":  sunday,

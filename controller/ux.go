@@ -555,7 +555,7 @@ func PostFeedback(respw http.ResponseWriter, req *http.Request) {
 	//lojik inputan post
 	lap.Project = prjuser
 	lap.User = docuser
-	lap.Phone = report.ValidasiNoHP(lap.Phone)
+	lap.Phone = ValidasiNoHP(lap.Phone)
 	lap.Petugas = docuser.Name
 	lap.NoPetugas = docuser.PhoneNumber
 	//memastikan nomor yang dimintai feedback bukan anggota
@@ -648,4 +648,11 @@ func GetUXReport(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(logUXReport); err != nil {
 		http.Error(w, "Gagal mengirim data dalam format JSON: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func ValidasiNoHP(nomor string) string {
+	nomor = strings.ReplaceAll(nomor, " ", "")
+	nomor = strings.ReplaceAll(nomor, "+", "")
+	nomor = strings.ReplaceAll(nomor, "-", "")
+	return nomor
 }
