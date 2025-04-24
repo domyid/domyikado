@@ -64,7 +64,7 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	// Cek apakah sudah pernah di-approve
 	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": docuser.PhoneNumber, "approved": true})
 	if err == nil {
-		respn.Status = "Error : Data bimbingan sudah di approve"
+		respn.Status = "Info : Data bimbingan sudah di approve"
 		respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang."
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
@@ -107,7 +107,7 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 		bimbingan.ID = existing.ID
 		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
 		if err != nil {
-			respn.Status = "Gagal Update Database"
+			respn.Status = "Error : Gagal Update Database"
 			respn.Response = err.Error()
 			at.WriteJSON(respw, http.StatusNotModified, respn)
 			return
@@ -117,7 +117,7 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 		// Insert data baru
 		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
 		if err != nil {
-			respn.Status = "Gagal Insert Database"
+			respn.Status = "Error : Gagal Insert Database"
 			respn.Response = err.Error()
 			at.WriteJSON(respw, http.StatusNotModified, respn)
 			return
@@ -205,7 +205,7 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 	}
 	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
 	if err == nil {
-		respn.Status = "Error : Data bimbingan sudah di approve"
+		respn.Status = "Info : Data bimbingan sudah di approve"
 		respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang."
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
@@ -248,7 +248,7 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		bimbingan.ID = existing.ID
 		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
 		if err != nil {
-			respn.Status = "Gagal Update Database"
+			respn.Status = "Error : Gagal Update Database"
 			respn.Response = err.Error()
 			at.WriteJSON(respw, http.StatusNotModified, respn)
 			return
@@ -258,7 +258,7 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		// Insert data baru
 		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
 		if err != nil {
-			respn.Status = "Gagal Insert Database"
+			respn.Status = "Error : Gagal Insert Database"
 			respn.Response = err.Error()
 			at.WriteJSON(respw, http.StatusNotModified, respn)
 			return
@@ -347,7 +347,7 @@ func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request
 	// Filter MongoDB
 	filter := primitive.M{
 		"phonenumber": payload.Id,
-		"created_at": primitive.M{
+		"createdAt": primitive.M{
 			"$gte": start,
 			"$lt":  end,
 		},
@@ -398,7 +398,7 @@ func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.Approved = bim.Approved
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", filter, bimbingan)
 	if err != nil {
-		respn.Response = "Gagal replaceonedoc"
+		respn.Response = "Error : Gagal replaceonedoc"
 		respn.Info = err.Error()
 		at.WriteJSON(respw, http.StatusConflict, respn)
 		return
