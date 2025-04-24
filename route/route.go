@@ -291,7 +291,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/report/bukped/user":
 		controller.GetBukpedDataUserAPI(w, r)
 
-
 	//strava coba
 	case method == "GET" && path == "/data/strava": // hanya untuk mengambil data strava lama
 		controller.ProcessStravaPoints(w, r)
@@ -304,10 +303,14 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/api/activityscoreweekly":
 		controller.GetLastWeekActivityScore(w, r)
 	// Endpoint Bimbingan
-	case method == "POST" && path == "/data/proyek/bimbingan":
-		controller.PostDosenAsesor(w, r)
+	case method == "POST" && path == "/data/proyek/bimbingan/perdana":
+		controller.PostDosenAsesorPerdana(w, r)
+	case method == "POST" && path == "/data/proyek/bimbingan/lanjutan":
+		controller.PostDosenAsesorLanjutan(w, r)
+	case method == "GET" && path == "/data/proyek/bimbingan/weekly":
+		controller.GetDataBimbinganByRelativeWeek(w, r)
 	case method == "GET" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
-		controller.GetDataBimbingan(w, r)
+		controller.GetDataBimbinganById(w, r)
 	case method == "POST" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.ReplaceDataBimbingan(w, r)
 	// case method == "GET" && path == "/refresh/fororangtua":
