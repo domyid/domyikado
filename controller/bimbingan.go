@@ -306,6 +306,15 @@ func GetDataBimbinganById(respw http.ResponseWriter, req *http.Request) {
 
 func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
 
 	// Ambil query string: ?week=1
 	weekStr := req.URL.Query().Get("week")
@@ -337,6 +346,7 @@ func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request
 
 	// Filter MongoDB
 	filter := primitive.M{
+		"phonenumber": payload.Id,
 		"created_at": primitive.M{
 			"$gte": start,
 			"$lt":  end,
