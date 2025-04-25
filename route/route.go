@@ -320,6 +320,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.RefreshWeeklyBimbingan(w, r)
 	case method == "GET" && path == "/api/bimbingan/weekly":
 		controller.GetBimbinganWeeklyByWeek(w, r)
+	case method == "GET" && path == "/api/bimbingan/weekly/all":
+		controller.GetAllBimbinganWeekly(w, r)
+	case method == "GET" && path == "/admin/bimbingan/changeweek":
+		controller.ChangeWeekNumber(w, r)
 	// case method == "GET" && path == "/refresh/fororangtua":
 	// 	controller.ForOrangTua(w, r)
 	// case method == "GET" && path == "/refresh/laporankeorangtua":

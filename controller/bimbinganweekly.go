@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,27 +17,38 @@ import (
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // ProcessWeeklyBimbingan processes weekly activity scores for all students
 // and stores them in the bimbinganweekly collection
 func ProcessWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
-	// Check if it's actually Monday 5:00 PM
+	// Get current date and time
 	now := time.Now()
 	weekday := int(now.Weekday())
 	hour := now.Hour()
 
-	if weekday != 1 || hour != 17 { // 1 is Monday, 17 is 5:00 PM
-		log.Printf("Not running weekly bimbingan processing: Current time is %s (weekday: %d, hour: %d)",
-			now.Format("2006-01-02 15:04:05"), weekday, hour)
-		at.WriteJSON(w, http.StatusOK, model.Response{
-			Status: "Skipped: Not Monday 5:00 PM",
-		})
-		return
-	}
-
-	// Calculate current week number
+	// Calculate current week number and label
 	currentWeek := calculateCurrentWeekNumber()
+	weekLabel := fmt.Sprintf("week%d", currentWeek)
+
+	// Log the process start
+	log.Printf("Starting weekly bimbingan processing for %s at %s",
+		weekLabel, now.Format("2006-01-02 15:04:05"))
+
+	// Optional: check if it's Monday 5PM (for scheduled runs)
+	// Remove this check if you want to manually trigger the process at any time
+	if r.URL.Query().Get("force") != "true" {
+		if weekday != 1 || hour != 17 { // 1 is Monday, 17 is 5PM
+			log.Printf("Not running weekly bimbingan processing: Current time is %s (weekday: %d, hour: %d)",
+				now.Format("2006-01-02 15:04:05"), weekday, hour)
+			at.WriteJSON(w, http.StatusOK, model.Response{
+				Status: "Skipped: Not Monday 5:00 PM",
+				Info:   "Use ?force=true to bypass time check",
+			})
+			return
+		}
+	}
 
 	// Get all students
 	allUsers, err := atdb.GetAllDoc[[]model.Userdomyikado](config.Mongoconn, "user", bson.M{"isdosen": false})
@@ -52,7 +64,7 @@ func ProcessWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 	// Process each student
 	var processed, failed int
 	for _, user := range allUsers {
-		err := processStudentWeeklyData(user, currentWeek)
+		err := processStudentWeeklyData(user, currentWeek, weekLabel)
 		if err != nil {
 			log.Printf("Error processing user %s: %v", user.PhoneNumber, err)
 			failed++
@@ -62,12 +74,12 @@ func ProcessWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify system admin about the process completion
-	notifyAdmin(processed, failed, currentWeek)
+	notifyAdmin(processed, failed, currentWeek, weekLabel)
 
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Status: "Success",
-		Response: fmt.Sprintf("Processed %d users, failed %d users for week %d",
-			processed, failed, currentWeek),
+		Response: fmt.Sprintf("Processed %d users, failed %d users for %s",
+			processed, failed, weekLabel),
 	})
 }
 
@@ -88,22 +100,12 @@ func calculateCurrentWeekNumber() int {
 }
 
 // processStudentWeeklyData processes and stores weekly activity data for a student
-func processStudentWeeklyData(user model.Userdomyikado, weekNumber int) error {
+func processStudentWeeklyData(user model.Userdomyikado, weekNumber int, weekLabel string) error {
 	// Get the student's activity score for the week
 	activityScore, err := GetLastWeekActivityScoreData(user.PhoneNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get activity score: %v", err)
 	}
-
-	// Check if a record already exists for this user and week
-	existingRecord, err := atdb.GetOneDoc[model.BimbinganWeekly](
-		config.Mongoconn,
-		"bimbinganweekly",
-		bson.M{
-			"phonenumber": user.PhoneNumber,
-			"weeknumber":  weekNumber,
-		},
-	)
 
 	// Create the weekly record
 	weeklyRecord := model.BimbinganWeekly{
@@ -111,6 +113,7 @@ func processStudentWeeklyData(user model.Userdomyikado, weekNumber int) error {
 		Name:        user.Name,
 		CreatedAt:   time.Now(),
 		WeekNumber:  weekNumber,
+		WeekLabel:   weekLabel,
 		ActivityScore: model.ActivityScore{
 			Sponsor:         activityScore.Sponsor,
 			Strava:          activityScore.Strava,
@@ -144,7 +147,17 @@ func processStudentWeeklyData(user model.Userdomyikado, weekNumber int) error {
 		Approved: false,
 	}
 
-	// If record exists, update it; otherwise, create a new one
+	// Check if a record already exists for this user and SPECIFIC week label
+	existingRecord, err := atdb.GetOneDoc[model.BimbinganWeekly](
+		config.Mongoconn,
+		"bimbinganweekly",
+		bson.M{
+			"phonenumber": user.PhoneNumber,
+			"weeklabel":   weekLabel,
+		},
+	)
+
+	// If record exists for this specific week, update it; otherwise, create a new one
 	if err == nil && existingRecord.ID != primitive.NilObjectID {
 		weeklyRecord.ID = existingRecord.ID
 		_, err = atdb.ReplaceOneDoc(
@@ -154,13 +167,16 @@ func processStudentWeeklyData(user model.Userdomyikado, weekNumber int) error {
 			weeklyRecord,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to update existing record: %v", err)
+			return fmt.Errorf("failed to update existing record for %s: %v", weekLabel, err)
 		}
+		log.Printf("Updated existing record for user %s, %s", user.PhoneNumber, weekLabel)
 	} else {
+		// No existing record for this specific week, insert a new one
 		_, err = atdb.InsertOneDoc(config.Mongoconn, "bimbinganweekly", weeklyRecord)
 		if err != nil {
-			return fmt.Errorf("failed to insert new record: %v", err)
+			return fmt.Errorf("failed to insert new record for %s: %v", weekLabel, err)
 		}
+		log.Printf("Inserted new record for user %s, %s", user.PhoneNumber, weekLabel)
 	}
 
 	// Also notify the student about their weekly summary
@@ -170,15 +186,15 @@ func processStudentWeeklyData(user model.Userdomyikado, weekNumber int) error {
 }
 
 // notifyAdmin sends a notification to the system admin about the weekly process
-func notifyAdmin(processed, failed, weekNumber int) {
+func notifyAdmin(processed, failed int, weekNumber int, weekLabel string) {
 	adminPhone := "6285312924192" // Replace with actual admin phone number
 
 	message := fmt.Sprintf("*Weekly Bimbingan Processing Completed*\n\n"+
-		"Week: %d\n"+
+		"Week Number: %d (%s)\n"+
 		"Processed: %d students\n"+
 		"Failed: %d students\n\n"+
 		"Time: %s",
-		weekNumber, processed, failed, time.Now().Format("2006-01-02 15:04:05"))
+		weekNumber, weekLabel, processed, failed, time.Now().Format("2006-01-02 15:04:05"))
 
 	dt := &whatsauth.TextMessage{
 		To:       adminPhone,
@@ -203,7 +219,7 @@ func notifyStudent(user model.Userdomyikado, weeklyData model.BimbinganWeekly) {
 	// Create a summary message for the student
 	message := fmt.Sprintf("*Ringkasan Aktivitas Mingguan*\n\n"+
 		"Mahasiswa: %s\n"+
-		"Minggu ke-%d\n\n"+
+		"Minggu ke-%d (%s)\n\n"+
 		"*Skor Kegiatan:*\n"+
 		"- Sponsor: %d poin\n"+
 		"- Strava: %.2f km (%d poin)\n"+
@@ -216,7 +232,7 @@ func notifyStudent(user model.Userdomyikado, weeklyData model.BimbinganWeekly) {
 		"- Presensi: %d hari (%d poin)\n\n"+
 		"*Total Skor: %d*\n\n"+
 		"_Laporan mingguan ini otomatis dibuat setiap Senin jam 5 sore._",
-		user.Name, weeklyData.WeekNumber,
+		user.Name, weeklyData.WeekNumber, weeklyData.WeekLabel,
 		weeklyData.ActivityScore.Sponsor,
 		weeklyData.ActivityScore.StravaKM, weeklyData.ActivityScore.Strava,
 		weeklyData.ActivityScore.IQresult, weeklyData.ActivityScore.IQ,
@@ -248,40 +264,11 @@ func notifyStudent(user model.Userdomyikado, weeklyData model.BimbinganWeekly) {
 
 // RefreshWeeklyBimbingan is the HTTP handler for manually triggering the weekly bimbingan process
 func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
-	// Force process regardless of the current time
-	currentWeek := calculateCurrentWeekNumber()
-
-	// Get all students
-	allUsers, err := atdb.GetAllDoc[[]model.Userdomyikado](config.Mongoconn, "user", bson.M{"isdosen": false})
-	if err != nil {
-		log.Printf("Error getting users: %v", err)
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Status:   "Error",
-			Response: fmt.Sprintf("Failed to get users: %v", err),
-		})
-		return
-	}
-
-	// Process each student
-	var processed, failed int
-	for _, user := range allUsers {
-		err := processStudentWeeklyData(user, currentWeek)
-		if err != nil {
-			log.Printf("Error processing user %s: %v", user.PhoneNumber, err)
-			failed++
-		} else {
-			processed++
-		}
-	}
-
-	// Notify system admin about the process completion
-	notifyAdmin(processed, failed, currentWeek)
-
-	at.WriteJSON(w, http.StatusOK, model.Response{
-		Status: "Success",
-		Response: fmt.Sprintf("Processed %d users, failed %d users for week %d",
-			processed, failed, currentWeek),
-	})
+	// Force=true makes it ignore the day/time check
+	q := r.URL.Query()
+	q.Set("force", "true")
+	r.URL.RawQuery = q.Encode()
+	ProcessWeeklyBimbingan(w, r)
 }
 
 // GetBimbinganWeeklyByWeek gets the bimbingan weekly data for a specific week
@@ -313,13 +300,16 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the weekly bimbingan data
+	// Convert to week label format (week1, week2, etc)
+	weekLabel := fmt.Sprintf("week%d", weekNumber)
+
+	// Get the weekly bimbingan data based on week label
 	weeklyData, err := atdb.GetOneDoc[model.BimbinganWeekly](
 		config.Mongoconn,
 		"bimbinganweekly",
 		bson.M{
 			"phonenumber": payload.Id,
-			"weeknumber":  weekNumber,
+			"weeklabel":   weekLabel,
 		},
 	)
 
@@ -331,4 +321,97 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 	}
 
 	at.WriteJSON(w, http.StatusOK, weeklyData)
+}
+
+// GetAllBimbinganWeekly gets all bimbingan weekly data for a student
+func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(r)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get all weekly bimbingan data for this student
+	filter := bson.M{"phonenumber": payload.Id}
+
+	// Use find with options to sort by week number
+	cursor, err := config.Mongoconn.Collection("bimbinganweekly").Find(
+		context.Background(),
+		filter,
+		options.Find().SetSort(bson.M{"weeknumber": 1}), // Sort by week number ascending
+	)
+
+	if err != nil {
+		respn.Status = "Error : Gagal mendapatkan data bimbingan"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, respn)
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	// Decode the results
+	var weeklies []model.BimbinganWeekly
+	if err = cursor.All(context.Background(), &weeklies); err != nil {
+		respn.Status = "Error : Gagal decode data bimbingan"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, respn)
+		return
+	}
+
+	if len(weeklies) == 0 {
+		respn.Status = "Error : Data bimbingan mingguan tidak ditemukan"
+		at.WriteJSON(w, http.StatusNotFound, respn)
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, weeklies)
+}
+
+// ChangeWeekNumber manually changes the week number for testing purposes
+// THIS IS FOR DEVELOPMENT/TESTING ONLY - not for production use
+func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
+	var respn model.Response
+
+	// Check admin authorization - should only be accessible by admin
+	// You need to implement your own admin auth check here
+	// For example, using a special token or admin role check
+	adminToken := r.Header.Get("Authorization")
+	if adminToken == "" {
+		respn.Status = "Error : Not Authorized"
+		at.WriteJSON(w, http.StatusUnauthorized, respn)
+		return
+	}
+
+	// Get week parameter from query string
+	weekStr := r.URL.Query().Get("week")
+	if weekStr == "" {
+		respn.Status = "Error : Parameter week harus diisi"
+		at.WriteJSON(w, http.StatusBadRequest, respn)
+		return
+	}
+
+	weekNumber, err := strconv.Atoi(weekStr)
+	if err != nil || weekNumber < 1 {
+		respn.Status = "Error : Parameter week tidak valid, harus >= 1"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusBadRequest, respn)
+		return
+	}
+
+	// For testing: Override the current week in a config or environment variable
+	// This is just a simulation - you would implement this based on your actual week tracking mechanism
+	// In a real implementation, you might store this in a separate collection or config
+
+	currentWeekLabel := fmt.Sprintf("week%d", weekNumber)
+
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status: "Success",
+		Response: fmt.Sprintf("Current week has been manually set to %d (%s) for testing purposes. This will reset on server restart.",
+			weekNumber, currentWeekLabel),
+	})
 }

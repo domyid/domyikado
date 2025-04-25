@@ -12,6 +12,7 @@ type BimbinganWeekly struct {
 	Name          string             `bson:"name" json:"name"`
 	CreatedAt     time.Time          `bson:"createdAt" json:"createdAt"`
 	WeekNumber    int                `bson:"weeknumber" json:"weeknumber"`
+	WeekLabel     string             `bson:"weeklabel" json:"weeklabel"` // Format: "week1", "week2", etc.
 	ActivityScore ActivityScore      `bson:"activityscore" json:"activityscore"`
 	Approved      bool               `bson:"approved" json:"approved"`
 	Asesor        Userdomyikado      `bson:"asesor,omitempty" json:"asesor,omitempty"`
