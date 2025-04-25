@@ -80,6 +80,35 @@ func GetCurrentWeekStatus() (model.BimbinganWeeklyStatus, error) {
 	return status, nil
 }
 
+// GetBimbinganWeeklyStatus returns the current weekly status information
+func GetBimbinganWeeklyStatus(w http.ResponseWriter, r *http.Request) {
+	// Validate token if needed (optional)
+	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Get the current week status
+	status, err := GetCurrentWeekStatus()
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Failed to get current week status",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Return the week status
+	at.WriteJSON(w, http.StatusOK, status)
+}
+
 // ProcessWeeklyBimbingan processes weekly bimbingan data for all users
 func ProcessWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 	// Get the current week status
@@ -164,6 +193,201 @@ func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// getIncrementalActivityScore menghitung skor aktivitas inkremental untuk minggu tertentu
+// dengan mengurangi total skor saat ini dengan total skor dari minggu-minggu sebelumnya
+func getIncrementalActivityScore(phoneNumber string, weekNumber int) (model.ActivityScore, error) {
+	// Dapatkan skor aktivitas saat ini (total kumulatif)
+	currentScore, err := GetAllActivityScoreData(phoneNumber)
+	if err != nil {
+		return model.ActivityScore{}, fmt.Errorf("gagal mendapatkan skor aktivitas: %v", err)
+	}
+
+	// Jika ini minggu pertama, langsung gunakan skor saat ini
+	if weekNumber <= 1 {
+		return currentScore, nil
+	}
+
+	// Dapatkan skor dari minggu-minggu sebelumnya
+	var previousScores []model.BimbinganWeekly
+	filter := bson.M{
+		"phonenumber": phoneNumber,
+		"weeknumber":  bson.M{"$lt": weekNumber},
+		"approved":    true, // Hanya perhitungkan minggu yang telah disetujui
+	}
+
+	// Sort berdasarkan weeknumber ascending
+	opts := options.Find().SetSort(bson.M{"weeknumber": 1})
+
+	cursor, err := config.Mongoconn.Collection("bimbinganweekly").Find(context.Background(), filter, opts)
+	if err != nil {
+		return model.ActivityScore{}, fmt.Errorf("gagal mendapatkan data minggu sebelumnya: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &previousScores); err != nil {
+		return model.ActivityScore{}, fmt.Errorf("gagal parse data minggu sebelumnya: %v", err)
+	}
+
+	// Total skor dari minggu-minggu sebelumnya
+	var totalPreviousSponsors int
+	var totalPreviousStrava int
+	var totalPreviousIQ int
+	var totalPreviousPomokitSesi int
+	var totalPreviousPomokitPoints int
+	var totalPreviousMBC float32
+	var totalPreviousMBCPoints float64
+	var totalPreviousRupiah int
+	var totalPreviousQRIS int
+	var totalPreviousQRISPoints float64
+	var totalPreviousTrackerData int
+	var totalPreviousTrackerPoints float64
+	var totalPreviousBukPed int
+	var totalPreviousJurnal int
+	var totalPreviousGTMetrix int
+	var totalPreviousWebHookPush int
+	var totalPreviousWebHook int
+	var totalPreviousPresensiHari int
+	var totalPreviousPresensi int
+	var totalPreviousScore int
+	var totalPreviousRVN float32
+	var totalPreviousRavencoinPoints float64
+
+	// Akumulasi total dari semua minggu sebelumnya
+	for _, prevWeekly := range previousScores {
+		totalPreviousSponsors += prevWeekly.ActivityScore.Sponsor
+		totalPreviousStrava += prevWeekly.ActivityScore.Strava
+		totalPreviousIQ += prevWeekly.ActivityScore.IQ
+		totalPreviousPomokitSesi += prevWeekly.ActivityScore.Pomokitsesi
+		totalPreviousPomokitPoints += prevWeekly.ActivityScore.Pomokit
+		totalPreviousMBC += prevWeekly.ActivityScore.MBC
+		totalPreviousMBCPoints += prevWeekly.ActivityScore.MBCPoints
+		totalPreviousRupiah += prevWeekly.ActivityScore.Rupiah
+		totalPreviousQRIS += prevWeekly.ActivityScore.QRIS
+		totalPreviousQRISPoints += prevWeekly.ActivityScore.QRISPoints
+		totalPreviousTrackerData += prevWeekly.ActivityScore.Trackerdata
+		totalPreviousTrackerPoints += float64(prevWeekly.ActivityScore.Tracker)
+		totalPreviousBukPed += prevWeekly.ActivityScore.BukPed
+		totalPreviousJurnal += prevWeekly.ActivityScore.Jurnal
+		totalPreviousGTMetrix += prevWeekly.ActivityScore.GTMetrix
+		totalPreviousWebHookPush += prevWeekly.ActivityScore.WebHookpush
+		totalPreviousWebHook += prevWeekly.ActivityScore.WebHook
+		totalPreviousPresensiHari += prevWeekly.ActivityScore.PresensiHari
+		totalPreviousPresensi += prevWeekly.ActivityScore.Presensi
+		totalPreviousScore += prevWeekly.ActivityScore.TotalScore
+		totalPreviousRVN += prevWeekly.ActivityScore.RVN
+		totalPreviousRavencoinPoints += prevWeekly.ActivityScore.RavencoinPoints
+	}
+
+	// Hitung skor inkremental (total saat ini - total sebelumnya)
+	incrementalScore := model.ActivityScore{
+		Sponsordata:     currentScore.Sponsordata,
+		Sponsor:         currentScore.Sponsor - totalPreviousSponsors,
+		Trackerdata:     currentScore.Trackerdata - totalPreviousTrackerData,
+		Tracker:         currentScore.Tracker - totalPreviousTrackerPoints,
+		StravaKM:        currentScore.StravaKM,
+		Strava:          currentScore.Strava - totalPreviousStrava,
+		IQresult:        currentScore.IQresult,
+		IQ:              currentScore.IQ - totalPreviousIQ,
+		Pomokitsesi:     currentScore.Pomokitsesi - totalPreviousPomokitSesi,
+		Pomokit:         currentScore.Pomokit - totalPreviousPomokitPoints,
+		GTMetrixResult:  currentScore.GTMetrixResult,
+		BukuKatalog:     currentScore.BukuKatalog,
+		BukPed:          currentScore.BukPed - totalPreviousBukPed,
+		GTMetrix:        currentScore.GTMetrix - totalPreviousGTMetrix,
+		WebHookpush:     currentScore.WebHookpush - totalPreviousWebHookPush,
+		WebHook:         currentScore.WebHook - totalPreviousWebHook,
+		PresensiHari:    currentScore.PresensiHari - totalPreviousPresensiHari,
+		Presensi:        currentScore.Presensi - totalPreviousPresensi,
+		MBC:             currentScore.MBC - totalPreviousMBC,
+		MBCPoints:       currentScore.MBCPoints - totalPreviousMBCPoints,
+		BlockChain:      currentScore.BlockChain,
+		RVN:             currentScore.RVN - totalPreviousRVN,
+		RavencoinPoints: currentScore.RavencoinPoints - totalPreviousRavencoinPoints,
+		Rupiah:          currentScore.Rupiah - totalPreviousRupiah,
+		QRIS:            currentScore.QRIS - totalPreviousQRIS,
+		QRISPoints:      currentScore.QRISPoints - totalPreviousQRISPoints,
+		TotalScore:      currentScore.TotalScore - totalPreviousScore,
+	}
+
+	// Pastikan tidak ada nilai negatif
+	ensureNonNegativeScores(&incrementalScore)
+
+	return incrementalScore, nil
+}
+
+// ensureNonNegativeScores memastikan semua nilai skor tidak negatif
+func ensureNonNegativeScores(score *model.ActivityScore) {
+	if score.Sponsor < 0 {
+		score.Sponsor = 0
+	}
+	if score.Strava < 0 {
+		score.Strava = 0
+	}
+	if score.IQ < 0 {
+		score.IQ = 0
+	}
+	if score.Pomokit < 0 {
+		score.Pomokit = 0
+	}
+	if score.BlockChain < 0 {
+		score.BlockChain = 0
+	}
+	if score.QRIS < 0 {
+		score.QRIS = 0
+	}
+	if float64(score.Tracker) < 0 {
+		score.Tracker = 0
+	}
+	if score.BukPed < 0 {
+		score.BukPed = 0
+	}
+	if score.Jurnal < 0 {
+		score.Jurnal = 0
+	}
+	if score.GTMetrix < 0 {
+		score.GTMetrix = 0
+	}
+	if score.WebHook < 0 {
+		score.WebHook = 0
+	}
+	if score.Presensi < 0 {
+		score.Presensi = 0
+	}
+	if score.TotalScore < 0 {
+		score.TotalScore = 0
+	}
+	if score.MBC < 0 {
+		score.MBC = 0
+	}
+	if score.MBCPoints < 0 {
+		score.MBCPoints = 0
+	}
+	if score.RVN < 0 {
+		score.RVN = 0
+	}
+	if score.RavencoinPoints < 0 {
+		score.RavencoinPoints = 0
+	}
+	if score.QRISPoints < 0 {
+		score.QRISPoints = 0
+	}
+	if score.Rupiah < 0 {
+		score.Rupiah = 0
+	}
+	if score.Trackerdata < 0 {
+		score.Trackerdata = 0
+	}
+	if score.WebHookpush < 0 {
+		score.WebHookpush = 0
+	}
+	if score.PresensiHari < 0 {
+		score.PresensiHari = 0
+	}
+	if score.Pomokitsesi < 0 {
+		score.Pomokitsesi = 0
+	}
+}
+
 // refreshWeeklyBimbinganData updates the bimbingan data for all users for a specific week
 func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int, failed int, err error) {
 	// Get all users
@@ -182,9 +406,10 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 			continue
 		}
 
-		// Get the current activity scores
-		activityScore, err := GetAllActivityScoreData(user.PhoneNumber)
+		// Get the activity scores for this week (incremental calculation)
+		activityScore, err := getIncrementalActivityScore(user.PhoneNumber, weekNumber)
 		if err != nil {
+			fmt.Printf("Error calculating incremental score for user %s: %v\n", user.PhoneNumber, err)
 			failed++
 			continue
 		}
@@ -240,93 +465,6 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 	}
 
 	return processed, failed, nil
-}
-
-// ChangeWeekNumber changes the current active week
-func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
-	// Only admin should be able to change the week
-	// For simplicity, we're not implementing full admin authentication here
-
-	var request model.ChangeWeekRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Status:   "Error",
-			Info:     "Invalid request body",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	if request.WeekNumber < 1 {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Status:   "Error",
-			Info:     "Invalid week number",
-			Response: "Week number must be positive",
-		})
-		return
-	}
-
-	// Set default week label if not provided
-	if request.WeekLabel == "" {
-		request.WeekLabel = fmt.Sprintf("week%d", request.WeekNumber)
-	}
-
-	// Calculate new start and end dates
-	now := time.Now()
-
-	// Calculate start (Monday) and end (Sunday) of the current week
-	weekday := int(now.Weekday())
-	if weekday == 0 { // Sunday is 0, we want it to be 7
-		weekday = 7
-	}
-
-	startDate := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour)                       // Monday at 00:00
-	endDate := startDate.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second) // Sunday at 23:59:59
-
-	// Update the week status
-	update := bson.M{
-		"$set": bson.M{
-			"currentweek": request.WeekNumber,
-			"weeklabel":   request.WeekLabel,
-			"startdate":   startDate,
-			"enddate":     endDate,
-			"lastupdated": now,
-			"updatedby":   request.UpdatedBy,
-		},
-	}
-
-	_, err := config.Mongoconn.Collection("bimbinganweeklystatus").UpdateOne(
-		context.Background(),
-		bson.M{},
-		update,
-		options.Update().SetUpsert(true),
-	)
-
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Status:   "Error",
-			Info:     "Failed to update week number",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	// Process weekly data for the new week
-	processed, failed, err := refreshWeeklyBimbinganData(request.WeekNumber, request.WeekLabel)
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Status:   "Error",
-			Info:     "Failed to process data for the new week",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	at.WriteJSON(w, http.StatusOK, model.Response{
-		Status:   "Success",
-		Info:     fmt.Sprintf("Changed to week %d and processed %d users, %d failed", request.WeekNumber, processed, failed),
-		Response: "Week number has been updated",
-	})
 }
 
 // GetBimbinganWeeklyByWeek returns bimbingan data for a specific user and week
@@ -489,10 +627,10 @@ func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekL
 		return false, fmt.Errorf("failed to get user data: %v", err), err
 	}
 
-	// Get the current activity scores
-	activityScore, err := GetAllActivityScoreData(phoneNumber)
+	// Get the incremental activity scores for this week
+	activityScore, err := getIncrementalActivityScore(phoneNumber, weekNumber)
 	if err != nil {
-		return false, fmt.Errorf("failed to get activity score data: %v", err), err
+		return false, fmt.Errorf("failed to get incremental activity score data: %v", err), err
 	}
 
 	// Check if a record for this user and week already exists
@@ -632,7 +770,13 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Find or create the weekly data for this user and week
 	weekLabel := fmt.Sprintf("week%d", weekNumber)
-	refreshWeeklyBimbinganDataForUser(payload.Id, weekNumber, weekLabel)
+	_, _, err = refreshWeeklyBimbinganDataForUser(payload.Id, weekNumber, weekLabel)
+	if err != nil {
+		respn.Status = "Error : Gagal memperbarui data bimbingan"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusInternalServerError, respn)
+		return
+	}
 
 	// Get the weekly data
 	filter = bson.M{
@@ -689,35 +833,6 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 	config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 
 	at.WriteJSON(w, http.StatusOK, weeklyData)
-}
-
-// GetBimbinganWeeklyStatus returns the current weekly status information
-func GetBimbinganWeeklyStatus(w http.ResponseWriter, r *http.Request) {
-	// Validate token if needed (optional)
-	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-	if err != nil {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
-			Info:     at.GetSecretFromHeader(r),
-			Location: "Token Validation",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	// Get the current week status
-	status, err := GetCurrentWeekStatus()
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Status:   "Error",
-			Info:     "Failed to get current week status",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	// Return the week status
-	at.WriteJSON(w, http.StatusOK, status)
 }
 
 // ApproveBimbinganWeekly approves or rejects a weekly bimbingan request
@@ -841,4 +956,127 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 	config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 
 	at.WriteJSON(w, http.StatusOK, weeklyData)
+}
+
+// ChangeWeekNumber changes the current active week
+func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
+	// Validate token (admin authorization should be implemented here)
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(r)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(w, http.StatusForbidden, respn)
+		return
+	}
+
+	// Parse request body
+	var request model.ChangeWeekRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Status:   "Error",
+			Info:     "Invalid request body",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	if request.WeekNumber < 1 {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Status:   "Error",
+			Info:     "Invalid week number",
+			Response: "Week number must be positive",
+		})
+		return
+	}
+
+	// Set default week label if not provided
+	if request.WeekLabel == "" {
+		request.WeekLabel = fmt.Sprintf("week%d", request.WeekNumber)
+	}
+
+	// Set default updatedBy if not provided
+	if request.UpdatedBy == "" {
+		request.UpdatedBy = payload.Id
+	}
+
+	// Get current week status
+	currentStatus, err := GetCurrentWeekStatus()
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Failed to get current week status",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Prevent changing to the same week
+	if currentStatus.CurrentWeek == request.WeekNumber {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Status:   "Error",
+			Info:     "Week already active",
+			Response: fmt.Sprintf("Week %d is already the active week", request.WeekNumber),
+		})
+		return
+	}
+
+	// Calculate new start and end dates
+	now := time.Now()
+
+	// Calculate start (Monday) and end (Sunday) of the current week
+	weekday := int(now.Weekday())
+	if weekday == 0 { // Sunday is 0, we want it to be 7
+		weekday = 7
+	}
+
+	startDate := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour)                       // Monday at 00:00
+	endDate := startDate.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second) // Sunday at 23:59:59
+
+	// Update the week status
+	update := bson.M{
+		"$set": bson.M{
+			"currentweek": request.WeekNumber,
+			"weeklabel":   request.WeekLabel,
+			"startdate":   startDate,
+			"enddate":     endDate,
+			"lastupdated": now,
+			"updatedby":   request.UpdatedBy,
+		},
+	}
+
+	_, err = config.Mongoconn.Collection("bimbinganweeklystatus").UpdateOne(
+		context.Background(),
+		bson.M{},
+		update,
+		options.Update().SetUpsert(true),
+	)
+
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Failed to update week number",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Process weekly data for the new week
+	processed, failed, err := refreshWeeklyBimbinganData(request.WeekNumber, request.WeekLabel)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Failed to process data for the new week",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Status:   "Success",
+		Info:     fmt.Sprintf("Changed to week %d and processed %d users, %d failed", request.WeekNumber, processed, failed),
+		Response: "Week number has been updated",
+	})
 }
