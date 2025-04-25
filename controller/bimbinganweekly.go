@@ -229,6 +229,7 @@ func calculateDifferentialPoints(phoneNumber string, weekNumber int, currentActi
 		return currentActivityScore, nil
 	}
 
+	// Inisialisasi dengan nol
 	var previousTotalScore = model.ActivityScore{
 		Sponsordata:     0,
 		Sponsor:         0,
