@@ -313,6 +313,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetDataBimbinganById(w, r)
 	case method == "POST" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.ReplaceDataBimbingan(w, r)
+		//weeklyy
+	case method == "GET" && path == "/refresh/bimbingan/weekly":
+		controller.ProcessWeeklyBimbingan(w, r)
+	case method == "GET" && path == "/refresh/bimbingan/weekly/force":
+		controller.RefreshWeeklyBimbingan(w, r)
+	case method == "GET" && path == "/api/bimbingan/weekly":
+		controller.GetBimbinganWeeklyByWeek(w, r)
 	// case method == "GET" && path == "/refresh/fororangtua":
 	// 	controller.ForOrangTua(w, r)
 	// case method == "GET" && path == "/refresh/laporankeorangtua":
