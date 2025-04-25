@@ -328,6 +328,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ApproveBimbinganWeekly(w, r)
 	case method == "POST" && path == "/admin/bimbingan/changeweek":
 		controller.ChangeWeekNumber(w, r)
+	case method == "GET" && path == "/api/bimbingan/weekly/status":
+		controller.GetBimbinganWeeklyStatus(w, r)
 	// case method == "GET" && path == "/refresh/fororangtua":
 	// 	controller.ForOrangTua(w, r)
 	// case method == "GET" && path == "/refresh/laporankeorangtua":

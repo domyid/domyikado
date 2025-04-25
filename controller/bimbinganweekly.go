@@ -691,6 +691,35 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, weeklyData)
 }
 
+// GetBimbinganWeeklyStatus returns the current weekly status information
+func GetBimbinganWeeklyStatus(w http.ResponseWriter, r *http.Request) {
+	// Validate token if needed (optional)
+	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Get the current week status
+	status, err := GetCurrentWeekStatus()
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Status:   "Error",
+			Info:     "Failed to get current week status",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	// Return the week status
+	at.WriteJSON(w, http.StatusOK, status)
+}
+
 // ApproveBimbinganWeekly approves or rejects a weekly bimbingan request
 func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 	// Validate token (only dosen should be able to approve)
