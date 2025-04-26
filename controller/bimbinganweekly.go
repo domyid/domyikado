@@ -193,129 +193,116 @@ func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getIncrementalActivityScore menghitung skor aktivitas inkremental untuk minggu tertentu
-// dengan mengurangi total skor saat ini dengan total skor dari minggu-minggu sebelumnya
+// getIncrementalActivityScore calculates incremental activity score for a specific week
+// by retrieving all approved previous weeks' scores and subtracting them from the current total score
 func getIncrementalActivityScore(phoneNumber string, weekNumber int) (model.ActivityScore, error) {
-	// Dapatkan skor aktivitas saat ini (total kumulatif)
+	// Get current total activity score
 	currentScore, err := GetAllActivityScoreData(phoneNumber)
 	if err != nil {
-		return model.ActivityScore{}, fmt.Errorf("gagal mendapatkan skor aktivitas: %v", err)
+		return model.ActivityScore{}, fmt.Errorf("failed to get activity score: %v", err)
 	}
 
-	// Jika ini minggu pertama, langsung gunakan skor saat ini
+	// If this is week 1, return the current score as is
 	if weekNumber <= 1 {
 		return currentScore, nil
 	}
 
-	// Dapatkan skor dari minggu-minggu sebelumnya
+	// Get all previous approved weekly scores
 	var previousScores []model.BimbinganWeekly
 	filter := bson.M{
 		"phonenumber": phoneNumber,
 		"weeknumber":  bson.M{"$lt": weekNumber},
-		"approved":    true, // Hanya perhitungkan minggu yang telah disetujui
+		"approved":    true, // Only consider approved weeks
 	}
 
-	// Sort berdasarkan weeknumber ascending
+	// Sort by weeknumber ascending to process in chronological order
 	opts := options.Find().SetSort(bson.M{"weeknumber": 1})
 
 	cursor, err := config.Mongoconn.Collection("bimbinganweekly").Find(context.Background(), filter, opts)
 	if err != nil {
-		return model.ActivityScore{}, fmt.Errorf("gagal mendapatkan data minggu sebelumnya: %v", err)
+		return model.ActivityScore{}, fmt.Errorf("failed to get previous weeks data: %v", err)
 	}
 	defer cursor.Close(context.Background())
 
 	if err = cursor.All(context.Background(), &previousScores); err != nil {
-		return model.ActivityScore{}, fmt.Errorf("gagal parse data minggu sebelumnya: %v", err)
+		return model.ActivityScore{}, fmt.Errorf("failed to parse previous weeks data: %v", err)
 	}
 
-	// Total skor dari minggu-minggu sebelumnya
-	var totalPreviousSponsors int
-	var totalPreviousStrava int
-	var totalPreviousIQ int
-	var totalPreviousPomokitSesi int
-	var totalPreviousPomokitPoints int
-	var totalPreviousMBC float32
-	var totalPreviousMBCPoints float64
-	var totalPreviousRupiah int
-	var totalPreviousQRIS int
-	var totalPreviousQRISPoints float64
-	var totalPreviousTrackerData int
-	var totalPreviousTrackerPoints float64
-	var totalPreviousBukPed int
-	var totalPreviousJurnal int
-	var totalPreviousGTMetrix int
-	var totalPreviousWebHookPush int
-	var totalPreviousWebHook int
-	var totalPreviousPresensiHari int
-	var totalPreviousPresensi int
-	var totalPreviousScore int
-	var totalPreviousRVN float32
-	var totalPreviousRavencoinPoints float64
-
-	// Akumulasi total dari semua minggu sebelumnya
-	for _, prevWeekly := range previousScores {
-		totalPreviousSponsors += prevWeekly.ActivityScore.Sponsor
-		totalPreviousStrava += prevWeekly.ActivityScore.Strava
-		totalPreviousIQ += prevWeekly.ActivityScore.IQ
-		totalPreviousPomokitSesi += prevWeekly.ActivityScore.Pomokitsesi
-		totalPreviousPomokitPoints += prevWeekly.ActivityScore.Pomokit
-		totalPreviousMBC += prevWeekly.ActivityScore.MBC
-		totalPreviousMBCPoints += prevWeekly.ActivityScore.MBCPoints
-		totalPreviousRupiah += prevWeekly.ActivityScore.Rupiah
-		totalPreviousQRIS += prevWeekly.ActivityScore.QRIS
-		totalPreviousQRISPoints += prevWeekly.ActivityScore.QRISPoints
-		totalPreviousTrackerData += prevWeekly.ActivityScore.Trackerdata
-		totalPreviousTrackerPoints += float64(prevWeekly.ActivityScore.Tracker)
-		totalPreviousBukPed += prevWeekly.ActivityScore.BukPed
-		totalPreviousJurnal += prevWeekly.ActivityScore.Jurnal
-		totalPreviousGTMetrix += prevWeekly.ActivityScore.GTMetrix
-		totalPreviousWebHookPush += prevWeekly.ActivityScore.WebHookpush
-		totalPreviousWebHook += prevWeekly.ActivityScore.WebHook
-		totalPreviousPresensiHari += prevWeekly.ActivityScore.PresensiHari
-		totalPreviousPresensi += prevWeekly.ActivityScore.Presensi
-		totalPreviousScore += prevWeekly.ActivityScore.TotalScore
-		totalPreviousRVN += prevWeekly.ActivityScore.RVN
-		totalPreviousRavencoinPoints += prevWeekly.ActivityScore.RavencoinPoints
+	// If no previous approved weeks, return current score
+	if len(previousScores) == 0 {
+		return currentScore, nil
 	}
 
-	// Hitung skor inkremental (total saat ini - total sebelumnya)
+	// Calculate total scores from all previous approved weeks
+	var totalPreviousScore model.ActivityScore
+
+	// Sum up all previous weeks' scores
+	for _, prev := range previousScores {
+		totalPreviousScore.Sponsor += prev.ActivityScore.Sponsor
+		totalPreviousScore.Strava += prev.ActivityScore.Strava
+		totalPreviousScore.IQ += prev.ActivityScore.IQ
+		totalPreviousScore.Pomokitsesi += prev.ActivityScore.Pomokitsesi
+		totalPreviousScore.Pomokit += prev.ActivityScore.Pomokit
+		totalPreviousScore.MBC += prev.ActivityScore.MBC
+		totalPreviousScore.MBCPoints += prev.ActivityScore.MBCPoints
+		totalPreviousScore.Rupiah += prev.ActivityScore.Rupiah
+		totalPreviousScore.QRIS += prev.ActivityScore.QRIS
+		totalPreviousScore.QRISPoints += prev.ActivityScore.QRISPoints
+		totalPreviousScore.Trackerdata += prev.ActivityScore.Trackerdata
+		totalPreviousScore.Tracker += prev.ActivityScore.Tracker
+		totalPreviousScore.BukPed += prev.ActivityScore.BukPed
+		totalPreviousScore.Jurnal += prev.ActivityScore.Jurnal
+		totalPreviousScore.GTMetrix += prev.ActivityScore.GTMetrix
+		totalPreviousScore.WebHookpush += prev.ActivityScore.WebHookpush
+		totalPreviousScore.WebHook += prev.ActivityScore.WebHook
+		totalPreviousScore.PresensiHari += prev.ActivityScore.PresensiHari
+		totalPreviousScore.Presensi += prev.ActivityScore.Presensi
+		totalPreviousScore.RVN += prev.ActivityScore.RVN
+		totalPreviousScore.RavencoinPoints += prev.ActivityScore.RavencoinPoints
+		totalPreviousScore.TotalScore += prev.ActivityScore.TotalScore
+	}
+
+	// Calculate incremental score (current total - previous approved total)
 	incrementalScore := model.ActivityScore{
-		Sponsordata:     currentScore.Sponsordata,
-		Sponsor:         currentScore.Sponsor - totalPreviousSponsors,
-		Trackerdata:     currentScore.Trackerdata - totalPreviousTrackerData,
-		Tracker:         currentScore.Tracker - totalPreviousTrackerPoints,
-		StravaKM:        currentScore.StravaKM,
-		Strava:          currentScore.Strava - totalPreviousStrava,
-		IQresult:        currentScore.IQresult,
-		IQ:              currentScore.IQ - totalPreviousIQ,
-		Pomokitsesi:     currentScore.Pomokitsesi - totalPreviousPomokitSesi,
-		Pomokit:         currentScore.Pomokit - totalPreviousPomokitPoints,
-		GTMetrixResult:  currentScore.GTMetrixResult,
-		BukuKatalog:     currentScore.BukuKatalog,
-		BukPed:          currentScore.BukPed - totalPreviousBukPed,
-		GTMetrix:        currentScore.GTMetrix - totalPreviousGTMetrix,
-		WebHookpush:     currentScore.WebHookpush - totalPreviousWebHookPush,
-		WebHook:         currentScore.WebHook - totalPreviousWebHook,
-		PresensiHari:    currentScore.PresensiHari - totalPreviousPresensiHari,
-		Presensi:        currentScore.Presensi - totalPreviousPresensi,
-		MBC:             currentScore.MBC - totalPreviousMBC,
-		MBCPoints:       currentScore.MBCPoints - totalPreviousMBCPoints,
-		BlockChain:      currentScore.BlockChain,
-		RVN:             currentScore.RVN - totalPreviousRVN,
-		RavencoinPoints: currentScore.RavencoinPoints - totalPreviousRavencoinPoints,
-		Rupiah:          currentScore.Rupiah - totalPreviousRupiah,
-		QRIS:            currentScore.QRIS - totalPreviousQRIS,
-		QRISPoints:      currentScore.QRISPoints - totalPreviousQRISPoints,
-		TotalScore:      currentScore.TotalScore - totalPreviousScore,
+		// Preserve string/descriptive values
+		Sponsordata:    currentScore.Sponsordata,
+		StravaKM:       currentScore.StravaKM,
+		IQresult:       currentScore.IQresult,
+		GTMetrixResult: currentScore.GTMetrixResult,
+		BukuKatalog:    currentScore.BukuKatalog,
+
+		// Calculate numeric values by subtraction
+		Sponsor:         currentScore.Sponsor - totalPreviousScore.Sponsor,
+		Trackerdata:     currentScore.Trackerdata - totalPreviousScore.Trackerdata,
+		Tracker:         currentScore.Tracker - totalPreviousScore.Tracker,
+		Strava:          currentScore.Strava - totalPreviousScore.Strava,
+		IQ:              currentScore.IQ - totalPreviousScore.IQ,
+		Pomokitsesi:     currentScore.Pomokitsesi - totalPreviousScore.Pomokitsesi,
+		Pomokit:         currentScore.Pomokit - totalPreviousScore.Pomokit,
+		BukPed:          currentScore.BukPed - totalPreviousScore.BukPed,
+		GTMetrix:        currentScore.GTMetrix - totalPreviousScore.GTMetrix,
+		WebHookpush:     currentScore.WebHookpush - totalPreviousScore.WebHookpush,
+		WebHook:         currentScore.WebHook - totalPreviousScore.WebHook,
+		PresensiHari:    currentScore.PresensiHari - totalPreviousScore.PresensiHari,
+		Presensi:        currentScore.Presensi - totalPreviousScore.Presensi,
+		MBC:             currentScore.MBC - totalPreviousScore.MBC,
+		MBCPoints:       currentScore.MBCPoints - totalPreviousScore.MBCPoints,
+		BlockChain:      currentScore.BlockChain - totalPreviousScore.BlockChain,
+		RVN:             currentScore.RVN - totalPreviousScore.RVN,
+		RavencoinPoints: currentScore.RavencoinPoints - totalPreviousScore.RavencoinPoints,
+		Rupiah:          currentScore.Rupiah - totalPreviousScore.Rupiah,
+		QRIS:            currentScore.QRIS - totalPreviousScore.QRIS,
+		QRISPoints:      currentScore.QRISPoints - totalPreviousScore.QRISPoints,
+		TotalScore:      currentScore.TotalScore - totalPreviousScore.TotalScore,
 	}
 
-	// Pastikan tidak ada nilai negatif
+	// Ensure no negative values
 	ensureNonNegativeScores(&incrementalScore)
 
 	return incrementalScore, nil
 }
 
-// ensureNonNegativeScores memastikan semua nilai skor tidak negatif
+// ensureNonNegativeScores ensures all score values are non-negative
 func ensureNonNegativeScores(score *model.ActivityScore) {
 	if score.Sponsor < 0 {
 		score.Sponsor = 0
@@ -388,7 +375,7 @@ func ensureNonNegativeScores(score *model.ActivityScore) {
 	}
 }
 
-// refreshWeeklyBimbinganData updates the bimbingan data for all users for a specific week
+// refreshWeeklyBimbinganData updates or creates bimbingan records for all users for a specific week
 func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int, failed int, err error) {
 	// Get all users
 	users, err := atdb.GetAllDoc[[]model.Userdomyikado](config.Mongoconn, "user", bson.M{})
@@ -406,7 +393,7 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 			continue
 		}
 
-		// Get the activity scores for this week (incremental calculation)
+		// Calculate incremental activity score for this week
 		activityScore, err := getIncrementalActivityScore(user.PhoneNumber, weekNumber)
 		if err != nil {
 			fmt.Printf("Error calculating incremental score for user %s: %v\n", user.PhoneNumber, err)
@@ -432,7 +419,7 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 				WeekNumber:    weekNumber,
 				WeekLabel:     weekLabel,
 				ActivityScore: activityScore,
-				Approved:      false,
+				Approved:      false, // Default to not approved
 				CreatedAt:     now,
 				UpdatedAt:     now,
 			}
@@ -619,7 +606,7 @@ func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, weeklyData)
 }
 
-// refreshWeeklyBimbinganDataForUser updates the bimbingan data for a single user
+// refreshWeeklyBimbinganDataForUser refreshes data for a single user for a specific week
 func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekLabel string) (bool, error, error) {
 	// Check if user exists
 	_, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", bson.M{"phonenumber": phoneNumber})
@@ -630,7 +617,7 @@ func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekL
 	// Get the incremental activity scores for this week
 	activityScore, err := getIncrementalActivityScore(phoneNumber, weekNumber)
 	if err != nil {
-		return false, fmt.Errorf("failed to get incremental activity score data: %v", err), err
+		return false, fmt.Errorf("failed to get incremental activity score: %v", err), err
 	}
 
 	// Check if a record for this user and week already exists
@@ -682,7 +669,7 @@ func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekL
 	}
 }
 
-// PostBimbinganWeeklyRequest submits a bimbingan request for approval for the current week
+// PostBimbinganWeeklyRequest submits a bimbingan request for approval
 func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 	// Validate token
 	var respn model.Response
