@@ -20,73 +20,62 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// InitializeBimbinganWeeklyStatus initializes the weekly status if it doesn't exist
+// InitializeBimbinganWeeklyStatus inisialisasi status mingguan jika belum ada
 func InitializeBimbinganWeeklyStatus() error {
-	// Check if status document exists
+	// Periksa apakah dokumen status sudah ada
 	var status model.BimbinganWeeklyStatus
 	err := config.Mongoconn.Collection("bimbinganweeklystatus").FindOne(context.Background(), bson.M{}).Decode(&status)
 
 	if err == mongo.ErrNoDocuments {
-		// Create new status document with initial values (Week 1)
+		// Buat dokumen status baru dengan nilai awal (Minggu 1)
 		now := time.Now()
-
-		// Calculate start (Monday) and end (Sunday) of the current week
-		weekday := int(now.Weekday())
-		if weekday == 0 { // Sunday is 0, we want it to be 7
-			weekday = 7
-		}
-
-		startDate := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour)                       // Monday at 00:00
-		endDate := startDate.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second) // Sunday at 23:59:59
 
 		status = model.BimbinganWeeklyStatus{
 			CurrentWeek: 1,
 			WeekLabel:   "week1",
-			StartDate:   startDate,
-			EndDate:     endDate,
 			LastUpdated: now,
 			UpdatedBy:   "system_init",
 		}
 
 		_, err = config.Mongoconn.Collection("bimbinganweeklystatus").InsertOne(context.Background(), status)
 		if err != nil {
-			return fmt.Errorf("failed to initialize bimbingan weekly status: %v", err)
+			return fmt.Errorf("gagal inisialisasi status bimbingan mingguan: %v", err)
 		}
 
-		fmt.Println("Initialized bimbingan weekly status with Week 1")
+		fmt.Println("Inisialisasi status bimbingan mingguan dengan Minggu 1")
 	} else if err != nil {
-		return fmt.Errorf("error checking bimbingan weekly status: %v", err)
+		return fmt.Errorf("error memeriksa status bimbingan mingguan: %v", err)
 	}
 
 	return nil
 }
 
-// GetCurrentWeekStatus returns the current active week status
+// GetCurrentWeekStatus mengembalikan status minggu aktif saat ini
 func GetCurrentWeekStatus() (model.BimbinganWeeklyStatus, error) {
 	var status model.BimbinganWeeklyStatus
 
-	// Ensure the status collection is initialized
+	// Pastikan koleksi status sudah diinisialisasi
 	err := InitializeBimbinganWeeklyStatus()
 	if err != nil {
 		return status, err
 	}
 
-	// Get the current status
+	// Ambil status saat ini
 	err = config.Mongoconn.Collection("bimbinganweeklystatus").FindOne(context.Background(), bson.M{}).Decode(&status)
 	if err != nil {
-		return status, fmt.Errorf("error fetching current week status: %v", err)
+		return status, fmt.Errorf("error mengambil status minggu saat ini: %v", err)
 	}
 
 	return status, nil
 }
 
-// GetBimbinganWeeklyStatus returns the current weekly status information
+// GetBimbinganWeeklyStatus mengembalikan informasi status mingguan saat ini
 func GetBimbinganWeeklyStatus(w http.ResponseWriter, r *http.Request) {
-	// Validate token if needed (optional)
+	// Validasi token jika diperlukan
 	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
+			Status:   "Error: Token Tidak Valid",
 			Info:     at.GetSecretFromHeader(r),
 			Location: "Token Validation",
 			Response: err.Error(),
@@ -94,40 +83,40 @@ func GetBimbinganWeeklyStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the current week status
+	// Ambil status minggu saat ini
 	status, err := GetCurrentWeekStatus()
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to get current week status",
+			Info:     "Gagal mendapatkan status minggu saat ini",
 			Response: err.Error(),
 		})
 		return
 	}
 
-	// Return the week status
+	// Kembalikan status minggu
 	at.WriteJSON(w, http.StatusOK, status)
 }
 
-// ProcessWeeklyBimbingan processes weekly bimbingan data for all users
+// ProcessWeeklyBimbingan memproses data bimbingan mingguan untuk semua pengguna
 func ProcessWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
-	// Get the current week status
+	// Ambil status minggu saat ini
 	weekStatus, err := GetCurrentWeekStatus()
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to get current week status",
+			Info:     "Gagal mendapatkan status minggu saat ini",
 			Response: err.Error(),
 		})
 		return
 	}
 
-	// Process data for the current week
+	// Proses data untuk minggu saat ini
 	processed, failed, err := refreshWeeklyBimbinganData(weekStatus.CurrentWeek, weekStatus.WeekLabel)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to process weekly bimbingan data",
+			Info:     "Gagal memproses data bimbingan mingguan",
 			Response: err.Error(),
 		})
 		return
@@ -135,14 +124,14 @@ func ProcessWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Status:   "Success",
-		Info:     fmt.Sprintf("Processed %d users, %d failed", processed, failed),
-		Response: "Weekly bimbingan data has been processed",
+		Info:     fmt.Sprintf("Berhasil memproses %d pengguna, %d gagal", processed, failed),
+		Response: "Data bimbingan mingguan telah diproses",
 	})
 }
 
-// RefreshWeeklyBimbingan forces a refresh of weekly bimbingan data
+// RefreshWeeklyBimbingan memaksa pembaruan data bimbingan mingguan
 func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
-	// Get week parameter, default to current week
+	// Ambil parameter minggu, default ke minggu saat ini
 	weekParam := r.URL.Query().Get("week")
 
 	var weekNumber int
@@ -153,18 +142,18 @@ func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 		if err != nil || weekNumber < 1 {
 			at.WriteJSON(w, http.StatusBadRequest, model.Response{
 				Status:   "Error",
-				Info:     "Invalid week parameter",
-				Response: "Week must be a positive integer",
+				Info:     "Parameter minggu tidak valid",
+				Response: "Minggu harus berupa bilangan bulat positif",
 			})
 			return
 		}
 	} else {
-		// Get current week from status
+		// Ambil minggu saat ini dari status
 		status, err := GetCurrentWeekStatus()
 		if err != nil {
 			at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 				Status:   "Error",
-				Info:     "Failed to get current week status",
+				Info:     "Gagal mendapatkan status minggu saat ini",
 				Response: err.Error(),
 			})
 			return
@@ -172,15 +161,15 @@ func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 		weekNumber = status.CurrentWeek
 	}
 
-	// Generate week label
+	// Buat label minggu
 	weekLabel := fmt.Sprintf("week%d", weekNumber)
 
-	// Force refresh for the specified week
+	// Paksa pembaruan untuk minggu yang ditentukan
 	processed, failed, err := refreshWeeklyBimbinganData(weekNumber, weekLabel)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to refresh weekly bimbingan data",
+			Info:     "Gagal menyegarkan data bimbingan mingguan",
 			Response: err.Error(),
 		})
 		return
@@ -188,55 +177,55 @@ func RefreshWeeklyBimbingan(w http.ResponseWriter, r *http.Request) {
 
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Status:   "Success",
-		Info:     fmt.Sprintf("Refreshed %d users, %d failed for week %d", processed, failed, weekNumber),
-		Response: "Weekly bimbingan data has been refreshed",
+		Info:     fmt.Sprintf("Berhasil menyegarkan %d pengguna, %d gagal untuk minggu %d", processed, failed, weekNumber),
+		Response: "Data bimbingan mingguan telah disegarkan",
 	})
 }
 
-// getIncrementalActivityScore calculates incremental activity score for a specific week
-// by retrieving all approved previous weeks' scores and subtracting them from the current total score
+// getIncrementalActivityScore menghitung skor aktivitas inkremental untuk minggu tertentu
+// dengan mengurangi total skor saat ini dengan total skor dari minggu-minggu sebelumnya yang sudah disetujui
 func getIncrementalActivityScore(phoneNumber string, weekNumber int) (model.ActivityScore, error) {
-	// Get current total activity score
+	// Dapatkan skor aktivitas kumulatif saat ini
 	currentScore, err := GetAllActivityScoreData(phoneNumber)
 	if err != nil {
-		return model.ActivityScore{}, fmt.Errorf("failed to get activity score: %v", err)
+		return model.ActivityScore{}, fmt.Errorf("gagal mendapatkan skor aktivitas: %v", err)
 	}
 
-	// If this is week 1, return the current score as is
+	// Jika ini minggu pertama, langsung gunakan skor saat ini
 	if weekNumber <= 1 {
 		return currentScore, nil
 	}
 
-	// Get all previous approved weekly scores
+	// Dapatkan skor dari minggu-minggu sebelumnya yang sudah disetujui
 	var previousScores []model.BimbinganWeekly
 	filter := bson.M{
 		"phonenumber": phoneNumber,
 		"weeknumber":  bson.M{"$lt": weekNumber},
-		"approved":    true, // Only consider approved weeks
+		"approved":    true, // Hanya perhitungkan minggu yang telah disetujui
 	}
 
-	// Sort by weeknumber ascending to process in chronological order
+	// Sort berdasarkan weeknumber ascending
 	opts := options.Find().SetSort(bson.M{"weeknumber": 1})
 
 	cursor, err := config.Mongoconn.Collection("bimbinganweekly").Find(context.Background(), filter, opts)
 	if err != nil {
-		return model.ActivityScore{}, fmt.Errorf("failed to get previous weeks data: %v", err)
+		return model.ActivityScore{}, fmt.Errorf("gagal mendapatkan data minggu sebelumnya: %v", err)
 	}
 	defer cursor.Close(context.Background())
 
 	if err = cursor.All(context.Background(), &previousScores); err != nil {
-		return model.ActivityScore{}, fmt.Errorf("failed to parse previous weeks data: %v", err)
+		return model.ActivityScore{}, fmt.Errorf("gagal parse data minggu sebelumnya: %v", err)
 	}
 
-	// If no previous approved weeks, return current score
+	// Jika tidak ada minggu sebelumnya yang disetujui, kembalikan skor saat ini
 	if len(previousScores) == 0 {
 		return currentScore, nil
 	}
 
-	// Calculate total scores from all previous approved weeks
+	// Hitung total skor dari semua minggu sebelumnya yang disetujui
 	var totalPreviousScore model.ActivityScore
 
-	// Sum up all previous weeks' scores
+	// Jumlahkan semua skor minggu sebelumnya
 	for _, prev := range previousScores {
 		totalPreviousScore.Sponsor += prev.ActivityScore.Sponsor
 		totalPreviousScore.Strava += prev.ActivityScore.Strava
@@ -262,16 +251,16 @@ func getIncrementalActivityScore(phoneNumber string, weekNumber int) (model.Acti
 		totalPreviousScore.TotalScore += prev.ActivityScore.TotalScore
 	}
 
-	// Calculate incremental score (current total - previous approved total)
+	// Hitung skor inkremental (total saat ini - total minggu sebelumnya)
 	incrementalScore := model.ActivityScore{
-		// Preserve string/descriptive values
+		// Pertahankan nilai string/deskriptif
 		Sponsordata:    currentScore.Sponsordata,
 		StravaKM:       currentScore.StravaKM,
 		IQresult:       currentScore.IQresult,
 		GTMetrixResult: currentScore.GTMetrixResult,
 		BukuKatalog:    currentScore.BukuKatalog,
 
-		// Calculate numeric values by subtraction
+		// Hitung nilai numerik dengan pengurangan
 		Sponsor:         currentScore.Sponsor - totalPreviousScore.Sponsor,
 		Trackerdata:     currentScore.Trackerdata - totalPreviousScore.Trackerdata,
 		Tracker:         currentScore.Tracker - totalPreviousScore.Tracker,
@@ -296,13 +285,13 @@ func getIncrementalActivityScore(phoneNumber string, weekNumber int) (model.Acti
 		TotalScore:      currentScore.TotalScore - totalPreviousScore.TotalScore,
 	}
 
-	// Ensure no negative values
+	// Pastikan tidak ada nilai negatif
 	ensureNonNegativeScores(&incrementalScore)
 
 	return incrementalScore, nil
 }
 
-// ensureNonNegativeScores ensures all score values are non-negative
+// ensureNonNegativeScores memastikan semua nilai skor tidak negatif
 func ensureNonNegativeScores(score *model.ActivityScore) {
 	if score.Sponsor < 0 {
 		score.Sponsor = 0
@@ -375,33 +364,33 @@ func ensureNonNegativeScores(score *model.ActivityScore) {
 	}
 }
 
-// refreshWeeklyBimbinganData updates or creates bimbingan records for all users for a specific week
+// refreshWeeklyBimbinganData memperbarui atau membuat catatan bimbingan untuk semua pengguna untuk minggu tertentu
 func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int, failed int, err error) {
-	// Get all users
+	// Ambil semua pengguna
 	users, err := atdb.GetAllDoc[[]model.Userdomyikado](config.Mongoconn, "user", bson.M{})
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get users: %v", err)
+		return 0, 0, fmt.Errorf("gagal mendapatkan pengguna: %v", err)
 	}
 
 	processed = 0
 	failed = 0
 
-	// Process each user
+	// Proses setiap pengguna
 	for _, user := range users {
 		if user.PhoneNumber == "" {
 			failed++
 			continue
 		}
 
-		// Calculate incremental activity score for this week
+		// Hitung skor aktivitas inkremental untuk minggu ini
 		activityScore, err := getIncrementalActivityScore(user.PhoneNumber, weekNumber)
 		if err != nil {
-			fmt.Printf("Error calculating incremental score for user %s: %v\n", user.PhoneNumber, err)
+			fmt.Printf("Error menghitung skor inkremental untuk pengguna %s: %v\n", user.PhoneNumber, err)
 			failed++
 			continue
 		}
 
-		// Check if a record for this user and week already exists
+		// Periksa apakah catatan untuk pengguna dan minggu ini sudah ada
 		var existingWeekly model.BimbinganWeekly
 		filter := bson.M{
 			"phonenumber": user.PhoneNumber,
@@ -413,13 +402,13 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 		now := time.Now()
 
 		if err == mongo.ErrNoDocuments {
-			// Create new weekly record
+			// Buat catatan mingguan baru
 			newWeekly := model.BimbinganWeekly{
 				PhoneNumber:   user.PhoneNumber,
 				WeekNumber:    weekNumber,
 				WeekLabel:     weekLabel,
 				ActivityScore: activityScore,
-				Approved:      false, // Default to not approved
+				Approved:      false, // Default ke belum disetujui
 				CreatedAt:     now,
 				UpdatedAt:     now,
 			}
@@ -433,10 +422,11 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 			failed++
 			continue
 		} else {
-			// Update existing record but preserve approval status and assessor data
+			// Perbarui catatan yang ada tetapi pertahankan status persetujuan dan data asesor
 			update := bson.M{
 				"$set": bson.M{
 					"activityscore": activityScore,
+					"weeklabel":     weekLabel, // Pastikan label minggu tetap terbaru
 					"updatedAt":     now,
 				},
 			}
@@ -454,13 +444,13 @@ func refreshWeeklyBimbinganData(weekNumber int, weekLabel string) (processed int
 	return processed, failed, nil
 }
 
-// GetBimbinganWeeklyByWeek returns bimbingan data for a specific user and week
+// GetBimbinganWeeklyByWeek mengembalikan data bimbingan untuk pengguna dan minggu tertentu
 func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
-	// Get token from header
+	// Ambil token dari header
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
+			Status:   "Error: Token Tidak Valid",
 			Info:     at.GetSecretFromHeader(r),
 			Location: "Token Validation",
 			Response: err.Error(),
@@ -468,7 +458,7 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get week parameter, default to current week
+	// Ambil parameter minggu, default ke minggu saat ini
 	weekParam := r.URL.Query().Get("week")
 
 	var weekNumber int
@@ -478,18 +468,18 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 		if err != nil || weekNumber < 1 {
 			at.WriteJSON(w, http.StatusBadRequest, model.Response{
 				Status:   "Error",
-				Info:     "Invalid week parameter",
-				Response: "Week must be a positive integer",
+				Info:     "Parameter minggu tidak valid",
+				Response: "Minggu harus berupa bilangan bulat positif",
 			})
 			return
 		}
 	} else {
-		// Get current week from status
+		// Ambil minggu saat ini dari status
 		status, err := GetCurrentWeekStatus()
 		if err != nil {
 			at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 				Status:   "Error",
-				Info:     "Failed to get current week status",
+				Info:     "Gagal mendapatkan status minggu saat ini",
 				Response: err.Error(),
 			})
 			return
@@ -497,7 +487,7 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 		weekNumber = status.CurrentWeek
 	}
 
-	// Get user's bimbingan data for the specified week
+	// Ambil data bimbingan pengguna untuk minggu tertentu
 	filter := bson.M{
 		"phonenumber": payload.Id,
 		"weeknumber":  weekNumber,
@@ -507,25 +497,25 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 	err = config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 
 	if err == mongo.ErrNoDocuments {
-		// If no data exists, try to create it first by refreshing
+		// Jika tidak ada data, coba buat dulu dengan menyegarkan
 		weekLabel := fmt.Sprintf("week%d", weekNumber)
 		_, _, err = refreshWeeklyBimbinganDataForUser(payload.Id, weekNumber, weekLabel)
 
 		if err != nil {
 			at.WriteJSON(w, http.StatusNotFound, model.Response{
 				Status:   "Error",
-				Info:     "No weekly data found and failed to create it",
+				Info:     "Tidak ditemukan data mingguan dan gagal membuatnya",
 				Response: err.Error(),
 			})
 			return
 		}
 
-		// Try to get the data again
+		// Coba ambil data lagi
 		err = config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 		if err != nil {
 			at.WriteJSON(w, http.StatusNotFound, model.Response{
 				Status:   "Error",
-				Info:     "Weekly data not found even after refresh",
+				Info:     "Data mingguan tidak ditemukan bahkan setelah penyegaran",
 				Response: err.Error(),
 			})
 			return
@@ -533,23 +523,23 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to fetch weekly data",
+			Info:     "Gagal mengambil data mingguan",
 			Response: err.Error(),
 		})
 		return
 	}
 
-	// Return the weekly data
+	// Kembalikan data mingguan
 	at.WriteJSON(w, http.StatusOK, weeklyData)
 }
 
-// GetAllBimbinganWeekly returns all available bimbingan weekly data for a user
+// GetAllBimbinganWeekly mengembalikan semua data bimbingan mingguan yang tersedia untuk seorang pengguna
 func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
-	// Get token from header
+	// Ambil token dari header
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
+			Status:   "Error: Token Tidak Valid",
 			Info:     at.GetSecretFromHeader(r),
 			Location: "Token Validation",
 			Response: err.Error(),
@@ -557,19 +547,19 @@ func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all weekly data for this user
+	// Ambil semua data mingguan untuk pengguna ini
 	filter := bson.M{
 		"phonenumber": payload.Id,
 	}
 
-	// Sort by weeknumber ascending
+	// Urutkan berdasarkan weeknumber ascending
 	opts := options.Find().SetSort(bson.M{"weeknumber": 1})
 
 	cursor, err := config.Mongoconn.Collection("bimbinganweekly").Find(context.Background(), filter, opts)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to fetch weekly data",
+			Info:     "Gagal mengambil data mingguan",
 			Response: err.Error(),
 		})
 		return
@@ -580,20 +570,20 @@ func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 	if err = cursor.All(context.Background(), &weeklyData); err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to parse weekly data",
+			Info:     "Gagal mengurai data mingguan",
 			Response: err.Error(),
 		})
 		return
 	}
 
 	if len(weeklyData) == 0 {
-		// If no data exists, create at least the current week
+		// Jika tidak ada data, buat setidaknya minggu saat ini
 		status, err := GetCurrentWeekStatus()
 		if err == nil {
-			// Try to refresh for the current week
+			// Coba segarkan untuk minggu saat ini
 			refreshWeeklyBimbinganDataForUser(payload.Id, status.CurrentWeek, status.WeekLabel)
 
-			// Try to get the data again
+			// Coba ambil data lagi
 			cursor, err = config.Mongoconn.Collection("bimbinganweekly").Find(context.Background(), filter, opts)
 			if err == nil {
 				defer cursor.Close(context.Background())
@@ -602,25 +592,25 @@ func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Return the weekly data
+	// Kembalikan data mingguan
 	at.WriteJSON(w, http.StatusOK, weeklyData)
 }
 
-// refreshWeeklyBimbinganDataForUser refreshes data for a single user for a specific week
+// refreshWeeklyBimbinganDataForUser memperbarui data bimbingan untuk satu pengguna
 func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekLabel string) (bool, error, error) {
-	// Check if user exists
+	// Periksa apakah pengguna ada
 	_, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", bson.M{"phonenumber": phoneNumber})
 	if err != nil {
-		return false, fmt.Errorf("failed to get user data: %v", err), err
+		return false, fmt.Errorf("gagal mendapatkan data pengguna: %v", err), err
 	}
 
-	// Get the incremental activity scores for this week
+	// Dapatkan skor aktivitas inkremental untuk minggu ini
 	activityScore, err := getIncrementalActivityScore(phoneNumber, weekNumber)
 	if err != nil {
-		return false, fmt.Errorf("failed to get incremental activity score: %v", err), err
+		return false, fmt.Errorf("gagal mendapatkan skor aktivitas inkremental: %v", err), err
 	}
 
-	// Check if a record for this user and week already exists
+	// Periksa apakah sudah ada catatan untuk pengguna dan minggu ini
 	var existingWeekly model.BimbinganWeekly
 	filter := bson.M{
 		"phonenumber": phoneNumber,
@@ -632,7 +622,7 @@ func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekL
 	now := time.Now()
 
 	if err == mongo.ErrNoDocuments {
-		// Create new weekly record
+		// Buat catatan mingguan baru
 		newWeekly := model.BimbinganWeekly{
 			PhoneNumber:   phoneNumber,
 			WeekNumber:    weekNumber,
@@ -645,33 +635,34 @@ func refreshWeeklyBimbinganDataForUser(phoneNumber string, weekNumber int, weekL
 
 		_, err = config.Mongoconn.Collection("bimbinganweekly").InsertOne(context.Background(), newWeekly)
 		if err != nil {
-			return false, fmt.Errorf("failed to create weekly record: %v", err), err
+			return false, fmt.Errorf("gagal membuat catatan mingguan: %v", err), err
 		}
 
 		return true, nil, nil
 	} else if err != nil {
-		return false, fmt.Errorf("failed to check for existing weekly record: %v", err), err
+		return false, fmt.Errorf("gagal memeriksa catatan mingguan yang ada: %v", err), err
 	} else {
-		// Update existing record but preserve approval status and assessor data
+		// Perbarui catatan yang ada tetapi pertahankan status persetujuan dan data asesor
 		update := bson.M{
 			"$set": bson.M{
 				"activityscore": activityScore,
+				"weeklabel":     weekLabel, // Pastikan label minggu tetap terbaru
 				"updatedAt":     now,
 			},
 		}
 
 		_, err = config.Mongoconn.Collection("bimbinganweekly").UpdateOne(context.Background(), filter, update)
 		if err != nil {
-			return false, fmt.Errorf("failed to update weekly record: %v", err), err
+			return false, fmt.Errorf("gagal memperbarui catatan mingguan: %v", err), err
 		}
 
 		return true, nil, nil
 	}
 }
 
-// PostBimbinganWeeklyRequest submits a bimbingan request for approval
+// PostBimbinganWeeklyRequest mengirimkan permintaan bimbingan untuk persetujuan
 func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
-	// Validate token
+	// Validasi token
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
@@ -697,7 +688,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate asesor phone number
+	// Validasi nomor telepon asesor
 	if request.AsesorPhoneNumber == "" {
 		respn.Status = "Error : No Telepon Asesor tidak diisi"
 		respn.Response = "Isi lebih lengkap terlebih dahulu"
@@ -705,7 +696,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate user exists
+	// Validasi pengguna ada
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", bson.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Data user tidak di temukan"
@@ -714,8 +705,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate asesor exists and is a dosen
-	request.AsesorPhoneNumber = ValidasiNoHP(request.AsesorPhoneNumber)
+	// Validasi asesor ada dan adalah dosen
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", bson.M{"phonenumber": request.AsesorPhoneNumber, "isdosen": true})
 	if err != nil {
 		respn.Status = "Error : Data asesor tidak di temukan"
@@ -724,10 +714,10 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine which week to use
+	// Tentukan minggu mana yang digunakan
 	weekNumber := request.WeekNumber
 	if weekNumber <= 0 {
-		// Get current week from status
+		// Ambil minggu saat ini dari status
 		status, err := GetCurrentWeekStatus()
 		if err != nil {
 			respn.Status = "Error : Gagal mendapatkan status minggu saat ini"
@@ -738,7 +728,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		weekNumber = status.CurrentWeek
 	}
 
-	// Check if the weekly data already exists and is already approved
+	// Periksa apakah data mingguan sudah ada dan sudah disetujui
 	filter := bson.M{
 		"phonenumber": payload.Id,
 		"weeknumber":  weekNumber,
@@ -748,14 +738,14 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 	var existingApproved model.BimbinganWeekly
 	err = config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&existingApproved)
 	if err == nil {
-		// Already approved
+		// Sudah disetujui
 		respn.Status = "Info : Data bimbingan sudah di approve"
 		respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang."
 		at.WriteJSON(w, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Find or create the weekly data for this user and week
+	// Temukan atau buat data mingguan untuk pengguna dan minggu ini
 	weekLabel := fmt.Sprintf("week%d", weekNumber)
 	_, _, err = refreshWeeklyBimbinganDataForUser(payload.Id, weekNumber, weekLabel)
 	if err != nil {
@@ -765,7 +755,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the weekly data
+	// Ambil data mingguan
 	filter = bson.M{
 		"phonenumber": payload.Id,
 		"weeknumber":  weekNumber,
@@ -780,7 +770,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update with asesor information
+	// Perbarui dengan informasi asesor
 	update := bson.M{
 		"$set": bson.M{
 			"asesor":    docasesor,
@@ -796,7 +786,7 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send notification to asesor
+	// Kirim notifikasi ke asesor
 	message := fmt.Sprintf("*Permintaan Bimbingan Minggu %d*\n"+
 		"Mahasiswa : %s\n"+
 		"Beri Nilai: %s/%d",
@@ -816,15 +806,15 @@ func PostBimbinganWeeklyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the updated data
+	// Ambil data yang sudah diperbarui
 	config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 
 	at.WriteJSON(w, http.StatusOK, weeklyData)
 }
 
-// ApproveBimbinganWeekly approves or rejects a weekly bimbingan request
+// ApproveBimbinganWeekly menyetujui atau menolak permintaan bimbingan mingguan
 func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
-	// Validate token (only dosen should be able to approve)
+	// Validasi token (hanya dosen yang boleh menyetujui)
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
@@ -836,7 +826,7 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate that the approver is a dosen
+	// Validasi bahwa pemberi persetujuan adalah dosen
 	docasesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", bson.M{"phonenumber": payload.Id, "isdosen": true})
 	if err != nil {
 		respn.Status = "Error : Anda bukan dosen asesor"
@@ -862,7 +852,7 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate student phone number and week number
+	// Validasi nomor telepon mahasiswa dan nomor minggu
 	if request.StudentPhoneNumber == "" || request.WeekNumber <= 0 {
 		respn.Status = "Error : Data tidak lengkap"
 		respn.Response = "Nomor telepon mahasiswa dan minggu harus diisi"
@@ -870,7 +860,7 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if the bimbingan request exists
+	// Periksa apakah permintaan bimbingan ada
 	filter := bson.M{
 		"phonenumber": request.StudentPhoneNumber,
 		"weeknumber":  request.WeekNumber,
@@ -885,7 +875,7 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if the approver is the assigned asesor
+	// Periksa apakah pemberi persetujuan adalah asesor yang ditugaskan
 	if weeklyData.Asesor.PhoneNumber != payload.Id {
 		respn.Status = "Error : Anda bukan asesor yang ditugaskan"
 		respn.Response = "Hanya asesor yang ditugaskan yang dapat memberikan persetujuan"
@@ -893,7 +883,7 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update the bimbingan data
+	// Perbarui data bimbingan
 	update := bson.M{
 		"$set": bson.M{
 			"approved":  request.Approved,
@@ -911,10 +901,10 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get student data
+	// Ambil data mahasiswa
 	docstudent, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", bson.M{"phonenumber": request.StudentPhoneNumber})
 	if err == nil {
-		// Send notification to student
+		// Kirim notifikasi ke mahasiswa
 		var message string
 		if request.Approved {
 			message = fmt.Sprintf("Bimbingan Minggu %d Kamu *TELAH DI APPROVE* oleh Dosen %s\n"+
@@ -939,15 +929,15 @@ func ApproveBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 	}
 
-	// Get the updated data
+	// Ambil data yang sudah diperbarui
 	config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 
 	at.WriteJSON(w, http.StatusOK, weeklyData)
 }
 
-// ChangeWeekNumber changes the current active week
+// ChangeWeekNumber mengubah minggu aktif saat ini
 func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
-	// Validate token (admin authorization should be implemented here)
+	// Validasi token (otorisasi admin harus diimplementasikan di sini)
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
 	if err != nil {
@@ -964,7 +954,7 @@ func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Status:   "Error",
-			Info:     "Invalid request body",
+			Info:     "Body request tidak valid",
 			Response: err.Error(),
 		})
 		return
@@ -973,62 +963,50 @@ func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
 	if request.WeekNumber < 1 {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Status:   "Error",
-			Info:     "Invalid week number",
-			Response: "Week number must be positive",
+			Info:     "Nomor minggu tidak valid",
+			Response: "Nomor minggu harus positif",
 		})
 		return
 	}
 
-	// Set default week label if not provided
+	// Set label minggu default jika tidak disediakan
 	if request.WeekLabel == "" {
 		request.WeekLabel = fmt.Sprintf("week%d", request.WeekNumber)
 	}
 
-	// Set default updatedBy if not provided
+	// Set updatedBy default jika tidak disediakan
 	if request.UpdatedBy == "" {
 		request.UpdatedBy = payload.Id
 	}
 
-	// Get current week status
+	// Dapatkan status minggu saat ini
 	currentStatus, err := GetCurrentWeekStatus()
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to get current week status",
+			Info:     "Gagal mendapatkan status minggu saat ini",
 			Response: err.Error(),
 		})
 		return
 	}
 
-	// Prevent changing to the same week
+	// Cegah perubahan ke minggu yang sama
 	if currentStatus.CurrentWeek == request.WeekNumber {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Status:   "Error",
-			Info:     "Week already active",
-			Response: fmt.Sprintf("Week %d is already the active week", request.WeekNumber),
+			Info:     "Minggu sudah aktif",
+			Response: fmt.Sprintf("Minggu %d sudah menjadi minggu aktif", request.WeekNumber),
 		})
 		return
 	}
 
-	// Calculate new start and end dates
+	// Perbarui status minggu
 	now := time.Now()
 
-	// Calculate start (Monday) and end (Sunday) of the current week
-	weekday := int(now.Weekday())
-	if weekday == 0 { // Sunday is 0, we want it to be 7
-		weekday = 7
-	}
-
-	startDate := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour)                       // Monday at 00:00
-	endDate := startDate.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second) // Sunday at 23:59:59
-
-	// Update the week status
 	update := bson.M{
 		"$set": bson.M{
 			"currentweek": request.WeekNumber,
 			"weeklabel":   request.WeekLabel,
-			"startdate":   startDate,
-			"enddate":     endDate,
 			"lastupdated": now,
 			"updatedby":   request.UpdatedBy,
 		},
@@ -1044,18 +1022,18 @@ func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to update week number",
+			Info:     "Gagal memperbarui nomor minggu",
 			Response: err.Error(),
 		})
 		return
 	}
 
-	// Process weekly data for the new week
+	// Proses data mingguan untuk minggu baru
 	processed, failed, err := refreshWeeklyBimbinganData(request.WeekNumber, request.WeekLabel)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
-			Info:     "Failed to process data for the new week",
+			Info:     "Gagal memproses data untuk minggu baru",
 			Response: err.Error(),
 		})
 		return
@@ -1063,7 +1041,7 @@ func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
 
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Status:   "Success",
-		Info:     fmt.Sprintf("Changed to week %d and processed %d users, %d failed", request.WeekNumber, processed, failed),
-		Response: "Week number has been updated",
+		Info:     fmt.Sprintf("Berhasil mengubah ke minggu %d dan memproses %d pengguna, %d gagal", request.WeekNumber, processed, failed),
+		Response: "Nomor minggu telah diperbarui",
 	})
 }
