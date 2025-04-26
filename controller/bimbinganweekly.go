@@ -487,7 +487,7 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 		weekNumber = status.CurrentWeek
 	}
 
-	// PERBAIKAN: Pastikan data untuk minggu yang diminta ada
+	// Ambil data bimbingan pengguna untuk minggu tertentu
 	filter := bson.M{
 		"phonenumber": payload.Id,
 		"weeknumber":  weekNumber,
@@ -497,28 +497,26 @@ func GetBimbinganWeeklyByWeek(w http.ResponseWriter, r *http.Request) {
 	err = config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
 
 	if err == mongo.ErrNoDocuments {
-		// Jika data tidak ditemukan, segera buat data untuk minggu ini
+		// Jika tidak ada data, coba buat dulu dengan menyegarkan
 		weekLabel := fmt.Sprintf("week%d", weekNumber)
-		created, _, _ := refreshWeeklyBimbinganDataForUser(payload.Id, weekNumber, weekLabel)
+		_, _, err = refreshWeeklyBimbinganDataForUser(payload.Id, weekNumber, weekLabel)
 
-		if created {
-			// Coba ambil data baru yang dibuat
-			err = config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
-			if err != nil {
-				// Masih error, kembalikan response error
-				at.WriteJSON(w, http.StatusNotFound, model.Response{
-					Status:   "Error",
-					Info:     "Data mingguan tidak dapat dibuat",
-					Response: err.Error(),
-				})
-				return
-			}
-		} else {
-			// Gagal membuat data
-			at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+		if err != nil {
+			at.WriteJSON(w, http.StatusNotFound, model.Response{
 				Status:   "Error",
-				Info:     "Gagal membuat data mingguan baru",
-				Response: "Tidak dapat membuat data mingguan",
+				Info:     "Tidak ditemukan data mingguan dan gagal membuatnya",
+				Response: err.Error(),
+			})
+			return
+		}
+
+		// Coba ambil data lagi
+		err = config.Mongoconn.Collection("bimbinganweekly").FindOne(context.Background(), filter).Decode(&weeklyData)
+		if err != nil {
+			at.WriteJSON(w, http.StatusNotFound, model.Response{
+				Status:   "Error",
+				Info:     "Data mingguan tidak ditemukan bahkan setelah penyegaran",
+				Response: err.Error(),
 			})
 			return
 		}
@@ -578,14 +576,12 @@ func GetAllBimbinganWeekly(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// PERBAIKAN: Jika tidak ada data, periksa minggu aktif saat ini
 	if len(weeklyData) == 0 {
-		// Ambil status minggu saat ini
+		// Jika tidak ada data, buat setidaknya minggu saat ini
 		status, err := GetCurrentWeekStatus()
 		if err == nil {
-			// Buat data untuk minggu aktif saat ini
-			weekLabel := fmt.Sprintf("week%d", status.CurrentWeek)
-			_, _, _ = refreshWeeklyBimbinganDataForUser(payload.Id, status.CurrentWeek, weekLabel)
+			// Coba segarkan untuk minggu saat ini
+			refreshWeeklyBimbinganDataForUser(payload.Id, status.CurrentWeek, status.WeekLabel)
 
 			// Coba ambil data lagi
 			cursor, err = config.Mongoconn.Collection("bimbinganweekly").Find(context.Background(), filter, opts)
@@ -1032,10 +1028,8 @@ func ChangeWeekNumber(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// PERBAIKAN: Segera proses data mingguan untuk minggu baru
-	// Ini akan membuat data minggu baru untuk semua pengguna
+	// Proses data mingguan untuk minggu baru
 	processed, failed, err := refreshWeeklyBimbinganData(request.WeekNumber, request.WeekLabel)
-
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Status:   "Error",
