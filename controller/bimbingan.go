@@ -97,6 +97,8 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.WebHook = score.WebHook
 	bimbingan.PresensiHari = score.PresensiHari
 	bimbingan.Presensi = score.Presensi
+	bimbingan.Sponsordata = score.Sponsordata
+	bimbingan.Sponsor = score.Sponsor
 	bimbingan.TotalScore = score.TotalScore
 
 	// Cari apakah ada data existing yang belum approved
