@@ -330,6 +330,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ChangeWeekNumber(w, r)
 	case method == "GET" && path == "/api/bimbingan/weekly/status":
 		controller.GetBimbinganWeeklyStatus(w, r)
+	// Tugas Mingguan Kelas
+	case method == "GET" && path == "/dataenroll/proyek":
+		controller.GetProjectData(w, r)
 	// case method == "GET" && path == "/refresh/fororangtua":
 	// 	controller.ForOrangTua(w, r)
 	// case method == "GET" && path == "/refresh/laporankeorangtua":
