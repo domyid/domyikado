@@ -325,7 +325,7 @@ func GetDataBimbinganById(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
 
-func GetDataBimbinganWeek(respw http.ResponseWriter, req *http.Request) {
+func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
@@ -340,8 +340,15 @@ func GetDataBimbinganWeek(respw http.ResponseWriter, req *http.Request) {
 	// Ambil query string: ?bimbinganke=1
 	bimbinganKeStr := req.URL.Query().Get("bimbinganke")
 	if bimbinganKeStr == "" {
-		respn.Status = "Error : Parameter bimbinganke harus diisi"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
+		if err != nil {
+			respn.Status = "Error : Gagal mengambil data bimbingan"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusInternalServerError, respn)
+			return
+		}
+
+		at.WriteJSON(respw, http.StatusOK, bimbinganList)
 		return
 	}
 
