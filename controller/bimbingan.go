@@ -73,6 +73,7 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	score, _ := GetAllActivityScoreData(payload.Id)
 
 	// logic inputan post
+	bimbingan.BimbinganKe = 1
 	bimbingan.Approved = false
 	bimbingan.PhoneNumber = docuser.PhoneNumber
 	bimbingan.Asesor = docasesor
@@ -99,6 +100,10 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.Presensi = score.Presensi
 	bimbingan.Sponsordata = score.Sponsordata
 	bimbingan.Sponsor = score.Sponsor
+	bimbingan.BukuKatalog = score.BukuKatalog
+	bimbingan.BukPed = score.BukPed
+	bimbingan.JurnalWeb = score.JurnalWeb
+	bimbingan.Jurnal = score.Jurnal
 	bimbingan.TotalScore = score.TotalScore
 
 	// Cari apakah ada data existing yang belum approved
@@ -240,24 +245,38 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.WebHook = score.WebHook
 	bimbingan.PresensiHari = score.PresensiHari
 	bimbingan.Presensi = score.Presensi
+	bimbingan.Sponsordata = score.Sponsordata
+	bimbingan.Sponsor = score.Sponsor
+	bimbingan.BukuKatalog = score.BukuKatalog
+	bimbingan.BukPed = score.BukPed
+	bimbingan.JurnalWeb = score.JurnalWeb
+	bimbingan.Jurnal = score.Jurnal
 	bimbingan.TotalScore = score.TotalScore
 
 	// Cari apakah ada data existing yang belum approved
-	existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
+	// existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
 	var idbimbingan primitive.ObjectID
-	if err == nil {
-		// Update data yang belum di-approve
-		bimbingan.ID = existing.ID
-		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
+	// if err == nil {
+	// 	// Update data yang belum di-approve
+	// 	bimbingan.ID = existing.ID
+	// 	_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
+	// 	if err != nil {
+	// 		respn.Status = "Error : Gagal Update Database"
+	// 		respn.Response = err.Error()
+	// 		at.WriteJSON(respw, http.StatusNotModified, respn)
+	// 		return
+	// 	}
+	// 	idbimbingan = existing.ID
+	// } else {
+		allDoc, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber})
 		if err != nil {
-			respn.Status = "Error : Gagal Update Database"
+			respn.Status = "Error : Data bimbingan tidak di temukan"
 			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusNotModified, respn)
+			at.WriteJSON(respw, http.StatusBadRequest, respn)
 			return
 		}
-		idbimbingan = existing.ID
-	} else {
 		// Insert data baru
+		bimbingan.BimbinganKe = len(allDoc) + 1
 		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
 		if err != nil {
 			respn.Status = "Error : Gagal Insert Database"
@@ -265,7 +284,7 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 			at.WriteJSON(respw, http.StatusNotModified, respn)
 			return
 		}
-	}
+	// }
 
 	// kirim pesan ke asesor
 	message := "*Permintaan Bimbingan*\n" + "Mahasiswa : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
