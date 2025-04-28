@@ -325,7 +325,7 @@ func GetDataBimbinganById(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
 
-func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request) {
+func GetDataBimbinganWeek(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
@@ -337,44 +337,29 @@ func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request
 		return
 	}
 
-	// Ambil query string: ?week=1
-	weekStr := req.URL.Query().Get("week")
-	if weekStr == "" {
-		respn.Status = "Error : Parameter week harus diisi"
+	// Ambil query string: ?bimbinganke=1
+	bimbinganKeStr := req.URL.Query().Get("bimbinganke")
+	if bimbinganKeStr == "" {
+		respn.Status = "Error : Parameter bimbinganke harus diisi"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	weekOffset, err := strconv.Atoi(weekStr)
-	if err != nil || weekOffset < 1 {
-		respn.Status = "Error : Parameter week tidak valid, harus >= 1"
+	bimbinganKe, err := strconv.Atoi(bimbinganKeStr)
+	if err != nil || bimbinganKe < 1 {
+		respn.Status = "Error : Parameter bimbinganke tidak valid, harus >= 1"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Hitung awal minggu ini (Senin)
-	now := time.Now()
-	weekday := int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7 // Ubah Minggu jadi 7
-	}
-	currentWeekStart := now.AddDate(0, 0, -weekday+1) // mundur ke Senin
-
-	// Hitung awal dan akhir minggu relatif
-	start := currentWeekStart.AddDate(0, 0, (weekOffset-1)*7)
-	end := start.AddDate(0, 0, 7)
-
-	// Filter MongoDB
+	// Filter berdasarkan phonenumber dan bimbinganke
 	filter := primitive.M{
 		"phonenumber": payload.Id,
-		"createdAt": primitive.M{
-			"$gte": start,
-			"$lt":  end,
-		},
+		"bimbinganke": bimbinganKe,
 	}
 
-	bimbinganList, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
+	bimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data bimbingan"
 		respn.Response = err.Error()
@@ -382,8 +367,68 @@ func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request
 		return
 	}
 
-	at.WriteJSON(respw, http.StatusOK, bimbinganList)
+	at.WriteJSON(respw, http.StatusOK, bimbingan)
 }
+
+// func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request) {
+// 	var respn model.Response
+// 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+// 	if err != nil {
+// 		respn.Status = "Error : Token Tidak Valid"
+// 		respn.Info = at.GetSecretFromHeader(req)
+// 		respn.Location = "Decode Token Error"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusForbidden, respn)
+// 		return
+// 	}
+
+// 	// Ambil query string: ?week=1
+// 	weekStr := req.URL.Query().Get("week")
+// 	if weekStr == "" {
+// 		respn.Status = "Error : Parameter week harus diisi"
+// 		at.WriteJSON(respw, http.StatusBadRequest, respn)
+// 		return
+// 	}
+
+// 	weekOffset, err := strconv.Atoi(weekStr)
+// 	if err != nil || weekOffset < 1 {
+// 		respn.Status = "Error : Parameter week tidak valid, harus >= 1"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusBadRequest, respn)
+// 		return
+// 	}
+
+// 	// Hitung awal minggu ini (Senin)
+// 	now := time.Now()
+// 	weekday := int(now.Weekday())
+// 	if weekday == 0 {
+// 		weekday = 7 // Ubah Minggu jadi 7
+// 	}
+// 	currentWeekStart := now.AddDate(0, 0, -weekday+1) // mundur ke Senin
+
+// 	// Hitung awal dan akhir minggu relatif
+// 	start := currentWeekStart.AddDate(0, 0, (weekOffset-1)*7)
+// 	end := start.AddDate(0, 0, 7)
+
+// 	// Filter MongoDB
+// 	filter := primitive.M{
+// 		"phonenumber": payload.Id,
+// 		"createdAt": primitive.M{
+// 			"$gte": start,
+// 			"$lt":  end,
+// 		},
+// 	}
+
+// 	bimbinganList, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
+// 	if err != nil {
+// 		respn.Status = "Error : Gagal mengambil data bimbingan"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+// 		return
+// 	}
+
+// 	at.WriteJSON(respw, http.StatusOK, bimbinganList)
+// }
 
 func ReplaceDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response

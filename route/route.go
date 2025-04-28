@@ -308,7 +308,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/data/proyek/bimbingan/lanjutan":
 		controller.PostDosenAsesorLanjutan(w, r)
 	case method == "GET" && path == "/data/proyek/bimbingan/weekly":
-		controller.GetDataBimbinganByRelativeWeek(w, r)
+		controller.GetDataBimbinganWeek(w, r)
 	case method == "GET" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.GetDataBimbinganById(w, r)
 	case method == "POST" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
