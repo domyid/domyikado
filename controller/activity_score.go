@@ -100,6 +100,7 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	var score model.ActivityScore
 
+	datasponsor, _ := GetAllDataSponsorPoin(config.Mongoconn, userID)
 	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(userID))
 	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID)
 	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, userID)
@@ -114,6 +115,8 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	totalScore := HitungTotalScore(&score)
 
 	score = model.ActivityScore{
+		Sponsordata:     datasponsor.Sponsordata,
+		Sponsor:         datasponsor.Sponsor,
 		Trackerdata:     datatracker.Trackerdata,
 		Tracker:         datatracker.Tracker,
 		StravaKM:        datastravapoin.StravaKM,
@@ -121,7 +124,7 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
 		Pomokit:         dataPomokitScore.Pomokit,
 		GTMetrixResult:  dataGTMetrixScore.GTMetrixResult,
-		BukuKatalog:    bukpedMemberScore.BukuKatalog,
+		BukuKatalog:     bukpedMemberScore.BukuKatalog,
 		BukPed:          bukpedMemberScore.BukPed,
 		GTMetrix:        dataGTMetrixScore.GTMetrix,
 		PresensiHari:    dataPresensi.PresensiHari,
