@@ -33,8 +33,8 @@ const (
 	RavencoinWalletAddress        = "RKJpSmjTq5MPDaBx2ubTx1msVB2uZcKA5j"
 
 	// Expiry times for different payment methods
-	QRISExpirySeconds         = 300  // 5 minutes
-	MicroBitcoinExpirySeconds = 900  // 15 minutes
+	QRISExpirySeconds         = 3600 // 60 minutes
+	MicroBitcoinExpirySeconds = 1500 // 15 minutes
 	RavencoinExpirySeconds    = 1500 // 15 minutes
 )
 
