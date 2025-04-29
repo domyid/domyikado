@@ -243,7 +243,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUserTesting(w, r)
 	case method == "GET" && path == "/refresh/laporantracker":
-		controller.LaporanengunjungWeb(w, r)
+		controller.LaporanPengunjungWeb(w, r)
 	// Tracker end
 	case method == "GET" && path == "/refresh/reportmingguan":
 		controller.GetNewCode(w, r)
@@ -339,6 +339,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// 	controller.LaporanKeOrangTua(w, r)
 	// case method == "GET" && path == "/refresh/laporan/riwayat/bimbingan/per/week":
 	// 	controller.LaporanRiwayatBimbinganPerMinggu(w, r)
+	// 	controller.LaporanBelumBimbingan(w, r)
+	case method == "GET" && path == "/dataenroll/belumbimbingan":
+		controller.LaporanBelumBimbingan(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
