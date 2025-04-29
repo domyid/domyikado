@@ -170,3 +170,9 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		Response: "Berhasil simpan data",
 	})
 }
+
+func TestAmbilValueRemoteAddr(w http.ResponseWriter, r *http.Request) {
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: r.RemoteAddr,
+	})
+}

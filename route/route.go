@@ -243,7 +243,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		controller.SimpanInformasiUserTesting(w, r)
+		controller.TestAmbilValueRemoteAddr(w, r)
 	case method == "GET" && path == "/refresh/laporantracker":
 		controller.LaporanPengunjungWeb(w, r)
 	// Tracker end
