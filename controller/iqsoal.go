@@ -225,55 +225,6 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(respw).Encode(response)
 }
 
-func GetWeeklyIQScores(respw http.ResponseWriter, req *http.Request, db *mongo.Database, phonenumber string) ([]model.UserWithIqScore, error) {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
-
-	now := time.Now().In(loc)
-	weekday := int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7 // Minggu jadi 7, Senin = 1
-	}
-
-	// Senin minggu ini pukul 17:01
-	mondayThisWeek := now.AddDate(0, 0, -weekday+1)
-	startOfWeek := time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, loc)
-
-	// Senin minggu depan pukul 17:00
-	mondayNextWeek := mondayThisWeek.AddDate(0, 0, 7)
-	endOfWeek := time.Date(mondayNextWeek.Year(), mondayNextWeek.Month(), mondayNextWeek.Day(), 17, 0, 0, 0, loc)
-
-	// Format jadi string seperti yang disimpan di Mongo
-	startStr := startOfWeek.Format("2006-01-02 15:04:05")
-	endStr := endOfWeek.Format("2006-01-02 15:04:05")
-
-	filter := bson.M{
-		"phonenumber": phonenumber,
-		"created_at": bson.M{
-			"$gte": startStr,
-			"$lt":  endStr,
-		},
-	}
-
-	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter)
-	if err != nil {
-		http.Error(respw, `{"error": "Gagal mengambil data dari database"}`, http.StatusInternalServerError)
-		return nil, err
-	}
-	defer cursor.Close(context.TODO())
-
-	var results []model.UserWithIqScore
-	for cursor.Next(context.TODO()) {
-		var iq model.UserWithIqScore
-		if err := cursor.Decode(&iq); err != nil {
-			http.Error(respw, `{"error": "Gagal decode data"}`, http.StatusInternalServerError)
-			return nil, err
-		}
-		results = append(results, iq)
-	}
-
-	return results, nil
-}
-
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	// Cek Token Login di Header
 	token := at.GetLoginFromHeader(r)
