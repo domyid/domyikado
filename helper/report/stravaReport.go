@@ -364,9 +364,31 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 	return activityscore, nil
 }
 
-func GetWeekYear(times time.Time) string {
-	year, week := times.ISOWeek()
-	return fmt.Sprintf("%d_%d", year, week)
+// func GetWeekYear(times time.Time) string {
+// 	year, week := times.ISOWeek()
+// 	return fmt.Sprintf("%d_%d", year, week)
+// }
+
+// GetWeekYear menghitung tahun dan minggu dimulai dari senin 17.01 sampai minggu depan senin 17.00
+func GetWeekYear(t time.Time) string {
+	loc := t.Location()
+
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Ubah Minggu jadi 7
+	}
+
+	// Dapatkan Senin minggu ini, lalu set ke jam 17:01
+	monday := t.AddDate(0, 0, -weekday+1)
+	startOfWeek := time.Date(monday.Year(), monday.Month(), monday.Day(), 17, 1, 0, 0, loc)
+
+	// Jika sekarang belum lewat Senin jam 17:01, berarti masih minggu sebelumnya
+	if t.Before(startOfWeek) {
+		startOfWeek = startOfWeek.AddDate(0, 0, -7)
+	}
+
+	year, week := startOfWeek.ISOWeek()
+	return fmt.Sprintf("%d_%02d", year, week)
 }
 
 func duplicatePhoneNumbersCount(users []StravaInfo) map[string]StravaInfo {
