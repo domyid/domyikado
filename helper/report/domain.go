@@ -259,9 +259,4 @@ var DomainProyek1 = []model.PhoneDomain{
 		PhoneNumber:      "62895328739927",
 		Project_Hostname: "rr-php.github.io",
 	},
-	// tambahkan domain buat testing
-	{
-		PhoneNumber:      "6281271720763",
-		Project_Hostname: "befous.com",
-	},
 }
