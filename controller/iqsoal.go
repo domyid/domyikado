@@ -225,7 +225,7 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(respw).Encode(response)
 }
 
-func GetWeeklyIQScores(w http.ResponseWriter, r *http.Request) {
+func GetLastWeekDataIQScore(w http.ResponseWriter, r *http.Request) {
 	token := at.GetLoginFromHeader(r)
 	if token == "" {
 		http.Error(w, `{"error": "Token login diperlukan"}`, http.StatusUnauthorized)
