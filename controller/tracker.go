@@ -80,7 +80,14 @@ func GetHostname(auth string) string {
 	return ""
 }
 
-func LaporanengunjungWeb(w http.ResponseWriter, r *http.Request) {
+func LaporanBelumBimbingan(w http.ResponseWriter, r *http.Request) {
+	report.KirimLaporanBelumBimbingan(config.Mongoconn)
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: "Berhasil simpan data",
+	})
+}
+
+func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 	report.KirimLaporanPengunjungWebKeGrup(config.Mongoconn)
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Response: "Berhasil simpan data",
