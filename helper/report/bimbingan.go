@@ -1,11 +1,15 @@
 package report
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
 
+	"github.com/gocroot/config"
+	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -80,6 +84,66 @@ func RiwayatBimbinganPerMinggu(db *mongo.Database, phonenumber string) (string, 
 	}
 
 	return output, nil
+}
+
+func generateChatBelumBimbingan(db *mongo.Database) (string, error) {
+	filter := bson.M{
+		"_id": WeeklyFilter(),
+	}
+	data, err := atdb.GetAllDoc[[]model.BimbinganWeekly](db, "bimbinganweekly", filter)
+	if err != nil {
+		return "", err
+	}
+
+	bimbinganMap := make(map[string]bool)
+	for _, entry := range data {
+		bimbinganMap[entry.PhoneNumber] = true
+	}
+
+	output := "📚 *Riwayat Bimbingan per Minggu:*\n"
+	for i, domain := range DomainProyek1 {
+		status := "⚠️ Belum bimbingan"
+		if bimbinganMap[domain.PhoneNumber] {
+			status = "✅ Sudah bimbingan"
+		}
+		output += fmt.Sprintf("%d. %s - %s\n", i+1, domain.PhoneNumber, status)
+	}
+	return output, nil
+}
+
+func KirimLaporanBelumBimbingan(db *mongo.Database) (err error) {
+	msg, err := generateChatBelumBimbingan(db)
+	if err != nil {
+		return err
+	}
+
+	// Menggunakan manual group ID yang spesifik
+	manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
+
+	var lastErr error
+
+	for _, groupID := range manualGroupIDs {
+		// Kirim pesan ke grup WhatsApp
+		dt := &whatsauth.TextMessage{
+			To:       groupID,
+			IsGroup:  true,
+			Messages: msg,
+		}
+
+		// Kirim WA ke API
+		var resp model.Response
+		_, resp, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			lastErr = errors.New("Tidak berhak: " + err.Error() + ", " + resp.Info)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return nil
 }
 
 // func ReportBimbinganToOrangTua(db *mongo.Database) (map[string]string, error) {
