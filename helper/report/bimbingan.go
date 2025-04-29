@@ -102,11 +102,11 @@ func generateChatBelumBimbingan(db *mongo.Database) (string, error) {
 
 	output := "📚 *Riwayat Bimbingan per Minggu:*\n"
 	for i, domain := range DomainProyek1 {
-		data, err := atdb.GetAllDoc[model.Userdomyikado](db, "user", filter)
+		userData, err := atdb.GetAllDoc[[]model.Userdomyikado](db, "user", bson.M{"phonenumber": domain.PhoneNumber})
 		if err != nil {
 			return "", err
 		}
-		name := data.Name
+		name := userData[0].Name
 		status := "⚠️ Belum bimbingan"
 		if bimbinganMap[domain.PhoneNumber] {
 			status = "✅ Sudah bimbingan"
