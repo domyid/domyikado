@@ -2,13 +2,16 @@ package report
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
 	"fmt"
 
+	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Struct untuk menyimpan data IQ Score
@@ -217,4 +220,63 @@ func Contain(slice []string, value string) bool {
 		}
 	}
 	return false
+}
+
+func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
+	var activityscore model.ActivityScore
+
+	weekYear := GetWeekYear(time.Now())
+
+	// Filter berdasarkan phonenumber dan week_year
+	filter := bson.M{
+		"phonenumber": phonenumber,
+		"week_year":   weekYear,
+	}
+	sort := bson.M{"created_at": 1} // Urutkan dari yang paling lama
+
+	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter, options.Find().SetSort(sort).SetLimit(1))
+	if err != nil {
+		return activityscore, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if cursor.Next(context.TODO()) {
+		var iqDoc model.UserWithIqScore
+		if err := cursor.Decode(&iqDoc); err != nil {
+			return activityscore, err
+		}
+
+		// Parsing IQ dan Score
+		scoreInt, _ := strconv.Atoi(iqDoc.Score)
+		iqInt, err := strconv.Atoi(iqDoc.IQ)
+		if err == nil && iqInt > 100 {
+			iqInt = 100
+		}
+
+		activityscore.IQ = iqInt
+		activityscore.IQresult = scoreInt
+		activityscore.PhoneNumber = phonenumber
+		activityscore.CreatedAt = time.Now()
+	} else {
+		return activityscore, fmt.Errorf("data IQ tidak ditemukan untuk minggu ini")
+	}
+
+	return activityscore, nil
+}
+
+func GetWeekYears(t time.Time) string {
+	loc := t.Location()
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	monday := t.AddDate(0, 0, -weekday+1)
+	startOfWeek := time.Date(monday.Year(), monday.Month(), monday.Day(), 17, 1, 0, 0, loc)
+
+	if t.Before(startOfWeek) {
+		startOfWeek = startOfWeek.AddDate(0, 0, -7)
+	}
+
+	year, week := startOfWeek.ISOWeek()
+	return fmt.Sprintf("%d_%02d", year, week)
 }
