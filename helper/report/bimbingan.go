@@ -90,7 +90,7 @@ func generateChatBelumBimbingan(db *mongo.Database) (string, error) {
 	filter := bson.M{
 		"_id": WeeklyFilter(),
 	}
-	data, err := atdb.GetAllDoc[[]model.BimbinganWeekly](db, "bimbinganweekly", filter)
+	data, err := atdb.GetAllDoc[[]model.BimbinganWeekly](db, "bimbingan", filter)
 	if err != nil {
 		return "", err
 	}
