@@ -75,6 +75,7 @@ type ActivityScore struct {
 	ID              primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	CreatedAt       time.Time          `bson:"createdAt"`                                          //kalo lebih dari seminggu auto hapus
 	BimbinganKe     int                `bson:"bimbinganke,omitempty" json:"bimbinganke,omitempty"` //bimbingan ke berapa
+	Username        string             `bson:"username,omitempty" json:"username,omitempty"`
 	PhoneNumber     string             `bson:"phonenumber,omitempty" json:"phonenumber,omitempty"`
 	Enroll          MasterEnrool       `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
 	Sponsordata     int                `bson:"sponsordata,omitempty" json:"sponsordata,omitempty"`

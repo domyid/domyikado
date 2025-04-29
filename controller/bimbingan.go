@@ -75,6 +75,7 @@ func PostDosenAsesorPerdana(respw http.ResponseWriter, req *http.Request) {
 	// logic inputan post
 	bimbingan.BimbinganKe = 1
 	bimbingan.Approved = false
+	bimbingan.Username = docuser.Name
 	bimbingan.PhoneNumber = docuser.PhoneNumber
 	bimbingan.Asesor = docasesor
 	bimbingan.CreatedAt = time.Now()
@@ -227,6 +228,7 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 
 	// logic inputan post
 	bimbingan.Approved = false
+	bimbingan.Username = docuser.Name
 	bimbingan.PhoneNumber = docuser.PhoneNumber
 	bimbingan.Asesor = docasesor
 	bimbingan.CreatedAt = time.Now()
