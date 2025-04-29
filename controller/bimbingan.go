@@ -193,21 +193,26 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah minggu ini sudah pernah di-approve
 	now := time.Now()
 	weekday := int(now.Weekday())
-	if weekday == 0 { // Minggu
-		weekday = 7
+	if weekday == 0 {
+		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
 	}
-	monday := now.AddDate(0, 0, -weekday+1).Truncate(24 * time.Hour) // Senin jam 00:00
-	sunday := monday.AddDate(0, 0, 6)                                // Minggu jam 23:59:59
+
+	// Dapatkan Senin minggu ini
+	mondayThisWeek := now.AddDate(0, 0, -weekday+1)
+	mondayThisWeek = time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, mondayThisWeek.Location()) // Senin 17:01
+
+	// Dapatkan Senin berikutnya jam 17:00
+	mondayNextWeek := mondayThisWeek.AddDate(0, 0, 7)
+	mondayNextWeek = time.Date(mondayNextWeek.Year(), mondayNextWeek.Month(), mondayNextWeek.Day(), 17, 0, 0, 0, mondayNextWeek.Location())
 
 	filter := primitive.M{
 		"phonenumber": docuser.PhoneNumber,
 		"approved":    true,
 		"createdAt": primitive.M{
-			"$gte": monday,
-			"$lt":  sunday,
+			"$gte": mondayThisWeek,
+			"$lt":  mondayNextWeek,
 		},
 	}
 	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
