@@ -225,13 +225,13 @@ func Contain(slice []string, value string) bool {
 func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
-	// Ambil week_year dari minggu lalu
-	weekYear := GetWeekYears(time.Now())
+	// Ambil created_at dari minggu lalu
+	CreatedAt := GetCreated_At(time.Now())
 
-	// Filter berdasarkan phonenumber dan week_year dari minggu lalu
+	// Filter berdasarkan phonenumber dan created_at dari minggu lalu
 	filter := bson.M{
 		"phonenumber": phonenumber,
-		"week_year":   weekYear,
+		"created_at":  CreatedAt,
 	}
 
 	// Cari satu dokumen yang sesuai filter
@@ -265,7 +265,7 @@ func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.Acti
 	return activityscore, nil
 }
 
-func GetWeekYears(t time.Time) string {
+func GetCreated_At(t time.Time) string {
 	// Load zona waktu Asia/Jakarta (WIB)
 	loc, err := time.LoadLocation("Asia/Jakarta")
 	if err != nil {
@@ -276,14 +276,14 @@ func GetWeekYears(t time.Time) string {
 	// Ambil waktu saat ini dalam zona WIB
 	now := time.Now().In(loc)
 
-	// Hitung weekday (Senin = 1, Minggu = 7)
-	weekday := int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7 // Minggu
+	// Hitung created_at (Senin = 1, Minggu = 7)
+	created_at := int(now.Weekday())
+	if created_at == 0 {
+		created_at = 7 // Minggu
 	}
 
 	// Dapatkan tanggal Senin minggu ini pukul 17:01:00 WIB
-	monday := now.AddDate(0, 0, -weekday+1)
+	monday := now.AddDate(0, 0, -created_at+1)
 	startOfWeek := time.Date(monday.Year(), monday.Month(), monday.Day(), 17, 1, 0, 0, loc)
 
 	// Jika sekarang sebelum Senin jam 17:01, kita hitung mundur ke minggu sebelumnya
