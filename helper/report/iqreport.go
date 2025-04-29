@@ -225,16 +225,17 @@ func Contain(slice []string, value string) bool {
 func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
-	weekYear := GetWeekYear(time.Now())
+	// Ambil week_year dari minggu lalu
+	weekYear := GetWeekYears(time.Now())
 
-	// Filter berdasarkan phonenumber dan week_year
+	// Filter berdasarkan phonenumber dan week_year dari minggu lalu
 	filter := bson.M{
 		"phonenumber": phonenumber,
 		"week_year":   weekYear,
 	}
-	sort := bson.M{"created_at": 1} // Urutkan dari yang paling lama
 
-	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter, options.Find().SetSort(sort).SetLimit(1))
+	// Cari satu dokumen yang sesuai filter
+	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter, options.Find().SetLimit(1))
 	if err != nil {
 		return activityscore, err
 	}
@@ -246,7 +247,7 @@ func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.Acti
 			return activityscore, err
 		}
 
-		// Parsing IQ dan Score
+		// Parsing nilai IQ dan Score
 		scoreInt, _ := strconv.Atoi(iqDoc.Score)
 		iqInt, err := strconv.Atoi(iqDoc.IQ)
 		if err == nil && iqInt > 100 {
@@ -258,25 +259,41 @@ func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.Acti
 		activityscore.PhoneNumber = phonenumber
 		activityscore.CreatedAt = time.Now()
 	} else {
-		return activityscore, fmt.Errorf("data IQ tidak ditemukan untuk minggu ini")
+		return activityscore, fmt.Errorf("data IQ tidak ditemukan untuk minggu lalu")
 	}
 
 	return activityscore, nil
 }
 
 func GetWeekYears(t time.Time) string {
-	loc := t.Location()
-	weekday := int(t.Weekday())
-	if weekday == 0 {
-		weekday = 7
+	// Load zona waktu Asia/Jakarta (WIB)
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		// Jika gagal load lokasi, fallback ke UTC
+		loc = time.UTC
 	}
-	monday := t.AddDate(0, 0, -weekday+1)
+
+	// Ambil waktu saat ini dalam zona WIB
+	now := time.Now().In(loc)
+
+	// Hitung weekday (Senin = 1, Minggu = 7)
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Minggu
+	}
+
+	// Dapatkan tanggal Senin minggu ini pukul 17:01:00 WIB
+	monday := now.AddDate(0, 0, -weekday+1)
 	startOfWeek := time.Date(monday.Year(), monday.Month(), monday.Day(), 17, 1, 0, 0, loc)
 
-	if t.Before(startOfWeek) {
+	// Jika sekarang sebelum Senin jam 17:01, kita hitung mundur ke minggu sebelumnya
+	if now.Before(startOfWeek) {
 		startOfWeek = startOfWeek.AddDate(0, 0, -7)
 	}
 
+	// Ambil ISO week dan tahun dari startOfWeek
 	year, week := startOfWeek.ISOWeek()
+
+	// Format: "2025_18"
 	return fmt.Sprintf("%d_%02d", year, week)
 }
