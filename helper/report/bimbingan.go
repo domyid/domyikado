@@ -123,7 +123,7 @@ func KirimLaporanBelumBimbingan(db *mongo.Database) (err error) {
 	}
 
 	// Menggunakan manual group ID yang spesifik
-	manualGroupIDs := []string{"120363298977628161"} // Ganti dengan WAGroupID yang ingin digunakan
+	manualGroupIDs := []string{"120363022595651310"} // Ganti dengan WAGroupID yang ingin digunakan
 
 	var lastErr error
 
