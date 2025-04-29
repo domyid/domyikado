@@ -237,7 +237,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
-	case method == "POST" && path == "/api/trackertesting":
+	case method == "GET" && path == "/api/trackertesting":
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
 			return
