@@ -313,6 +313,49 @@ func GetLastWeekIQ(db *mongo.Database, phonenumber string) (activityscore model.
 	return activityscore, nil
 }
 
+func GetLastWeekDataIQScores(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
+	var activityscore model.ActivityScore
+
+	// Hitung waktu 7 hari yang lalu
+	lastWeek := time.Now().AddDate(0, 0, -7)
+
+	// Filter data berdasarkan nomor telepon dan tanggal dalam seminggu terakhir
+	filter := bson.M{
+		"phonenumber": phonenumber,
+		"created_at": bson.M{
+			"$gte": lastWeek.Format("2006-01-02 15:04:05"),
+		},
+	}
+
+	sort := bson.M{"created_at": -1} // Urutkan berdasarkan tanggal paling terbaru
+
+	// Ambil data pertama yang sesuai
+	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter, options.Find().SetSort(sort).SetLimit(1))
+	if err != nil {
+		return activityscore, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if cursor.Next(context.TODO()) {
+		var iqDoc model.UserWithIqScore
+		if err := cursor.Decode(&iqDoc); err != nil {
+			return activityscore, err
+		}
+
+		scoreInt, _ := strconv.Atoi(iqDoc.Score)
+		iqInt, _ := strconv.Atoi(iqDoc.IQ)
+
+		activityscore.IQ = iqInt
+		activityscore.IQresult = scoreInt
+		activityscore.PhoneNumber = phonenumber
+		activityscore.CreatedAt = time.Now()
+	} else {
+		return activityscore, fmt.Errorf("data IQ tidak ditemukan dalam seminggu terakhir untuk nomor telepon %s", phonenumber)
+	}
+
+	return activityscore, nil
+}
+
 func GetCreated_At(t time.Time) string {
 	// Load zona waktu Asia/Jakarta (WIB)
 	loc, err := time.LoadLocation("Asia/Jakarta")
