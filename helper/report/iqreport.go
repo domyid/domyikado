@@ -8,6 +8,7 @@ import (
 
 	"fmt"
 
+	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -261,6 +262,33 @@ func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.Acti
 	} else {
 		return activityscore, fmt.Errorf("data IQ tidak ditemukan untuk minggu lalu")
 	}
+
+	return activityscore, nil
+}
+
+func GetLastWeekDataIQ(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	CreatedAt := GetCreated_At(time.Now())
+
+	// Ambil dokumen IQ dari database berdasarkan nomor HP & minggu ini
+	iqDoc, err := atdb.GetOneDoc[model.IqScore](db, "iqscore", bson.M{"phone_number": phonenumber, "created_at": CreatedAt})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return activityscore, nil
+		}
+		return activityscore, err
+	}
+
+	// Parsing nilai IQ dan Score
+	scoreInt, _ := strconv.Atoi(iqDoc.Score)
+	iqInt, err := strconv.Atoi(iqDoc.IQ)
+	if err != nil {
+		return activityscore, err
+	}
+
+	activityscore.IQ = iqInt          // Total skor tes IQ
+	activityscore.IQresult = scoreInt // Nilai IQ
+	activityscore.PhoneNumber = phonenumber
+	activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
 
 	return activityscore, nil
 }
