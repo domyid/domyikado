@@ -353,26 +353,26 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 }
 
 func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	// weekYear := GetWeekYear(time.Now())
 	now := time.Now()
 	weekday := int(now.Weekday())
 	if weekday == 0 {
-		weekday = 7 // Minggu = 7
+		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
 	}
+
+	// Dapatkan Senin minggu ini
 	mondayThisWeek := now.AddDate(0, 0, -weekday+1)
+	mondayThisWeek = time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, mondayThisWeek.Location()) // Senin 17:01
 
-	// Batas waktu akhir: Senin minggu ini jam 17:00
-	end := time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 0, 0, 0, mondayThisWeek.Location())
-
-	// Batas waktu awal: Senin minggu lalu jam 17:01
-	start := end.AddDate(0, 0, -7).Add(time.Minute)
+	// Dapatkan Senin berikutnya jam 17:00
+	mondayNextWeek := mondayThisWeek.AddDate(0, 0, 7)
+	mondayNextWeek = time.Date(mondayNextWeek.Year(), mondayNextWeek.Month(), mondayNextWeek.Day(), 17, 0, 0, 0, mondayNextWeek.Location())
 
 	// Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu ini
 	filter := bson.M{
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
-			"$gte": start,
-			"$lte": end,
+			"$gte": mondayThisWeek,
+			"$lte": mondayNextWeek,
 		},
 	}
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter)
