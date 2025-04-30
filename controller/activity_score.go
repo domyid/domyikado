@@ -46,6 +46,23 @@ func GetLastWeekActivityScore(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, score)
 }
 
+// tugas kelas AI
+func GetLastWeekScoreKelasAI(w http.ResponseWriter, r *http.Request) {
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	score, _ := GetLastWeekScoreKelasAIData(authorization.Id)
+	at.WriteJSON(w, http.StatusOK, score)
+}
+
 func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 	var score model.ActivityScore
 
@@ -143,6 +160,36 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 		QRIS:            dataQRIS.QRIS,
 		QRISPoints:      dataQRIS.QRISPoints,
 		TotalScore:      totalScore,
+	}
+
+	return score, nil
+}
+
+func GetLastWeekScoreKelasAIData(userID string) (model.ScoreKelasAI, error) {
+	var score model.ScoreKelasAI
+
+	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID)
+	dataIQ, _ := report.GetLastWeekDataIQScores(config.Mongoconn, userID)
+	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
+	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
+	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
+	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
+
+	score = model.ScoreKelasAI{
+		StravaKM:        datastravapoin.StravaKM,
+		Strava:          datastravapoin.Strava,
+		IQresult:        dataIQ.IQresult,
+		IQ:              dataIQ.IQ,
+		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
+		Pomokit:         dataPomokitScore.Pomokit,
+		MBC:             dataMicroBitcoin.MBC,
+		MBCPoints:       dataMicroBitcoin.MBCPoints,
+		BlockChain:      dataMicroBitcoin.BlockChain,
+		RVN:             dataRavencoin.RVN,
+		RavencoinPoints: dataRavencoin.RavencoinPoints,
+		Rupiah:          dataQRIS.Rupiah,
+		QRIS:            dataQRIS.QRIS,
+		QRISPoints:      dataQRIS.QRISPoints,
 	}
 
 	return score, nil

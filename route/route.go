@@ -344,6 +344,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// 	controller.LaporanBelumBimbingan(w, r)
 	case method == "GET" && path == "/dataenroll/belumbimbingan":
 		controller.LaporanBelumBimbingan(w, r)
+
+	// kelas ai
+	case method == "POST" && path == "/data/tugaskelasai":
+		controller.PostTugasKelasAI(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
