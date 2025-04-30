@@ -243,7 +243,7 @@ func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.Acti
 	defer cursor.Close(context.TODO())
 
 	if cursor.Next(context.TODO()) {
-		var iqDoc model.UserWithIqScore
+		var iqDoc model.IqScore
 		if err := cursor.Decode(&iqDoc); err != nil {
 			return activityscore, err
 		}
@@ -289,6 +289,26 @@ func GetLastWeekDataIQ(db *mongo.Database, phonenumber string) (activityscore mo
 	activityscore.IQresult = scoreInt // Nilai IQ
 	activityscore.PhoneNumber = phonenumber
 	activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
+
+	return activityscore, nil
+}
+
+func GetLastWeekIQ(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+	iqDoc, err := atdb.GetAllDoc[model.IqScore](db, "iqscore", bson.M{"_id": WeeklyFilter(), "phonenumber": phonenumber})
+	if err != nil {
+		return activityscore, err
+	}
+
+	// Parsing nilai IQ dan Score
+	scoreInt, _ := strconv.Atoi(iqDoc.Score)
+	iqInt, err := strconv.Atoi(iqDoc.IQ)
+	if err != nil {
+		return activityscore, err
+	}
+
+	activityscore.IQresult = scoreInt // Nilai IQ
+	activityscore.IQ = iqInt          // Total skor tes IQ
+	activityscore.PhoneNumber = phonenumber
 
 	return activityscore, nil
 }
