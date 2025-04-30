@@ -103,7 +103,7 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	datasponsor, _ := GetAllDataSponsorPoin(config.Mongoconn, userID)
 	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(userID))
 	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID)
-	dataIQ, _ := report.GetLastWeekIQ(config.Mongoconn, userID)
+	dataIQ, _ := GetAllDataIQScore(config.Mongoconn, userID)
 	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, userID)
 	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, userID)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
