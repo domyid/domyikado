@@ -7,10 +7,8 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
-	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/watoken"
-	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -96,19 +94,19 @@ func PostTugasKelasAI(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// kirim pesan ke user
-	message := "*Tugas " + string(rune(tugasAI.TugasKe)) + "*\n" + " berhasil di kirim"
-	dt := &whatsauth.TextMessage{
-		To:       tugasAI.PhoneNumber,
-		IsGroup:  false,
-		Messages: message,
-	}
-	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-	if err != nil {
-		resp.Info = "Tidak berhak"
-		resp.Response = err.Error()
-		at.WriteJSON(respw, http.StatusUnauthorized, resp)
-		return
-	}
+	// // kirim pesan ke user
+	// message := "*Tugas " + string(rune(tugasAI.TugasKe)) + "*\n" + " berhasil di kirim"
+	// dt := &whatsauth.TextMessage{
+	// 	To:       tugasAI.PhoneNumber,
+	// 	IsGroup:  false,
+	// 	Messages: message,
+	// }
+	// _, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+	// if err != nil {
+	// 	resp.Info = "Tidak berhak"
+	// 	resp.Response = err.Error()
+	// 	at.WriteJSON(respw, http.StatusUnauthorized, resp)
+	// 	return
+	// }
 	at.WriteJSON(respw, http.StatusOK, tugasAI)
 }
