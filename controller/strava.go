@@ -110,12 +110,12 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 }
 
 type AddPointsRequest struct {
-	ActivityID  string  `json:"activity_id"`
-	PhoneNumber string  `json:"phone_number"`
-	Distance    float64 `json:"distance"`
-	NameStrava  string  `json:"name_strava"`
-	CreatedAt   string  `json:"created_at"`
-	WaGroupID   string  `json:"wagroupid"`
+	ActivityID  string    `json:"activity_id"`
+	PhoneNumber string    `json:"phone_number"`
+	Distance    float64   `json:"distance"`
+	NameStrava  string    `json:"name_strava"`
+	CreatedAt   time.Time `json:"created_at"`
+	WaGroupID   string    `json:"wagroupid"`
 }
 
 func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
@@ -194,15 +194,15 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	newDoc := bson.M{
-		"phone_number": reqBody.PhoneNumber,
-		"total_km":     reqBody.Distance,
-		"wagroupid":    reqBody.WaGroupID,
-		"user_id":      user.ID,
-		"name":         user.Name,
-		"name_strava":  reqBody.NameStrava,
-		"poin":         math.Round((reqBody.Distance/6)*100*10) / 10,
-		"week_year":    weekYear, // masih bisa disimpan sebagai referensi
-		"created_at":   time.Now(),
+		"phone_number":      reqBody.PhoneNumber,
+		"total_km":          reqBody.Distance,
+		"wagroupid":         reqBody.WaGroupID,
+		"user_id":           user.ID,
+		"name":              user.Name,
+		"name_strava":       reqBody.NameStrava,
+		"poin":              math.Round((reqBody.Distance/6)*100*10) / 10,
+		"week_year":         weekYear, // masih bisa disimpan sebagai referensi
+		"created_at":        time.Now(),
 		"strava_created_at": reqBody.CreatedAt,
 	}
 
