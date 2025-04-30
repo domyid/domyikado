@@ -20,7 +20,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Daftar grup ID yang diperbolehkan
@@ -50,10 +49,10 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 	phoneNumbers := make(map[string]bool)
 	userData := make(map[string]map[string]struct {
-		TotalKm       float64
-		ActivityCount int
-		NameStrava    string
-		WaGroupID     string
+		TotalKm float64
+		// ActivityCount int
+		NameStrava string
+		WaGroupID  string
 	})
 
 	phoneList := make([]string, 0)
@@ -74,23 +73,24 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 		phoneNumbers[activity.PhoneNumber] = true
 		if _, exists := userData[activity.PhoneNumber]; !exists {
 			userData[activity.PhoneNumber] = make(map[string]struct {
-				TotalKm       float64
-				ActivityCount int
-				NameStrava    string
-				WaGroupID     string
+				TotalKm float64
+				// ActivityCount int
+				NameStrava string
+				WaGroupID  string
 			})
 		}
 
 		userData[activity.PhoneNumber][weekYear] = struct {
-			TotalKm       float64
-			ActivityCount int
-			NameStrava    string
-			WaGroupID     string
+			TotalKm float64
+			// ActivityCount int
+			NameStrava string
+			WaGroupID  string
 		}{
-			TotalKm:       userData[activity.PhoneNumber][weekYear].TotalKm + distance,
-			ActivityCount: userData[activity.PhoneNumber][weekYear].ActivityCount + 1,
-			NameStrava:    activity.Name,
-			WaGroupID:     activity.WaGroupID,
+			// TotalKm: userData[activity.PhoneNumber][weekYear].TotalKm + distance,
+			// ActivityCount: userData[activity.PhoneNumber][weekYear].ActivityCount + 1,
+			TotalKm:    distance,
+			NameStrava: activity.Name,
+			WaGroupID:  activity.WaGroupID,
 		}
 
 		// Jika wagroupid kosong, tambahkan ke daftar pencarian grup ID
@@ -110,19 +110,19 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 
 	for phone, weeks := range userData {
 		for weekYear, data := range weeks {
-			filter := bson.M{"phone_number": phone, "week_year": weekYear}
+			// filter := bson.M{"phone_number": phone, "week_year": weekYear}
 
-			var existing struct {
-				ActivityCount int                `bson:"activity_count"`
-				WaGroupID     string             `bson:"wagroupid,omitempty"`
-				UserID        primitive.ObjectID `bson:"user_id,omitempty"`
-				NameStrava    string             `bson:"name_strava,omitempty"`
-			}
-			err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
-			if err != nil && err != mongo.ErrNoDocuments {
-				log.Println("Error fetching existing data:", err)
-				continue
-			}
+			// var existing struct {
+			// 	ActivityCount int                `bson:"activity_count"`
+			// 	WaGroupID     string             `bson:"wagroupid,omitempty"`
+			// 	UserID        primitive.ObjectID `bson:"user_id,omitempty"`
+			// 	NameStrava    string             `bson:"name_strava,omitempty"`
+			// }
+			// err := colPoin.FindOne(context.TODO(), filter).Decode(&existing)
+			// if err != nil && err != mongo.ErrNoDocuments {
+			// 	log.Println("Error fetching existing data:", err)
+			// 	continue
+			// }
 
 			var user struct {
 				ID   primitive.ObjectID `bson:"_id"`
@@ -143,30 +143,47 @@ func ProcessStravaPoints(respw http.ResponseWriter, req *http.Request) {
 				}
 			}
 
-			update := bson.M{
-				"$set": bson.M{
-					"total_km":       math.Round(data.TotalKm*10) / 10,
-					"activity_count": existing.ActivityCount + data.ActivityCount,
-					"wagroupid":      selectedGroup,
-					"user_id":        user.ID, // Disimpan sebagai ObjectID
-					"updated_at":     time.Now(),
-					"name":           user.Name,       // Menyimpan nama user dari koleksi users
-					"name_strava":    data.NameStrava, // Menyimpan nama Strava dari aktivitas
-					"week_year":      weekYear,
-				},
-				"$setOnInsert": bson.M{
-					"created_at": time.Now(),
-				},
-				"$inc": bson.M{
-					"poin": math.Round((data.TotalKm/6)*100*10) / 10,
-				},
+			// update := bson.M{
+			// 	"$set": bson.M{
+			// 		"total_km":       math.Round(data.TotalKm*10) / 10,
+			// 		// "activity_count": existing.ActivityCount + data.ActivityCount,
+			// 		"wagroupid":      selectedGroup,
+			// 		"user_id":        user.ID, // Disimpan sebagai ObjectID
+			// 		"updated_at":     time.Now(),
+			// 		"name":           user.Name,       // Menyimpan nama user dari koleksi users
+			// 		"name_strava":    data.NameStrava, // Menyimpan nama Strava dari aktivitas
+			// 		"week_year":      weekYear,
+			// 	},
+			// 	"$setOnInsert": bson.M{
+			// 		"created_at": time.Now(),
+			// 	},
+			// 	"$inc": bson.M{
+			// 		"poin": math.Round((data.TotalKm/6)*100*10) / 10,
+			// 	},
+			// }
+
+			newDoc := bson.M{
+				"phone_number": phone,
+				"total_km":     data.TotalKm,
+				"wagroupid":    selectedGroup,
+				"user_id":      user.ID,
+				"name":         user.Name,
+				"name_strava":  data.NameStrava,
+				"poin":         math.Round((data.TotalKm/6)*100*10) / 10,
+				"week_year":    weekYear, // masih bisa disimpan sebagai referensi
+				"created_at":   time.Now(),
 			}
 
-			opts := options.Update().SetUpsert(true)
-			_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+			_, err = colPoin.InsertOne(context.TODO(), newDoc)
 			if err != nil {
-				log.Println("Error updating strava_poin:", err)
+				log.Println("Error inserting strava_poin:", err)
 			}
+
+			// opts := options.Update().SetUpsert(true)
+			// _, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+			// if err != nil {
+			// 	log.Println("Error updating strava_poin:", err)
+			// }
 		}
 	}
 
@@ -222,14 +239,15 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	weekYear := report.GetWeekYear(time.Now())
 
 	// Filter berdasarkan phone_number dan minggu tahun (week_year)
-	filter := bson.M{"phone_number": reqBody.PhoneNumber, "week_year": weekYear}
+	// filter := bson.M{"phone_number": reqBody.PhoneNumber, "week_year": weekYear}
+	filter := bson.M{"phone_number": reqBody.PhoneNumber}
 
 	// Ambil data poin sebelumnya
 	var existingData struct {
-		TotalKm       float64 `bson:"total_km"`
-		Poin          float64 `bson:"poin"`
-		ActivityCount int     `bson:"activity_count"`
-		WaGroupID     string  `bson:"wagroupid,omitempty"`
+		// TotalKm       float64 `bson:"total_km"`
+		// Poin          float64 `bson:"poin"`
+		// ActivityCount int     `bson:"activity_count"`
+		WaGroupID string `bson:"wagroupid,omitempty"`
 	}
 	err = colPoin.FindOne(context.TODO(), filter).Decode(&existingData)
 	if err != nil && err != mongo.ErrNoDocuments {
@@ -260,34 +278,51 @@ func AddStravaPoints(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Hitung poin berdasarkan jarak (distance) baru
-	newPoints := math.Round((reqBody.Distance/6)*100*10) / 10
+	// newPoints := math.Round((reqBody.Distance/6)*100*10) / 10
 
 	// Update total km, poin, dan count dengan menambah nilai lama dengan nilai baru
-	update := bson.M{
-		"$inc": bson.M{
-			"total_km":       reqBody.Distance,
-			"poin":           newPoints,
-			"activity_count": 1, // Menambahkan count aktivitas
-		},
-		"$setOnInsert": bson.M{
-			"created_at": time.Now(),
-		},
-		"$set": bson.M{
-			"updated_at":  time.Now(),
-			"user_id":     user.ID,
-			"name":        user.Name, // Simpan nama dari koleksi user
-			"name_strava": reqBody.NameStrava,
-			"week_year":   weekYear,
-			"wagroupid":   reqBody.WaGroupID,
-		},
-	}
-	opts := options.Update().SetUpsert(true)
+	// update := bson.M{
+	// 	"$inc": bson.M{
+	// 		"total_km":       reqBody.Distance,
+	// 		"poin":           newPoints,
+	// 		"activity_count": 1, // Menambahkan count aktivitas
+	// 	},
+	// 	"$setOnInsert": bson.M{
+	// 		"created_at": time.Now(),
+	// 	},
+	// 	"$set": bson.M{
+	// 		"updated_at":  time.Now(),
+	// 		"user_id":     user.ID,
+	// 		"name":        user.Name, // Simpan nama dari koleksi user
+	// 		"name_strava": reqBody.NameStrava,
+	// 		"week_year":   weekYear,
+	// 		"wagroupid":   reqBody.WaGroupID,
+	// 	},
+	// }
+	// opts := options.Update().SetUpsert(true)
 
-	_, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+	// _, err = colPoin.UpdateOne(context.TODO(), filter, update, opts)
+	// if err != nil {
+	// 	at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to update points"})
+	// 	return
+	// }
+
+	newDoc := bson.M{
+		"phone_number": reqBody.PhoneNumber,
+		"total_km":     reqBody.Distance,
+		"wagroupid":    reqBody.WaGroupID,
+		"user_id":      user.ID,
+		"name":         user.Name,
+		"name_strava":  reqBody.NameStrava,
+		"poin":         math.Round((reqBody.Distance/6)*100*10) / 10,
+		"week_year":    weekYear, // masih bisa disimpan sebagai referensi
+		"created_at":   time.Now(),
+	}
+
+	_, err = colPoin.InsertOne(context.TODO(), newDoc)
 	if err != nil {
-		at.WriteJSON(respw, http.StatusInternalServerError, model.Response{Response: "Failed to update points"})
-		return
+		log.Println("Error inserting strava_poin:", err)
 	}
 
-	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil diperbarui"})
+	at.WriteJSON(respw, http.StatusOK, model.Response{Response: "Poin berhasil ditambahkan"})
 }
