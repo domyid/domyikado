@@ -225,104 +225,104 @@ func GetUserAndIqScore(respw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(respw).Encode(response)
 }
 
-func GetLastWeekDataIQScore(w http.ResponseWriter, r *http.Request) {
-	token := at.GetLoginFromHeader(r)
-	if token == "" {
-		http.Error(w, `{"error": "Token login diperlukan"}`, http.StatusUnauthorized)
-		return
-	}
+// func GetLastWeekDataIQScore(w http.ResponseWriter, r *http.Request) {
+// 	token := at.GetLoginFromHeader(r)
+// 	if token == "" {
+// 		http.Error(w, `{"error": "Token login diperlukan"}`, http.StatusUnauthorized)
+// 		return
+// 	}
 
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
-	if err != nil {
-		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
-		return
-	}
+// 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
+// 	if err != nil {
+// 		http.Error(w, `{"error": "Token tidak valid"}`, http.StatusUnauthorized)
+// 		return
+// 	}
 
-	phoneNumber := payload.Id
+// 	phoneNumber := payload.Id
 
-	// Cari data user berdasarkan phonenumber
-	userCollection := config.Mongoconn.Collection("user")
-	var user model.Userdomyikado
-	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
-	if err != nil {
-		at.WriteJSON(w, http.StatusNotFound, model.Response{
-			Status:   "Error: User Not Found",
-			Info:     "Tidak ada user dengan nomor telepon ini",
-			Location: "User Lookup",
-			Response: err.Error(),
-		})
-		return
-	}
+// 	// Cari data user berdasarkan phonenumber
+// 	userCollection := config.Mongoconn.Collection("user")
+// 	var user model.Userdomyikado
+// 	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
+// 	if err != nil {
+// 		at.WriteJSON(w, http.StatusNotFound, model.Response{
+// 			Status:   "Error: User Not Found",
+// 			Info:     "Tidak ada user dengan nomor telepon ini",
+// 			Location: "User Lookup",
+// 			Response: err.Error(),
+// 		})
+// 		return
+// 	}
 
-	// Ambil data IQ user
-	iqCollection := config.Mongoconn.Collection("iqscore")
-	cursor, err := iqCollection.Find(context.TODO(), bson.M{"phonenumber": phoneNumber})
-	if err != nil {
-		http.Error(w, `{"error": "Gagal mengambil data IQ"}`, http.StatusInternalServerError)
-		return
-	}
-	defer cursor.Close(context.TODO())
+// 	// Ambil data IQ user
+// 	iqCollection := config.Mongoconn.Collection("iqscore")
+// 	cursor, err := iqCollection.Find(context.TODO(), bson.M{"phonenumber": phoneNumber})
+// 	if err != nil {
+// 		http.Error(w, `{"error": "Gagal mengambil data IQ"}`, http.StatusInternalServerError)
+// 		return
+// 	}
+// 	defer cursor.Close(context.TODO())
 
-	layout := "2006-01-02T15:04:05.000Z07:00"
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+// 	layout := "2006-01-02T15:04:05.000Z07:00"
+// 	loc, _ := time.LoadLocation("Asia/Jakarta")
 
-	weeklyMap := make(map[string]model.IqScore)
+// 	weeklyMap := make(map[string]model.IqScore)
 
-	for cursor.Next(context.TODO()) {
-		var result model.IqScore
-		if err := cursor.Decode(&result); err != nil {
-			continue
-		}
+// 	for cursor.Next(context.TODO()) {
+// 		var result model.IqScore
+// 		if err := cursor.Decode(&result); err != nil {
+// 			continue
+// 		}
 
-		createdTime, err := time.ParseInLocation("2006-01-02 15:04:05", result.CreatedAt, loc)
-		if err != nil {
-			continue
-		}
-		createdTime = createdTime.In(loc)
+// 		createdTime, err := time.ParseInLocation("2006-01-02 15:04:05", result.CreatedAt, loc)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		createdTime = createdTime.In(loc)
 
-		// Cari Senin di minggu yang sedang diproses
-		offset := (int(createdTime.Weekday()) + 6) % 7 // Senin=0
-		senin := time.Date(createdTime.Year(), createdTime.Month(), createdTime.Day(), 17, 1, 0, 0, loc).AddDate(0, 0, -offset)
+// 		// Cari Senin di minggu yang sedang diproses
+// 		offset := (int(createdTime.Weekday()) + 6) % 7 // Senin=0
+// 		senin := time.Date(createdTime.Year(), createdTime.Month(), createdTime.Day(), 17, 1, 0, 0, loc).AddDate(0, 0, -offset)
 
-		// Kalau Senin dan sebelum jam 17:01, mundur ke minggu sebelumnya
-		if createdTime.Weekday() == time.Monday && createdTime.Hour() < 17 {
-			senin = senin.AddDate(0, 0, -7)
-		} else if createdTime.Weekday() == time.Monday && createdTime.Hour() == 17 && createdTime.Minute() < 1 {
-			senin = senin.AddDate(0, 0, -7)
-		} else if createdTime.Before(senin) {
-			senin = senin.AddDate(0, 0, -7)
-		}
+// 		// Kalau Senin dan sebelum jam 17:01, mundur ke minggu sebelumnya
+// 		if createdTime.Weekday() == time.Monday && createdTime.Hour() < 17 {
+// 			senin = senin.AddDate(0, 0, -7)
+// 		} else if createdTime.Weekday() == time.Monday && createdTime.Hour() == 17 && createdTime.Minute() < 1 {
+// 			senin = senin.AddDate(0, 0, -7)
+// 		} else if createdTime.Before(senin) {
+// 			senin = senin.AddDate(0, 0, -7)
+// 		}
 
-		weekKey := senin.Format("2006-01-02")
+// 		weekKey := senin.Format("2006-01-02")
 
-		if existing, ok := weeklyMap[weekKey]; !ok || createdTime.After(mustParseTime(existing.CreatedAt, layout, loc)) {
-			weeklyMap[weekKey] = result
-		}
-	}
+// 		if existing, ok := weeklyMap[weekKey]; !ok || createdTime.After(mustParseTime(existing.CreatedAt, layout, loc)) {
+// 			weeklyMap[weekKey] = result
+// 		}
+// 	}
 
-	// Format hasil untuk response
-	var response []map[string]interface{}
-	for week, entry := range weeklyMap {
-		response = append(response, map[string]interface{}{
-			"week_start": week,
-			"iq":         entry.IQ,
-			"score":      entry.Score,
-			"created_at": entry.CreatedAt,
-		})
-	}
+// 	// Format hasil untuk response
+// 	var response []map[string]interface{}
+// 	for week, entry := range weeklyMap {
+// 		response = append(response, map[string]interface{}{
+// 			"week_start": week,
+// 			"iq":         entry.IQ,
+// 			"score":      entry.Score,
+// 			"created_at": entry.CreatedAt,
+// 		})
+// 	}
 
-	// Kirimkan ke client
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
+// 	// Kirimkan ke client
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(response)
+// }
 
-func mustParseTime(dateStr, layout string, loc *time.Location) time.Time {
-	t, err := time.Parse(layout, dateStr)
-	if err != nil {
-		return time.Time{}
-	}
-	return t.In(loc)
-}
+// func mustParseTime(dateStr, layout string, loc *time.Location) time.Time {
+// 	t, err := time.Parse(layout, dateStr)
+// 	if err != nil {
+// 		return time.Time{}
+// 	}
+// 	return t.In(loc)
+// }
 
 func PostAnswer(w http.ResponseWriter, r *http.Request) {
 	// Cek Token Login di Header

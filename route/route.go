@@ -216,8 +216,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetIqScoreDataDaily(w, r)
 	case method == "GET" && path == "/refresh/report/iq/score/mingguan":
 		controller.GetIqScoreDataWeekly(w, r)
-	case method == "GET" && path == "/api/iq/get/week":
-		controller.GetLastWeekDataIQScore(w, r)
+	// case method == "GET" && path == "/api/iq/get/week":
+	// 	controller.GetLastWeekDataIQScore(w, r)
 	// Pre Test
 	case method == "GET" && strings.HasPrefix(path, "/api/pretest/question/"):
 		controller.GetOnePreTestQuestion(w, r)
