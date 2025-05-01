@@ -195,6 +195,36 @@ func GetLastWeekScoreKelasAIData(userID string) (model.ScoreKelasAI, error) {
 	return score, nil
 }
 
+func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
+	var score model.ScoreKelasWS
+
+	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID)
+	dataIQ, _ := report.GetLastWeekDataIQScores(config.Mongoconn, userID)
+	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
+	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
+	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
+	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
+
+	score = model.ScoreKelasWS{
+		StravaKM:        datastravapoin.StravaKM,
+		Strava:          datastravapoin.Strava,
+		IQresult:        dataIQ.IQresult,
+		IQ:              dataIQ.IQ,
+		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
+		Pomokit:         dataPomokitScore.Pomokit,
+		MBC:             dataMicroBitcoin.MBC,
+		MBCPoints:       dataMicroBitcoin.MBCPoints,
+		BlockChain:      dataMicroBitcoin.BlockChain,
+		RVN:             dataRavencoin.RVN,
+		RavencoinPoints: dataRavencoin.RavencoinPoints,
+		Rupiah:          dataQRIS.Rupiah,
+		QRIS:            dataQRIS.QRIS,
+		QRISPoints:      dataQRIS.QRISPoints,
+	}
+
+	return score, nil
+}
+
 func HitungTotalScore(a *model.ActivityScore) int {
 	total := 0
 
