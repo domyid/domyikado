@@ -8,7 +8,6 @@ import (
 
 	"fmt"
 
-	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -221,96 +220,6 @@ func Contain(slice []string, value string) bool {
 		}
 	}
 	return false
-}
-
-func GetLastWeekDataIqScores(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
-	var activityscore model.ActivityScore
-
-	// Ambil created_at dari minggu lalu
-	CreatedAt := GetCreated_At(time.Now())
-
-	// Filter berdasarkan phonenumber dan created_at dari minggu lalu
-	filter := bson.M{
-		"phonenumber": phonenumber,
-		"created_at":  CreatedAt,
-	}
-
-	// Cari satu dokumen yang sesuai filter
-	cursor, err := db.Collection("iqscore").Find(context.TODO(), filter, options.Find().SetLimit(1))
-	if err != nil {
-		return activityscore, err
-	}
-	defer cursor.Close(context.TODO())
-
-	if cursor.Next(context.TODO()) {
-		var iqDoc model.IqScore
-		if err := cursor.Decode(&iqDoc); err != nil {
-			return activityscore, err
-		}
-
-		// Parsing nilai IQ dan Score
-		scoreInt, _ := strconv.Atoi(iqDoc.Score)
-		iqInt, err := strconv.Atoi(iqDoc.IQ)
-		if err == nil && iqInt > 100 {
-			iqInt = 100
-		}
-
-		activityscore.IQ = iqInt
-		activityscore.IQresult = scoreInt
-		activityscore.PhoneNumber = phonenumber
-		activityscore.CreatedAt = time.Now()
-	} else {
-		return activityscore, fmt.Errorf("data IQ tidak ditemukan untuk minggu lalu")
-	}
-
-	return activityscore, nil
-}
-
-func GetLastWeekDataIQ(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	CreatedAt := GetCreated_At(time.Now())
-
-	// Ambil dokumen IQ dari database berdasarkan nomor HP & minggu ini
-	iqDoc, err := atdb.GetOneDoc[model.IqScore](db, "iqscore", bson.M{"phone_number": phonenumber, "created_at": CreatedAt})
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return activityscore, nil
-		}
-		return activityscore, err
-	}
-
-	// Parsing nilai IQ dan Score
-	scoreInt, _ := strconv.Atoi(iqDoc.Score)
-	iqInt, err := strconv.Atoi(iqDoc.IQ)
-	if err != nil {
-		return activityscore, err
-	}
-
-	activityscore.IQ = iqInt          // Total skor tes IQ
-	activityscore.IQresult = scoreInt // Nilai IQ
-	activityscore.PhoneNumber = phonenumber
-	activityscore.CreatedAt = time.Now() // Default nilai waktu sekarang
-
-	return activityscore, nil
-}
-
-func GetLastWeekIQ(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	iqDoc, err := atdb.GetAllDoc[model.IqScore](db, "iqscore", bson.M{"_id": WeeklyFilter(), "phonenumber": phonenumber})
-	if err != nil {
-		return activityscore, err
-	}
-
-	// Parsing nilai IQ dan Score
-	scoreInt, _ := strconv.Atoi(iqDoc.Score)
-	iqInt, err := strconv.Atoi(iqDoc.IQ)
-	if err != nil {
-		return activityscore, err
-	}
-
-	activityscore.IQresult = scoreInt // Nilai IQ
-	activityscore.IQ = iqInt          // Total skor tes IQ
-	activityscore.PhoneNumber = phonenumber
-
-	return activityscore, nil
 }
 
 func GetLastWeekDataIQScores(db *mongo.Database, phonenumber string) (model.ActivityScore, error) {
