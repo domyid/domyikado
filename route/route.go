@@ -333,8 +333,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && path == "/api/bimbingan/weekly/status":
 		controller.GetBimbinganWeeklyStatus(w, r)
 	// Tugas Mingguan Kelas
-	case method == "GET" && path == "/dataenroll/proyek":
-		controller.GetProjectData(w, r)
+	// case method == "GET" && path == "/dataenroll/proyek":
+	// 	controller.GetProjectData(w, r)
 	// case method == "GET" && path == "/refresh/fororangtua":
 	// 	controller.ForOrangTua(w, r)
 	// case method == "GET" && path == "/refresh/laporankeorangtua":
@@ -344,10 +344,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// 	controller.LaporanBelumBimbingan(w, r)
 	case method == "GET" && path == "/dataenroll/belumbimbingan":
 		controller.LaporanBelumBimbingan(w, r)
-
 	// kelas ai
 	case method == "POST" && path == "/data/tugaskelasai":
 		controller.PostTugasKelasAI(w, r)
+	// kelas ws
+	case method == "POST" && path == "/data/tugaskelasws":
+		controller.PostTugasKelasWS(w, r)
+
 	default:
 		controller.NotFound(w, r)
 	}
