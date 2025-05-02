@@ -559,10 +559,7 @@ func RekapIqScoreMingguan(db *mongo.Database) error {
 	}
 
 	// Manual Group ID
-	manualGroupIDs := []string{
-		"120363022595651310",
-		"120363298977628161",
-	}
+	manualGroupIDs := []string{"120363022595651310"}
 
 	var lastErr error
 	groupSet := make(map[string]bool) // Menghindari pengiriman ganda
