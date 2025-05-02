@@ -116,18 +116,18 @@ func GenerateRekapIqScoreByWeek(db *mongo.Database, groupID string) (string, str
 	// ✅ Susun pesan rekap
 	msg := "*🧠 Laporan Tes IQ Berdasarkan Minggu*\n\n"
 
-	msg += fmt.Sprintf("📊 *Total Seluruh*: %d peserta\n", len(total))
-	for _, iq := range total {
+	// msg += fmt.Sprintf("📊 *Total Seluruh*: %d peserta\n", len(total))
+	// for _, iq := range total {
+	// 	msg += fmt.Sprintf("✅ %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
+	// }
+
+	msg += fmt.Sprintf("\n📆 *Minggu Lalu*: %d peserta\n", len(lastWeek))
+	for _, iq := range lastWeek {
 		msg += fmt.Sprintf("✅ %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
 	}
 
 	msg += fmt.Sprintf("\n📅 *Minggu Ini*: %d peserta\n", len(thisWeek))
 	for _, iq := range thisWeek {
-		msg += fmt.Sprintf("✅ %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
-	}
-
-	msg += fmt.Sprintf("\n📆 *Minggu Lalu*: %d peserta\n", len(lastWeek))
-	for _, iq := range lastWeek {
 		msg += fmt.Sprintf("✅ %s - Skor: %s, IQ: %s\n", iq.Name, iq.Score, iq.IQ)
 	}
 
