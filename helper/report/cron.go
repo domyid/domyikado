@@ -558,8 +558,11 @@ func RekapIqScoreMingguan(db *mongo.Database) error {
 		return errors.New("gagal mengambil data IQ Score: " + err.Error())
 	}
 
-	// **Manual Group ID untuk Testing**
-	manualGroupIDs := []string{"120363022595651310"} // **Ganti dengan Group ID yang sesuai**
+	// Manual Group ID
+	manualGroupIDs := []string{
+		"120363022595651310",
+		"120363298977628161",
+	}
 
 	var lastErr error
 	groupSet := make(map[string]bool) // Menghindari pengiriman ganda
