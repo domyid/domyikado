@@ -226,14 +226,18 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	// kirim pesan ke asesor
 	message := "Semua Tugas dari " + docuser.Name + " yang sudah di kumpulkan :\n"
 	for _, doc := range allDocs {
-		message += fmt.Sprintf("Tugas ke %d\n: ", doc.TugasKe)
-		message += fmt.Sprintf("Tugas : %s\n", doc.AllTugas)
+		message += fmt.Sprintf("Tugas ke %d:\n ", doc.TugasKe)
 		message += fmt.Sprintf("Strava : %d\n", doc.Strava)
 		message += fmt.Sprintf("Pomokit : %d\n", doc.Pomokit)
 		message += fmt.Sprintf("IQ : %d\n", doc.IQ)
 		message += fmt.Sprintf("MBC : %d\n", int(doc.MBC))
 		message += fmt.Sprintf("RVN : %d\n", int(doc.RVN))
 		message += fmt.Sprintf("QRIS : %d\n", doc.QRIS)
+
+		for i, tugas := range doc.AllTugas {
+			message += fmt.Sprintf("Pekerjaan %d : %s\n", i, tugas)
+		}
+		message += "\n"
 	}
 	dt := &whatsauth.TextMessage{
 		To:       payload.Id,
