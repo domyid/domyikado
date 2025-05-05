@@ -11,6 +11,7 @@ import (
 	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/watoken"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -79,8 +80,6 @@ func PostTugasKelasAI(respw http.ResponseWriter, req *http.Request) {
 	tugasAI.Pomokit = score.Pomokit
 
 	// Cari apakah ada data existing yang belum approved
-	// var idTugasAI primitive.ObjectID
-
 	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai", primitive.M{"phonenumber": tugasAI.PhoneNumber})
 	if err != nil {
 		respn.Status = "Error : Data tugasAI tidak di temukan"
@@ -98,20 +97,6 @@ func PostTugasKelasAI(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// // kirim pesan ke user
-	// message := "*Tugas " + string(rune(tugasAI.TugasKe)) + "*\n" + " berhasil di kirim"
-	// dt := &whatsauth.TextMessage{
-	// 	To:       tugasAI.PhoneNumber,
-	// 	IsGroup:  false,
-	// 	Messages: message,
-	// }
-	// _, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-	// if err != nil {
-	// 	resp.Info = "Tidak berhak"
-	// 	resp.Response = err.Error()
-	// 	at.WriteJSON(respw, http.StatusUnauthorized, resp)
-	// 	return
-	// }
 	at.WriteJSON(respw, http.StatusOK, tugasAI)
 }
 
@@ -171,20 +156,93 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	tugasAI.Pomokit = score.Pomokit
 	tugasAI.AllTugas = score.AllTugas
 
-	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
+	}
+
+	// Jumat pukul 00:00 WIB
+	weekday = int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	// Mundur ke Jumat terakhir
+	daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
+	lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+	startTime := time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
+	endTime := startTime.AddDate(0, 0, 7) // Jumat depan 00:00
+
+	filter := primitive.M{
+		"phonenumber": payload.Id,
+		"createdAt": primitive.M{
+			"$gte": startTime.UTC(),
+			"$lt":  endTime.UTC(),
+		},
+	}
+
+	// Cari apakah ada data existing yang belum approved
+	existing, err := atdb.GetOneDoc[model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", filter)
+	if err == nil {
+		// Update data yang di minggu ini
+		tugasAI.ID = existing.ID
+		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "tugaskelasai1", primitive.M{"_id": existing.ID}, tugasAI)
+		if err != nil {
+			respn.Status = "Error : Gagal Update Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+	} else {
+		allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+		if err != nil {
+			respn.Status = "Error : Data tugasAI tidak di temukan"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusBadRequest, respn)
+			return
+		}
+		// Insert data baru
+		tugasAI.TugasKe = len(allDoc) + 1
+		_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai1", tugasAI)
+		if err != nil {
+			respn.Status = "Error : Gagal Insert Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+	}
+
+	allDocs, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Data tugasAI tidak di temukan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	// Insert data baru
-	tugasAI.TugasKe = len(allDoc) + 1
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai1", tugasAI)
+
+	// kirim pesan ke asesor
+	message := "Semua Tugas dari " + docuser.Name + " yang sudah di kumpulkan :\n"
+	for _, doc := range allDocs {
+		message += fmt.Sprintf("Tugas ke %d\n: ", doc.TugasKe)
+		message += fmt.Sprintf("Tugas : %s\n", doc.AllTugas)
+		message += fmt.Sprintf("Strava : %d\n", doc.Strava)
+		message += fmt.Sprintf("Pomokit : %d\n", doc.Pomokit)
+		message += fmt.Sprintf("IQ : %d\n", doc.IQ)
+		message += fmt.Sprintf("MBC : %d\n", int(doc.MBC))
+		message += fmt.Sprintf("RVN : %d\n", int(doc.RVN))
+		message += fmt.Sprintf("QRIS : %d\n", doc.QRIS)
+	}
+	dt := &whatsauth.TextMessage{
+		To:       payload.Id,
+		IsGroup:  false,
+		Messages: message,
+	}
+	_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 	if err != nil {
-		respn.Status = "Error : Gagal Insert Database"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotModified, respn)
+		resp.Info = "Tidak berhak"
+		resp.Response = err.Error()
+		at.WriteJSON(respw, http.StatusUnauthorized, resp)
 		return
 	}
 
