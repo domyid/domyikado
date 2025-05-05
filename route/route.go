@@ -351,6 +351,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/data/tugaskelasws":
 		controller.PostTugasKelasWS(w, r)
 
+	// coba
+	case method == "GET" && path == "/data/pomokit/kelasai":
+		controller.GetPomokitKelasAI(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
