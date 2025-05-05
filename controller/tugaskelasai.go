@@ -203,7 +203,7 @@ func GetDataTugasAIById(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	tugasai, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "tugaskelasai1", primitive.M{"_id": objectId})
+	tugasai, err := atdb.GetOneDoc[model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"_id": objectId})
 	if err != nil {
 		respn.Status = "Error : Data tugas ai tidak di temukan"
 		respn.Response = err.Error()
