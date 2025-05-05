@@ -352,7 +352,7 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 	return activityscore, nil
 }
 
-func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
+func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode string) (activityscore model.ActivityScore, err error) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	now := time.Now().In(loc)
 	weekday := int(now.Weekday())
@@ -360,28 +360,72 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 		weekday = 7
 	}
 
-	// Cek apakah sekarang masih Senin sebelum jam 17:01 WIB
-	if weekday == 1 && now.Hour() < 17 || (now.Hour() == 17 && now.Minute() < 1) {
-		now = now.AddDate(0, 0, -1) // mundur 1 hari supaya tetap dihitung minggu sebelumnya
-		weekday = int(now.Weekday())
+	// // Cek apakah sekarang masih Senin sebelum jam 17:01 WIB
+	// if weekday == 1 && now.Hour() < 17 || (now.Hour() == 17 && now.Minute() < 1) {
+	// 	now = now.AddDate(0, 0, -1) // mundur 1 hari supaya tetap dihitung minggu sebelumnya
+	// 	weekday = int(now.Weekday())
+	// 	if weekday == 0 {
+	// 		weekday = 7
+	// 	}
+	// }
+
+	// mondayThisWeek := now.AddDate(0, 0, -weekday+1)
+	// mondayThisWeek = time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, loc)
+	// mondayNextWeek := mondayThisWeek.AddDate(0, 0, 7)
+	// mondayNextWeek = time.Date(mondayNextWeek.Year(), mondayNextWeek.Month(), mondayNextWeek.Day(), 17, 0, 0, 0, loc)
+
+	// // Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu ini
+	// filter := bson.M{
+	// 	"phone_number": phonenumber,
+	// 	"strava_created_at": bson.M{
+	// 		"$gte": mondayThisWeek.UTC(),
+	// 		"$lt":  mondayNextWeek.UTC(),
+	// 	},
+	// }
+
+	var startTime, endTime time.Time
+
+	switch mode {
+	case "kelasai":
+		// Jumat pukul 00:00 WIB
+		weekday := int(now.Weekday())
 		if weekday == 0 {
 			weekday = 7
 		}
+		// Mundur ke Jumat terakhir
+		daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
+		lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+		startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
+		endTime = startTime.AddDate(0, 0, 7) // Jumat depan 00:00
+
+	case "proyek1": // senin
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		// Cek apakah sekarang masih Senin sebelum 17:01 WIB
+		if weekday == 1 && now.Hour() < 17 || (now.Hour() == 17 && now.Minute() < 1) {
+			now = now.AddDate(0, 0, -1)
+			weekday = int(now.Weekday())
+			if weekday == 0 {
+				weekday = 7
+			}
+		}
+		monday := now.AddDate(0, 0, -weekday+1)
+		startTime = time.Date(monday.Year(), monday.Month(), monday.Day(), 17, 1, 0, 0, loc)
+		endTime = startTime.AddDate(0, 0, 7)
+		endTime = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 17, 0, 0, 0, loc)
 	}
 
-	mondayThisWeek := now.AddDate(0, 0, -weekday+1)
-	mondayThisWeek = time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, loc)
-	mondayNextWeek := mondayThisWeek.AddDate(0, 0, 7)
-	mondayNextWeek = time.Date(mondayNextWeek.Year(), mondayNextWeek.Month(), mondayNextWeek.Day(), 17, 0, 0, 0, loc)
-
-	// Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu ini
+	// Query ke MongoDB
 	filter := bson.M{
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
-			"$gte": mondayThisWeek.UTC(),
-			"$lt":  mondayNextWeek.UTC(),
+			"$gte": startTime.UTC(),
+			"$lt":  endTime.UTC(),
 		},
 	}
+
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
