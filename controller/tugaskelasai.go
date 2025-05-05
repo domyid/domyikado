@@ -155,23 +155,13 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	tugasAI.Pomokit = score.Pomokit
 	tugasAI.AllTugas = score.AllTugas
 
-	loc, _ := time.LoadLocation("Asia/Jakarta")
-	now := time.Now().In(loc)
-	weekday := int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
+	startTime, endTime, err := GetWeeklyFridayRange(time.Now())
+	if err != nil {
+		respn.Status = "Error : Gagal mendapatkan range waktu"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
 	}
-
-	// Jumat pukul 00:00 WIB
-	weekday = int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7
-	}
-	// Mundur ke Jumat terakhir
-	daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
-	lastFriday := now.AddDate(0, 0, -daysSinceFriday)
-	startTime := time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
-	endTime := startTime.AddDate(0, 0, 7) // Jumat depan 00:00
 
 	filter := primitive.M{
 		"phonenumber": payload.Id,
@@ -267,20 +257,64 @@ func GetDataTugasAI(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, tugasailist)
 }
 
-func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.PomodoroReport, error) {
+func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.TugasPomodoro, error) {
 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
 	if err != nil {
 		return nil, err
 	}
 
 	pomokitApi := conf.PomokitUrl + "/" + phonenumber
-	scode, pomodoros, err := atapi.Get[[]model.PomodoroReport](pomokitApi)
+	scode, pomodoros, err := atapi.Get[[]model.TugasPomodoro](pomokitApi)
 	if err != nil || scode != http.StatusOK {
 		return nil, err
 	}
+
 	if len(pomodoros) == 0 {
 		return nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
 	}
 
-	return pomodoros, nil
+	// Filter pomodoros based on the current week
+	startTime, endTime, err := GetWeeklyFridayRange(pomodoros[0].CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	seenUrls := make(map[string]bool)
+	var filteredPomodoros []model.TugasPomodoro
+	for _, pomodoro := range pomodoros {
+		if pomodoro.CreatedAt.After(startTime) && pomodoro.CreatedAt.Before(endTime) {
+			if _, exists := seenUrls[pomodoro.URLPekerjaan]; !exists {
+				filteredPomodoros = append(filteredPomodoros, pomodoro)
+				seenUrls[pomodoro.URLPekerjaan] = true
+			}
+		}
+	}
+
+	if len(filteredPomodoros) == 0 {
+		return nil, fmt.Errorf("no pomodoros found for user %s in the current week", phonenumber)
+	}
+
+	return filteredPomodoros, nil
+}
+
+func GetWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Time, err error) {
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := times.In(loc)
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
+	}
+
+	// Jumat pukul 00:00 WIB
+	weekday = int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	// Mundur ke Jumat terakhir
+	daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
+	lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+	startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
+	endTime = startTime.AddDate(0, 0, 7) // Jumat depan 00:00
+
+	return startTime, endTime, nil
 }

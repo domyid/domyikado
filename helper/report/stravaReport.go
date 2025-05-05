@@ -360,29 +360,6 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 		weekday = 7
 	}
 
-	// // Cek apakah sekarang masih Senin sebelum jam 17:01 WIB
-	// if weekday == 1 && now.Hour() < 17 || (now.Hour() == 17 && now.Minute() < 1) {
-	// 	now = now.AddDate(0, 0, -1) // mundur 1 hari supaya tetap dihitung minggu sebelumnya
-	// 	weekday = int(now.Weekday())
-	// 	if weekday == 0 {
-	// 		weekday = 7
-	// 	}
-	// }
-
-	// mondayThisWeek := now.AddDate(0, 0, -weekday+1)
-	// mondayThisWeek = time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, loc)
-	// mondayNextWeek := mondayThisWeek.AddDate(0, 0, 7)
-	// mondayNextWeek = time.Date(mondayNextWeek.Year(), mondayNextWeek.Month(), mondayNextWeek.Day(), 17, 0, 0, 0, loc)
-
-	// // Ambil dokumen poin Strava dari database berdasarkan nomor HP & minggu ini
-	// filter := bson.M{
-	// 	"phone_number": phonenumber,
-	// 	"strava_created_at": bson.M{
-	// 		"$gte": mondayThisWeek.UTC(),
-	// 		"$lt":  mondayNextWeek.UTC(),
-	// 	},
-	// }
-
 	var startTime, endTime time.Time
 
 	switch mode {
