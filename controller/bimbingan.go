@@ -202,6 +202,15 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
 	}
 
+	// Jika sekarang masih Senin sebelum 17:01, anggap masih minggu sebelumnya
+	if weekday == 1 && (now.Hour() < 17 || (now.Hour() == 17 && now.Minute() < 1)) {
+		now = now.AddDate(0, 0, -1)
+		weekday = int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+	}
+
 	// Dapatkan Senin minggu ini
 	mondayThisWeek := now.AddDate(0, 0, -weekday+1)
 	mondayThisWeek = time.Date(mondayThisWeek.Year(), mondayThisWeek.Month(), mondayThisWeek.Day(), 17, 1, 0, 0, mondayThisWeek.Location()) // Senin 17:01
