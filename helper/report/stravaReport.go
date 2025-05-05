@@ -353,7 +353,8 @@ func GetAllDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore
 }
 
 func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activityscore model.ActivityScore, err error) {
-	now := time.Now()
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
 	weekday := int(now.Weekday())
 	if weekday == 0 {
 		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
@@ -371,8 +372,8 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 	filter := bson.M{
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
-			"$gte": mondayThisWeek,
-			"$lte": mondayNextWeek,
+			"$gte": mondayThisWeek.UTC(),
+			"$lte": mondayNextWeek.UTC(),
 		},
 	}
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter)

@@ -195,7 +195,8 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	now := time.Now()
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
 	weekday := int(now.Weekday())
 	if weekday == 0 {
 		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
