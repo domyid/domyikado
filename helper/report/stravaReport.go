@@ -373,7 +373,7 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string) (activity
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
 			"$gte": mondayThisWeek.UTC(),
-			"$lte": mondayNextWeek.UTC(),
+			"$lt": mondayNextWeek.UTC(),
 		},
 	}
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter)
