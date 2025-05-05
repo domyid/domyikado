@@ -214,8 +214,8 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 		"phonenumber": docuser.PhoneNumber,
 		"approved":    true,
 		"createdAt": primitive.M{
-			"$gte": mondayThisWeek,
-			"$lt":  mondayNextWeek,
+			"$gte": mondayThisWeek.UTC(),
+			"$lt":  mondayNextWeek.UTC(),
 		},
 	}
 	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
