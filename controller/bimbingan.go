@@ -355,44 +355,20 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Ambil query string: ?bimbinganke=1
-	bimbinganKeStr := req.URL.Query().Get("bimbinganke")
-	if bimbinganKeStr == "" {
-		bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
-		if err != nil {
-			respn.Status = "Error : Gagal mengambil data bimbingan"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusInternalServerError, respn)
-			return
-		}
-
-		at.WriteJSON(respw, http.StatusOK, bimbinganList)
-		return
+	type Bimbingan struct {
+		ID          primitive.ObjectID `json:"_id" bson:"_id"`
+		BimbinganKe int                `json:"bimbinganke" bson:"bimbinganke"`
 	}
 
-	bimbinganKe, err := strconv.Atoi(bimbinganKeStr)
-	if err != nil || bimbinganKe < 1 {
-		respn.Status = "Error : Parameter bimbinganke tidak valid, harus >= 1"
+	bimbinganList, err := atdb.GetAllDoc[[]Bimbingan](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data bimbingan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Filter berdasarkan phonenumber dan bimbinganke
-	filter := primitive.M{
-		"phonenumber": payload.Id,
-		"bimbinganke": bimbinganKe,
-	}
-
-	bimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
-	if err != nil {
-		respn.Status = "Error : Gagal mengambil data bimbingan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
-
-	at.WriteJSON(respw, http.StatusOK, bimbingan)
+	at.WriteJSON(respw, http.StatusOK, bimbinganList)
 }
 
 // func GetDataBimbinganByRelativeWeek(respw http.ResponseWriter, req *http.Request) {

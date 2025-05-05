@@ -356,6 +356,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostTugasKelasAI1(w, r)
 	case method == "GET" && path == "/data/tugaskelasai1/weekly":
 		controller.GetLastWeekScoreKelasAI(w, r)
+	case method == "GET" && path == "/data/tugaskelasai1":
+		controller.GetDataTugasAI(w, r)
+	case method == "GET" && at.URLParam(path, "/data/tugaskelasai1/:id"):
+		controller.GetDataTugasAIById(w, r)
 	default:
 		controller.NotFound(w, r)
 	}
