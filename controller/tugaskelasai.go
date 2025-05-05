@@ -151,25 +151,25 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	pomokitKelasAI, err := getPomokitKelasAI(config.Mongoconn, payload.Id)
-	if err != nil {
-		respn.Status = "Error : Gagal mendapatkan data pomokit"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-	if len(pomokitKelasAI) == 0 {
-		respn.Status = "Error : Gagal mendapatkan data pomokit"
-		respn.Response = "No pomodoros found for user " + payload.Id
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+	// pomokitKelasAI, err := GetPomokitDataKelasAI(config.Mongoconn, payload.Id)
+	// if err != nil {
+	// 	respn.Status = "Error : Gagal mendapatkan data pomokit"
+	// 	respn.Response = err.Error()
+	// 	at.WriteJSON(respw, http.StatusBadRequest, respn)
+	// 	return
+	// }
+	// if len(pomokitKelasAI) == 0 {
+	// 	respn.Status = "Error : Gagal mendapatkan data pomokit"
+	// 	respn.Response = "No pomodoros found for user " + payload.Id
+	// 	at.WriteJSON(respw, http.StatusBadRequest, respn)
+	// 	return
+	// }
 
-	urls := make([]string, 0, len(pomokitKelasAI))
-	for _, pomokit := range pomokitKelasAI {
-		urls = append(urls, pomokit.URLPekerjaan)
-	}
-	tugasAI.AllTugas = urls
+	// urls := make([]string, 0, len(pomokitKelasAI))
+	// for _, pomokit := range pomokitKelasAI {
+	// 	urls = append(urls, pomokit.URLPekerjaan)
+	// }
+	// tugasAI.AllTugas = urls
 
 	score, _ := GetLastWeekScoreKelasAIData(payload.Id)
 
@@ -189,6 +189,7 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	tugasAI.QRISPoints = score.QRISPoints
 	tugasAI.Pomokitsesi = score.Pomokitsesi
 	tugasAI.Pomokit = score.Pomokit
+	tugasAI.AllTugas = score.AllTugas
 
 	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
@@ -234,7 +235,7 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 // 	at.WriteJSON(respw, http.StatusOK, pomokitKelasAI)
 // }
 
-func getPomokitKelasAI(db *mongo.Database, phonenumber string) ([]model.PomodoroReport, error) {
+func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.PomodoroReport, error) {
 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
 	if err != nil {
 		return nil, err
