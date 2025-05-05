@@ -141,12 +141,6 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	if tugasAI.AllTugas == nil {
-		respn.Status = "Error : Tugas tidak boleh kosong"
-		respn.Response = "Isi lebih lengkap terlebih dahulu"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
 
 	//validasi eksistensi user di db
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
@@ -156,6 +150,26 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
+
+	pomokitKelasAI, err := getPomokitKelasAI(config.Mongoconn, payload.Id)
+	if err != nil {
+		respn.Status = "Error : Gagal mendapatkan data pomokit"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	if len(pomokitKelasAI) == 0 {
+		respn.Status = "Error : Gagal mendapatkan data pomokit"
+		respn.Response = "No pomodoros found for user " + payload.Id
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	urls := make([]string, 0, len(pomokitKelasAI))
+	for _, pomokit := range pomokitKelasAI {
+		urls = append(urls, pomokit.URLPekerjaan)
+	}
+	tugasAI.AllTugas = urls
 
 	score, _ := GetLastWeekScoreKelasAIData(payload.Id)
 
@@ -176,7 +190,7 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	tugasAI.Pomokitsesi = score.Pomokitsesi
 	tugasAI.Pomokit = score.Pomokit
 
-	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": tugasAI.PhoneNumber})
+	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Data tugasAI tidak di temukan"
 		respn.Response = err.Error()
@@ -196,29 +210,29 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, tugasAI)
 }
 
-func GetPomokitKelasAI(respw http.ResponseWriter, req *http.Request) {
-	//otorisasi dan validasi inputan
-	var respn model.Response
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
-	if err != nil {
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Info = at.GetSecretFromHeader(req)
-		respn.Location = "Decode Token Error"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
-		return
-	}
+// func GetPomokitKelasAI(respw http.ResponseWriter, req *http.Request) {
+// 	//otorisasi dan validasi inputan
+// 	var respn model.Response
+// 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+// 	if err != nil {
+// 		respn.Status = "Error : Token Tidak Valid"
+// 		respn.Info = at.GetSecretFromHeader(req)
+// 		respn.Location = "Decode Token Error"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusForbidden, respn)
+// 		return
+// 	}
 
-	pomokitKelasAI, err := getPomokitKelasAI(config.Mongoconn, payload.Id)
-	if err != nil {
-		respn.Status = "Error : Gagal mendapatkan data pomokit"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+// 	pomokitKelasAI, err := getPomokitKelasAI(config.Mongoconn, payload.Id)
+// 	if err != nil {
+// 		respn.Status = "Error : Gagal mendapatkan data pomokit"
+// 		respn.Response = err.Error()
+// 		at.WriteJSON(respw, http.StatusBadRequest, respn)
+// 		return
+// 	}
 
-	at.WriteJSON(respw, http.StatusOK, pomokitKelasAI)
-}
+// 	at.WriteJSON(respw, http.StatusOK, pomokitKelasAI)
+// }
 
 func getPomokitKelasAI(db *mongo.Database, phonenumber string) ([]model.PomodoroReport, error) {
 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
