@@ -187,6 +187,8 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	if err == nil {
 		// Update data yang di minggu ini
 		tugasAI.ID = existing.ID
+		tugasAI.TugasKe = existing.TugasKe
+		tugasAI.CreatedAt = existing.CreatedAt
 		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "tugaskelasai1", primitive.M{"_id": existing.ID}, tugasAI)
 		if err != nil {
 			respn.Status = "Error : Gagal Update Database"
