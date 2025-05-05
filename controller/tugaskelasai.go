@@ -213,7 +213,7 @@ func GetPomokitKelasAI(respw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		respn.Status = "Error : Gagal mendapatkan data pomokit"
 		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotModified, respn)
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
