@@ -90,13 +90,13 @@ func PostTugasKelasWS(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cari apakah ada data existing yang belum approved
-	existing, err := atdb.GetOneDoc[model.ScoreKelasWS](config.Mongoconn, "tugaskelasws1", filter)
+	existing, err := atdb.GetOneDoc[model.ScoreKelasWS](config.Mongoconn, "tugaskelasws", filter)
 	if err == nil {
 		// Update data yang di minggu ini
 		tugasWS.ID = existing.ID
 		tugasWS.TugasKe = existing.TugasKe
 		tugasWS.CreatedAt = existing.CreatedAt
-		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "tugaskelasws1", primitive.M{"_id": existing.ID}, tugasWS)
+		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "tugaskelasws", primitive.M{"_id": existing.ID}, tugasWS)
 		if err != nil {
 			respn.Status = "Error : Gagal Update Database"
 			respn.Response = err.Error()
@@ -104,7 +104,7 @@ func PostTugasKelasWS(respw http.ResponseWriter, req *http.Request) {
 			return
 		}
 	} else {
-		allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasWS](config.Mongoconn, "tugaskelasws1", primitive.M{"phonenumber": payload.Id})
+		allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasWS](config.Mongoconn, "tugaskelasws", primitive.M{"phonenumber": payload.Id})
 		if err != nil {
 			respn.Status = "Error : Data tugasWS tidak di temukan"
 			respn.Response = err.Error()
@@ -113,7 +113,7 @@ func PostTugasKelasWS(respw http.ResponseWriter, req *http.Request) {
 		}
 		// Insert data baru
 		tugasWS.TugasKe = len(allDoc) + 1
-		_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasws1", tugasWS)
+		_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasws", tugasWS)
 		if err != nil {
 			respn.Status = "Error : Gagal Insert Database"
 			respn.Response = err.Error()
@@ -137,7 +137,7 @@ func GetDataTugasWSById(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
-	tugasws, err := atdb.GetOneDoc[model.ScoreKelasWS](config.Mongoconn, "tugaskelasws1", primitive.M{"_id": objectId})
+	tugasws, err := atdb.GetOneDoc[model.ScoreKelasWS](config.Mongoconn, "tugaskelasws", primitive.M{"_id": objectId})
 	if err != nil {
 		respn.Status = "Error : Data tugas ws tidak di temukan"
 		respn.Response = err.Error()
@@ -164,7 +164,7 @@ func GetDataTugasWS(respw http.ResponseWriter, req *http.Request) {
 		TugasKe int                `json:"tugaske" bson:"tugaske"`
 	}
 
-	tugaswslist, err := atdb.GetAllDoc[[]TugasWS](config.Mongoconn, "tugaskelasws1", primitive.M{"phonenumber": payload.Id})
+	tugaswslist, err := atdb.GetAllDoc[[]TugasWS](config.Mongoconn, "tugaskelasws", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data tugas ws"
 		respn.Response = err.Error()
