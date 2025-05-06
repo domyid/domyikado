@@ -347,7 +347,15 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// kelas ws
 	case method == "POST" && path == "/data/tugaskelasws":
 		controller.PostTugasKelasWS(w, r)
-
+		// coba kelas ws
+	case method == "POST" && path == "/data/tugaskelasws1":
+		controller.PostTugasKelasWS1(w, r)
+	case method == "GET" && path == "/data/tugaskelasws1/weekly":
+		controller.GetLastWeekScoreKelasWS(w, r)
+	case method == "GET" && path == "/data/tugaskelasws1":
+		controller.GetDataTugasWS(w, r)
+	case method == "GET" && at.URLParam(path, "/data/tugaskelasws1/:id"):
+		controller.GetDataTugasWSById(w, r)
 	// kelas ai
 	case method == "POST" && path == "/data/tugaskelasai":
 		controller.PostTugasKelasAI(w, r)
