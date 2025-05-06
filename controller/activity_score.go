@@ -120,7 +120,7 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	datasponsor, _ := GetAllDataSponsorPoin(config.Mongoconn, userID)
 	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(userID))
 	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "proyek1")
-	dataIQ, _ := report.GetLastWeekDataIQScores(config.Mongoconn, userID)
+	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "proyek1")
 	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, userID)
 	dataWebhook, _ := report.GetLastWeekWebhookPoin(config.Mongoconn, userID)
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
@@ -169,7 +169,7 @@ func GetLastWeekScoreKelasAIData(userID string) (model.ScoreKelasAI, error) {
 	var score model.ScoreKelasAI
 
 	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "kelasai")
-	dataIQ, _ := report.GetLastWeekDataIQScores(config.Mongoconn, userID)
+	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
 	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
 	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
@@ -206,7 +206,7 @@ func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
 	var score model.ScoreKelasWS
 
 	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "proyek1")
-	dataIQ, _ := report.GetLastWeekDataIQScores(config.Mongoconn, userID)
+	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
 	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
 	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
