@@ -274,7 +274,7 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 	}
 
 	// Filter pomodoros based on the current week
-	startTime, endTime, err := GetWeeklyFridayRange(pomodoros[0].CreatedAt)
+	startTime, endTime, err := GetWeeklyFridayRange(time.Now())
 	if err != nil {
 		return nil, err
 	}
