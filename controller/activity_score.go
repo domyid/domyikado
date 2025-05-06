@@ -251,3 +251,20 @@ func HitungTotalScore(a *model.ActivityScore) int {
 
 	return total
 }
+
+// tugas kelas WS
+func GetLastWeekScoreKelasWS(w http.ResponseWriter, r *http.Request) {
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	score, _ := GetLastWeekScoreKelasWSData(authorization.Id)
+	at.WriteJSON(w, http.StatusOK, score)
+}
