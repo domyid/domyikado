@@ -211,6 +211,12 @@ func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
 	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
 	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
 	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
+	urlTugas, _ := GetPomokitDataKelasWS(config.Mongoconn, userID)
+
+	urls := make([]string, 0, len(urlTugas))
+	for _, tugas := range urlTugas {
+		urls = append(urls, tugas.URLPekerjaan)
+	}
 
 	score = model.ScoreKelasWS{
 		StravaKM:        datastravapoin.StravaKM,
@@ -227,6 +233,7 @@ func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
 		Rupiah:          dataQRIS.Rupiah,
 		QRIS:            dataQRIS.QRIS,
 		QRISPoints:      dataQRIS.QRISPoints,
+		AllTugas:        urls,
 	}
 
 	return score, nil
