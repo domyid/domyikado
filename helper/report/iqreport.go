@@ -297,3 +297,98 @@ func GetCreated_At(t time.Time) string {
 	// Format: "2025_18"
 	return fmt.Sprintf("%d_%02d", year, week)
 }
+
+func GetLastWeekDataIQScoress(db *mongo.Database, phonenumber, mode string) (model.ActivityScore, error) {
+	var activityscore model.ActivityScore
+
+	// WIB
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
+
+	var startTime, endTime time.Time
+
+	switch mode {
+	case "kelasws":
+		// minggu berjalan Jumat 00:00 WIB → Jumat depan 00:00
+		wd := int(now.Weekday())
+		if wd == 0 {
+			wd = 7
+		}
+		// cari Jumat terakhir (weekday==5)
+		daysSinceFri := (wd + 2) % 7 // jika today is Fri (5), daysSinceFri=0
+		lastFri := now.AddDate(0, 0, -daysSinceFri)
+		startTime = time.Date(lastFri.Year(), lastFri.Month(), lastFri.Day(), 0, 0, 0, 0, loc)
+		endTime = startTime.AddDate(0, 0, 7)
+
+	case "proyek1":
+		// minggu Senin 17:01 → Senin depan 17:00
+		wd := int(now.Weekday())
+		if wd == 0 {
+			wd = 7
+		}
+		// jika hari ini Senin sebelum jam 17:01, geser ke minggu kemarin
+		if wd == 1 && (now.Hour() < 17 || (now.Hour() == 17 && now.Minute() < 1)) {
+			now = now.AddDate(0, 0, -1)
+			wd = int(now.Weekday())
+			if wd == 0 {
+				wd = 7
+			}
+		}
+		mon := now.AddDate(0, 0, -wd+1)
+		startTime = time.Date(mon.Year(), mon.Month(), mon.Day(), 17, 1, 0, 0, loc)
+		// Senin depan jam 17:00
+		nxtMon := startTime.AddDate(0, 0, 7)
+		endTime = time.Date(nxtMon.Year(), nxtMon.Month(), nxtMon.Day(), 17, 0, 0, 0, loc)
+
+	default:
+		// fallback: 7×24 jam terakhir
+		startTime = now.AddDate(0, 0, -7)
+		endTime = now
+	}
+
+	// MongoDB menyimpan created_at sebagai string "YYYY-MM-DD HH:MM:SS"
+	// filter lexikografis cukup jika formatnya konsisten
+	filter := bson.M{
+		"phonenumber": phonenumber,
+		"created_at": bson.M{
+			"$gte": startTime.Format("2006-01-02 15:04:05"),
+			"$lt":  endTime.Format("2006-01-02 15:04:05"),
+		},
+	}
+
+	// ambil satu dokumen terbaru
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetLimit(1)
+
+	cursor, err := db.Collection("iqscore").
+		Find(context.TODO(), filter, opts)
+	if err != nil {
+		return activityscore, fmt.Errorf("query iqscore: %w", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	if !cursor.Next(context.TODO()) {
+		return activityscore, fmt.Errorf("tidak ada data IQ Score untuk mode %q", mode)
+	}
+
+	// decode ke struct yang punya Score & IQ sebagai string
+	var doc struct {
+		Score string `bson:"score"`
+		IQ    string `bson:"iq"`
+	}
+	if err := cursor.Decode(&doc); err != nil {
+		return activityscore, fmt.Errorf("decode iqscore: %w", err)
+	}
+
+	// konversi ke int
+	scoreInt, _ := strconv.Atoi(doc.Score)
+	iqInt, _ := strconv.Atoi(doc.IQ)
+
+	activityscore.PhoneNumber = phonenumber
+	activityscore.IQresult = scoreInt
+	activityscore.IQ = iqInt
+	activityscore.CreatedAt = time.Now() // catat kapan dipanggil
+
+	return activityscore, nil
+}
