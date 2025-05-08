@@ -51,7 +51,7 @@ func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 	httpstatus := http.StatusServiceUnavailable
 
 	var wg sync.WaitGroup
-	wg.Add(4) // Menambahkan jumlah goroutine yang akan dijalankan
+	wg.Add(3) // Menambahkan jumlah goroutine yang akan dijalankan
 
 	// Mutex untuk mengamankan akses ke variabel resp dan httpstatus
 	var mu sync.Mutex
@@ -115,16 +115,16 @@ func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 	}()
 
 	// 4. Menjalankan fungsi RekapStravaYesterday dalam goroutine
-	go func() {
-		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
-		if err := report.RekapStravaYesterday(config.Mongoconn); err != nil {
-			mu.Lock()
-			lastErr = err
-			resp.Response = err.Error()
-			httpstatus = http.StatusInternalServerError
-			mu.Unlock()
-		}
-	}()
+	// go func() {
+	// 	defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
+	// 	if err := report.RekapStravaYesterday(config.Mongoconn); err != nil {
+	// 		mu.Lock()
+	// 		lastErr = err
+	// 		resp.Response = err.Error()
+	// 		httpstatus = http.StatusInternalServerError
+	// 		mu.Unlock()
+	// 	}
+	// }()
 
 	wg.Wait() // Menunggu sampai semua goroutine selesai
 
@@ -137,71 +137,71 @@ func GetNewToken(respw http.ResponseWriter, req *http.Request) {
 }
 
 // jalan setiap jam 3 pagi
-func GetNewCode(respw http.ResponseWriter, req *http.Request) {
-	var resp model.Response
-	httpstatus := http.StatusServiceUnavailable
+// func GetNewCode(respw http.ResponseWriter, req *http.Request) {
+// 	var resp model.Response
+// 	httpstatus := http.StatusServiceUnavailable
 
-	var wg sync.WaitGroup
-	wg.Add(2) // Menambahkan jumlah goroutine yang akan dijalankan
+// 	var wg sync.WaitGroup
+// 	wg.Add(2) // Menambahkan jumlah goroutine yang akan dijalankan
 
-	// Mutex untuk mengamankan akses ke variabel resp dan httpstatus
-	var mu sync.Mutex
-	// Variabel untuk menyimpan kesalahan terakhir
-	var lastErr error
+// 	// Mutex untuk mengamankan akses ke variabel resp dan httpstatus
+// 	var mu sync.Mutex
+// 	// Variabel untuk menyimpan kesalahan terakhir
+// 	var lastErr error
 
-	// 1. Refresh token
-	go func() {
-		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
-		profs, err := atdb.GetAllDoc[[]model.Profile](config.Mongoconn, "profile", bson.M{})
-		if err != nil {
-			mu.Lock()
-			lastErr = err
-			resp.Response = err.Error()
-			mu.Unlock()
-			return
-		}
-		for _, prof := range profs {
-			dt := &whatsauth.WebHookInfo{
-				URL:    prof.URL,
-				Secret: prof.Secret,
-			}
-			res, err := whatsauth.RefreshToken(dt, prof.Phonenumber, config.WAAPIGetToken, config.Mongoconn)
-			if err != nil {
-				mu.Lock()
-				lastErr = err
-				resp.Response = err.Error()
-				httpstatus = http.StatusInternalServerError
-				mu.Unlock()
-				continue // Lanjutkan ke iterasi berikutnya
-			}
-			mu.Lock()
-			resp.Response = at.Jsonstr(res.ModifiedCount)
-			httpstatus = http.StatusOK
-			mu.Unlock()
-		}
-	}()
+// 	// 1. Refresh token
+// 	go func() {
+// 		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
+// 		profs, err := atdb.GetAllDoc[[]model.Profile](config.Mongoconn, "profile", bson.M{})
+// 		if err != nil {
+// 			mu.Lock()
+// 			lastErr = err
+// 			resp.Response = err.Error()
+// 			mu.Unlock()
+// 			return
+// 		}
+// 		for _, prof := range profs {
+// 			dt := &whatsauth.WebHookInfo{
+// 				URL:    prof.URL,
+// 				Secret: prof.Secret,
+// 			}
+// 			res, err := whatsauth.RefreshToken(dt, prof.Phonenumber, config.WAAPIGetToken, config.Mongoconn)
+// 			if err != nil {
+// 				mu.Lock()
+// 				lastErr = err
+// 				resp.Response = err.Error()
+// 				httpstatus = http.StatusInternalServerError
+// 				mu.Unlock()
+// 				continue // Lanjutkan ke iterasi berikutnya
+// 			}
+// 			mu.Lock()
+// 			resp.Response = at.Jsonstr(res.ModifiedCount)
+// 			httpstatus = http.StatusOK
+// 			mu.Unlock()
+// 		}
+// 	}()
 
-	// 2. Menjalankan fungsi RekapPagiHari dalam goroutine
-	go func() {
-		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
-		if err := report.RekapMingguIni(config.Mongoconn); err != nil {
-			mu.Lock()
-			lastErr = err
-			resp.Response = err.Error()
-			httpstatus = http.StatusInternalServerError
-			mu.Unlock()
-		}
-	}()
+// 	// 2. Menjalankan fungsi RekapPagiHari dalam goroutine
+// 	go func() {
+// 		defer wg.Done() // Memanggil wg.Done() setelah fungsi selesai
+// 		if err := report.RekapMingguIni(config.Mongoconn); err != nil {
+// 			mu.Lock()
+// 			lastErr = err
+// 			resp.Response = err.Error()
+// 			httpstatus = http.StatusInternalServerError
+// 			mu.Unlock()
+// 		}
+// 	}()
 
-	wg.Wait() // Menunggu sampai semua goroutine selesai
+// 	wg.Wait() // Menunggu sampai semua goroutine selesai
 
-	// Menggunakan status yang benar dari kesalahan terakhir jika ada
-	if lastErr != nil {
-		at.WriteJSON(respw, httpstatus, resp)
-	} else {
-		at.WriteJSON(respw, http.StatusOK, resp)
-	}
-}
+// 	// Menggunakan status yang benar dari kesalahan terakhir jika ada
+// 	if lastErr != nil {
+// 		at.WriteJSON(respw, httpstatus, resp)
+// 	} else {
+// 		at.WriteJSON(respw, http.StatusOK, resp)
+// 	}
+// }
 
 func NotFound(respw http.ResponseWriter, req *http.Request) {
 	var resp model.Response
