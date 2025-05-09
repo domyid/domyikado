@@ -364,16 +364,22 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 
 	switch mode {
 	case "kelasai":
-		// Jumat pukul 00:00 WIB
-		weekday := int(now.Weekday())
-		if weekday == 0 {
-			weekday = 7
-		}
-		// Mundur ke Jumat terakhir
-		daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
-		lastFriday := now.AddDate(0, 0, -daysSinceFriday)
-		startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
-		endTime = startTime.AddDate(0, 0, 7) // Jumat depan 00:00
+	if weekday == 0 {
+		weekday = 7 // Minggu jadi 7
+	}
+
+	// Mundur ke Jumat terakhir
+	// daysSinceFriday := (weekday + 2) % 7
+	// lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+	daysSinceSaturday := (weekday + 1) % 7
+	lastSaturday := now.AddDate(0, 0, -daysSinceSaturday)
+
+	// Mulai dari Sabtu pukul 00:01 WIB
+	startTime = time.Date(lastSaturday.Year(), lastSaturday.Month(), lastSaturday.Day(), 0, 1, 0, 0, loc)
+
+	// Selesai Sabtu pukul 00:00 WIB
+	nextFriday := lastSaturday.AddDate(0, 0, 7)
+	endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
 
 	case "proyek1": // senin
 		weekday := int(now.Weekday())
