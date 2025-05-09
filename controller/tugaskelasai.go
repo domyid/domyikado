@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
@@ -204,9 +205,13 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 	for _, pomodoro := range pomodoros {
 		createdAtLocal := pomodoro.CreatedAt.In(loc)
 		if createdAtLocal.After(startTime) && createdAtLocal.Before(endTime) {
-			if _, exists := seenUrls[pomodoro.URLPekerjaan]; !exists {
+			urlKey := pomodoro.URLPekerjaan
+			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
+				urlKey = pomodoro.GTMetrixURLTarget
+			}
+			if _, exists := seenUrls[urlKey]; !exists {
 				filteredPomodoros = append(filteredPomodoros, pomodoro)
-				seenUrls[pomodoro.URLPekerjaan] = true
+				seenUrls[urlKey] = true
 			}
 		}
 	}

@@ -28,7 +28,8 @@ type PomokitResponse struct {
 }
 
 type TugasPomodoro struct {
-	ID           primitive.ObjectID `json:"_id" bson:"_id"`
-	URLPekerjaan string             `bson:"urlpekerjaan" json:"urlpekerjaan"`
-	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
+	ID                primitive.ObjectID `json:"_id" bson:"_id"`
+	URLPekerjaan      string             `bson:"urlpekerjaan" json:"urlpekerjaan"`
+	GTMetrixURLTarget string             `json:"gtmetrix_url_target" bson:"gtmetrix_url_target"`
+	CreatedAt         time.Time          `bson:"createdAt" json:"createdAt"`
 }
