@@ -33,7 +33,7 @@ var DomainProyek1 = []model.PhoneDomain{
 	},
 	{
 		PhoneNumber:      "6282116301579",
-		Project_Hostname: "t.if.co.id/714240037/",
+		Project_Hostname: "sateayammadurajihan.github.io",
 	},
 	{
 		PhoneNumber:      "6282191365504",
