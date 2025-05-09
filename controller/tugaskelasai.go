@@ -220,6 +220,8 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 		return nil, fmt.Errorf("no pomodoros found for user %s in the current week", phonenumber)
 	}
 
+
+
 	return filteredPomodoros, nil
 }
 

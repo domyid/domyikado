@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
@@ -178,7 +179,11 @@ func GetLastWeekScoreKelasAIData(userID string) (model.ScoreKelasAI, error) {
 
 	urls := make([]string, 0, len(urlTugas))
 	for _, tugas := range urlTugas {
-		urls = append(urls, tugas.URLPekerjaan)
+		if strings.Contains(tugas.URLPekerjaan, "gtmetrix.com") {
+			urls = append(urls, tugas.GTMetrixURLTarget)
+		} else {
+			urls = append(urls, tugas.URLPekerjaan)
+		}
 	}
 
 	score = model.ScoreKelasAI{
