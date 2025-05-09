@@ -74,7 +74,7 @@ func PostTugasKelasWS(respw http.ResponseWriter, req *http.Request) {
 	tugasWS.Pomokit = score.Pomokit
 	tugasWS.AllTugas = score.AllTugas
 
-	startTime, endTime, err := GetWeeklyFridayRanges(time.Now())
+	startTime, endTime, err := GetEveryWeeklyFridayRange(time.Now())
 	if err != nil {
 		respn.Status = "Error : Gagal mendapatkan range waktu"
 		respn.Response = err.Error()
@@ -193,7 +193,7 @@ func GetPomokitDataKelasWS(db *mongo.Database, phonenumber string) ([]model.Tuga
 	}
 
 	// Filter pomodoros based on the current week
-	startTime, endTime, err := GetWeeklyFridayRanges(time.Now())
+	startTime, endTime, err := GetEveryWeeklyFridayRange(time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func GetPomokitDataKelasWS(db *mongo.Database, phonenumber string) ([]model.Tuga
 	return filteredPomodoros, nil
 }
 
-func GetWeeklyFridayRanges(times time.Time) (startTime time.Time, endTime time.Time, err error) {
+func GetEveryWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Time, err error) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	now := times.In(loc)
 
@@ -233,17 +233,15 @@ func GetWeeklyFridayRanges(times time.Time) (startTime time.Time, endTime time.T
 	}
 
 	// Mundur ke Jumat terakhir
-
 	// daysSinceFriday := (weekday + 2) % 7
 	// lastFriday := now.AddDate(0, 0, -daysSinceFriday)
-
 	daysSinceSaturday := (weekday + 1) % 7
 	lastSaturday := now.AddDate(0, 0, -daysSinceSaturday)
 
 	// Mulai dari Sabtu pukul 00:01 WIB
 	startTime = time.Date(lastSaturday.Year(), lastSaturday.Month(), lastSaturday.Day(), 0, 1, 0, 0, loc)
 
-	// Selesai Jumat berikutnya pukul 00:00 WIB
+	// Selesai Sabtu pukul 00:00 WIB
 	nextFriday := lastSaturday.AddDate(0, 0, 7)
 	endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
 
