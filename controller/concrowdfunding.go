@@ -28,7 +28,7 @@ import (
 
 const (
 	// Discord webhook URL for logging
-	CrowdfundingDiscordWebhookURL = "https://discord.com/api/webhooks/1348044639818485790/DOsYYebYjrTN48wZVDOPrO4j20X5J3pMAbOdPOUkrJuiXk5niqOjV9ZZ2r06th0jXMhh"
+	CrowdfundingDiscordWebhookURL = "https://discord.com/api/webhooks/1370349053321154581/wxAIb8_Lszb1aOBG4kceE1DtCXbCtnE4RclptWqNvbLor1-hAWjaaVrR0NbJmtsulTaI"
 	MicroBitcoinWalletAddress     = "BXheTnryBeec7Ere3zsuRmWjB1LiyCFpec"
 	RavencoinWalletAddress        = "RKJpSmjTq5MPDaBx2ubTx1msVB2uZcKA5j"
 
