@@ -210,7 +210,7 @@ func GetLastWeekScoreKelasAIData(userID string) (model.ScoreKelasAI, error) {
 func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
 	var score model.ScoreKelasWS
 
-	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "proyek1")
+	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "kelasai")
 	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
 	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
@@ -220,7 +220,11 @@ func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
 
 	urls := make([]string, 0, len(urlTugas))
 	for _, tugas := range urlTugas {
-		urls = append(urls, tugas.URLPekerjaan)
+		if strings.Contains(tugas.URLPekerjaan, "gtmetrix.com") {
+			urls = append(urls, tugas.GTMetrixURLTarget)
+		} else {
+			urls = append(urls, tugas.URLPekerjaan)
+		}
 	}
 
 	score = model.ScoreKelasWS{

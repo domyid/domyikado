@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
@@ -197,13 +198,20 @@ func GetPomokitDataKelasWS(db *mongo.Database, phonenumber string) ([]model.Tuga
 		return nil, err
 	}
 
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+
 	seenUrls := make(map[string]bool)
 	var filteredPomodoros []model.TugasPomodoro
 	for _, pomodoro := range pomodoros {
-		if pomodoro.CreatedAt.After(startTime) && pomodoro.CreatedAt.Before(endTime) {
-			if _, exists := seenUrls[pomodoro.URLPekerjaan]; !exists {
+		createdAtLocal := pomodoro.CreatedAt.In(loc)
+		if createdAtLocal.After(startTime) && createdAtLocal.Before(endTime) {
+			urlKey := pomodoro.URLPekerjaan
+			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
+				urlKey = pomodoro.GTMetrixURLTarget
+			}
+			if _, exists := seenUrls[urlKey]; !exists {
 				filteredPomodoros = append(filteredPomodoros, pomodoro)
-				seenUrls[pomodoro.URLPekerjaan] = true
+				seenUrls[urlKey] = true
 			}
 		}
 	}
@@ -218,21 +226,26 @@ func GetPomokitDataKelasWS(db *mongo.Database, phonenumber string) ([]model.Tuga
 func GetWeeklyFridayRanges(times time.Time) (startTime time.Time, endTime time.Time, err error) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	now := times.In(loc)
+
 	weekday := int(now.Weekday())
 	if weekday == 0 {
-		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
+		weekday = 7 // Minggu jadi 7
 	}
 
-	// Jumat pukul 00:00 WIB
-	weekday = int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7
-	}
 	// Mundur ke Jumat terakhir
-	daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
-	lastFriday := now.AddDate(0, 0, -daysSinceFriday)
-	startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
-	endTime = startTime.AddDate(0, 0, 7) // Jumat depan 00:00
+
+	// daysSinceFriday := (weekday + 2) % 7
+	// lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+
+	daysSinceSaturday := (weekday + 1) % 7
+	lastSaturday := now.AddDate(0, 0, -daysSinceSaturday)
+
+	// Mulai dari Sabtu pukul 00:01 WIB
+	startTime = time.Date(lastSaturday.Year(), lastSaturday.Month(), lastSaturday.Day(), 0, 1, 0, 0, loc)
+
+	// Selesai Jumat berikutnya pukul 00:00 WIB
+	nextFriday := lastSaturday.AddDate(0, 0, 7)
+	endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
 
 	return startTime, endTime, nil
 }
