@@ -197,10 +197,11 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 		return nil, err
 	}
 
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+
 	seenUrls := make(map[string]bool)
 	var filteredPomodoros []model.TugasPomodoro
 	for _, pomodoro := range pomodoros {
-		loc, _ := time.LoadLocation("Asia/Jakarta")
 		createdAtLocal := pomodoro.CreatedAt.In(loc)
 		if createdAtLocal.After(startTime) && createdAtLocal.Before(endTime) {
 			if _, exists := seenUrls[pomodoro.URLPekerjaan]; !exists {
@@ -220,21 +221,22 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 func GetWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Time, err error) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	now := times.In(loc)
+
 	weekday := int(now.Weekday())
 	if weekday == 0 {
-		weekday = 7 // Ubah Minggu (0) jadi 7 agar Senin = 1
+		weekday = 7 // Minggu jadi 7
 	}
 
-	// Jumat pukul 00:00 WIB
-	weekday = int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7
-	}
 	// Mundur ke Jumat terakhir
-	daysSinceFriday := (weekday + 2) % 7 // Jumat = 5, jadi kita sesuaikan ke mundur
+	daysSinceFriday := (weekday + 2) % 7
 	lastFriday := now.AddDate(0, 0, -daysSinceFriday)
-	startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 0, 0, 0, loc)
-	endTime = startTime.AddDate(0, 0, 7) // Jumat depan 00:00
+
+	// Mulai dari Jumat pukul 00:01 WIB
+	startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 1, 0, 0, loc)
+
+	// Selesai Jumat berikutnya pukul 00:00 WIB
+	nextFriday := lastFriday.AddDate(0, 0, 7)
+	endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
 
 	return startTime, endTime, nil
 }
