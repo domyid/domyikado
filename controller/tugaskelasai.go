@@ -200,7 +200,9 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 	seenUrls := make(map[string]bool)
 	var filteredPomodoros []model.TugasPomodoro
 	for _, pomodoro := range pomodoros {
-		if pomodoro.CreatedAt.After(startTime) && pomodoro.CreatedAt.Before(endTime) {
+		loc, _ := time.LoadLocation("Asia/Jakarta")
+		createdAtLocal := pomodoro.CreatedAt.In(loc)
+		if createdAtLocal.After(startTime) && createdAtLocal.Before(endTime) {
 			if _, exists := seenUrls[pomodoro.URLPekerjaan]; !exists {
 				filteredPomodoros = append(filteredPomodoros, pomodoro)
 				seenUrls[pomodoro.URLPekerjaan] = true
