@@ -228,14 +228,16 @@ func GetWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Ti
 	}
 
 	// Mundur ke Jumat terakhir
-	daysSinceFriday := (weekday + 2) % 7
-	lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+	// daysSinceFriday := (weekday + 2) % 7
+	// lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+	daysSinceSaturday := (weekday + 1) % 7
+	lastSaturday := now.AddDate(0, 0, -daysSinceSaturday)
 
-	// Mulai dari Jumat pukul 00:01 WIB
-	startTime = time.Date(lastFriday.Year(), lastFriday.Month(), lastFriday.Day(), 0, 1, 0, 0, loc)
+	// Mulai dari Sabtu pukul 00:01 WIB
+	startTime = time.Date(lastSaturday.Year(), lastSaturday.Month(), lastSaturday.Day(), 0, 1, 0, 0, loc)
 
-	// Selesai Jumat berikutnya pukul 00:00 WIB
-	nextFriday := lastFriday.AddDate(0, 0, 7)
+	// Selesai Sabtu pukul 00:00 WIB
+	nextFriday := lastSaturday.AddDate(0, 0, 1)
 	endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
 
 	return startTime, endTime, nil
