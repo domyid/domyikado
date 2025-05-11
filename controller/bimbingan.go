@@ -272,37 +272,37 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 	bimbingan.TotalScore = score.TotalScore
 
 	// Cari apakah ada data existing yang belum approved
-	existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
+	// existing, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber, "approved": false})
 	var idbimbingan primitive.ObjectID
-	if err == nil {
-		// Update data yang belum di-approve
-		bimbingan.ID = existing.ID
-		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
-		if err != nil {
-			respn.Status = "Error : Gagal Update Database"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusNotModified, respn)
-			return
-		}
-		idbimbingan = existing.ID
-	} else {
-		allDoc, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber})
-		if err != nil {
-			respn.Status = "Error : Data bimbingan tidak di temukan"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusBadRequest, respn)
-			return
-		}
-		// Insert data baru
-		bimbingan.BimbinganKe = len(allDoc) + 1
-		idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
-		if err != nil {
-			respn.Status = "Error : Gagal Insert Database"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusNotModified, respn)
-			return
-		}
+	// if err == nil {
+	// 	// Update data yang belum di-approve
+	// 	bimbingan.ID = existing.ID
+	// 	_, err := atdb.ReplaceOneDoc(config.Mongoconn, "bimbingan", primitive.M{"_id": existing.ID}, bimbingan)
+	// 	if err != nil {
+	// 		respn.Status = "Error : Gagal Update Database"
+	// 		respn.Response = err.Error()
+	// 		at.WriteJSON(respw, http.StatusNotModified, respn)
+	// 		return
+	// 	}
+	// 	idbimbingan = existing.ID
+	// } else {
+	allDoc, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": bimbingan.PhoneNumber})
+	if err != nil {
+		respn.Status = "Error : Data bimbingan tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
 	}
+	// Insert data baru
+	bimbingan.BimbinganKe = len(allDoc) + 1
+	idbimbingan, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
+	if err != nil {
+		respn.Status = "Error : Gagal Insert Database"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotModified, respn)
+		return
+	}
+	// }
 
 	// kirim pesan ke asesor
 	message := "*Permintaan Bimbingan*\n" + "Mahasiswa : " + docuser.Name + "\n Beri Nilai: " + "https://www.do.my.id/kambing/#" + idbimbingan.Hex()
