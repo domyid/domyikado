@@ -163,6 +163,7 @@ func GetDataTugasAI(respw http.ResponseWriter, req *http.Request) {
 	type TugasAI struct {
 		ID      primitive.ObjectID `json:"_id" bson:"_id"`
 		TugasKe int                `json:"tugaske" bson:"tugaske"`
+		Phonenumber string `json:"phonenumber" bson:"phonenumber"`
 	}
 
 	tugasailist, err := atdb.GetAllDoc[[]TugasAI](config.Mongoconn, "tugaskelasai", primitive.M{"phonenumber": payload.Id})
@@ -219,8 +220,6 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 	if len(filteredPomodoros) == 0 {
 		return nil, fmt.Errorf("no pomodoros found for user %s in the current week", phonenumber)
 	}
-
-
 
 	return filteredPomodoros, nil
 }

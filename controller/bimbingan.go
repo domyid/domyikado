@@ -358,6 +358,7 @@ func GetDataBimbingan(respw http.ResponseWriter, req *http.Request) {
 	type Bimbingan struct {
 		ID          primitive.ObjectID `json:"_id" bson:"_id"`
 		BimbinganKe int                `json:"bimbinganke" bson:"bimbinganke"`
+		Phonenumber string             `json:"phonenumber" bson:"phonenumber"`
 	}
 
 	bimbinganList, err := atdb.GetAllDoc[[]Bimbingan](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})

@@ -161,8 +161,9 @@ func GetDataTugasWS(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	type TugasWS struct {
-		ID      primitive.ObjectID `json:"_id" bson:"_id"`
-		TugasKe int                `json:"tugaske" bson:"tugaske"`
+		ID          primitive.ObjectID `json:"_id" bson:"_id"`
+		TugasKe     int                `json:"tugaske" bson:"tugaske"`
+		Phonenumber string             `json:"phonenumber" bson:"phonenumber"`
 	}
 
 	tugaswslist, err := atdb.GetAllDoc[[]TugasWS](config.Mongoconn, "tugaskelasws", primitive.M{"phonenumber": payload.Id})
