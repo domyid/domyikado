@@ -58,7 +58,7 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if user has enough bimbingan sessions (at least 8)
+	// Check if user has enough bimbingan sessions (at least 1)
 	bimbingans, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data bimbingan"
@@ -67,9 +67,9 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(bimbingans) < 8 {
+	if len(bimbingans) < 1 {
 		respn.Status = "Error : Tidak memenuhi syarat"
-		respn.Response = "Anda membutuhkan minimal 8 bimbingan untuk mengajukan sidang"
+		respn.Response = "Anda membutuhkan minimal 1 bimbingan untuk mengajukan sidang"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
