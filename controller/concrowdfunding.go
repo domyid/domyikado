@@ -2303,6 +2303,10 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Initialize Ravencoin last transactions before creating the order
+	// This ensures we have a baseline transaction count for comparison
+	InitializeRavencoinLastTransactions()
+
 	// Create order ID
 	orderID := uuid.New().String()
 
@@ -3031,10 +3035,16 @@ func InitializeRavencoinLastTransactions() {
 		}
 
 		// Initialize with current transaction count
-		_, err = config.Mongoconn.Collection("crowdfundinglastraventxs").InsertOne(context.Background(), bson.M{
-			"lastTxCount": addressResp.Txs,
-			"lastUpdated": time.Now(),
-		})
+		_, err = config.Mongoconn.Collection("crowdfundinglastraventxs").UpdateOne(
+			context.Background(),
+			bson.M{},
+			bson.M{"$set": bson.M{
+				"lastTxCount": addressResp.Txs,
+				"lastUpdated": time.Now(),
+			}},
+			options.Update().SetUpsert(true), // Use upsert to ensure it's created if it doesn't exist
+		)
+
 		if err != nil {
 			log.Printf("Error initializing Ravencoin last transactions: %v", err)
 			sendCrowdfundingDiscordEmbed(
