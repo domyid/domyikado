@@ -315,23 +315,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetDataBimbinganById(w, r)
 	case method == "POST" && at.URLParam(path, "/data/proyek/bimbingan/:id"):
 		controller.ReplaceDataBimbingan(w, r)
-	// Weekly bimbingan endpoints
-	case method == "GET" && path == "/refresh/bimbingan/weekly":
-		controller.ProcessWeeklyBimbingan(w, r)
-	case method == "GET" && path == "/refresh/bimbingan/weekly/force":
-		controller.RefreshWeeklyBimbingan(w, r)
-	case method == "GET" && path == "/api/bimbingan/weekly":
-		controller.GetBimbinganWeeklyByWeek(w, r)
-	case method == "GET" && path == "/api/bimbingan/weekly/all":
-		controller.GetAllBimbinganWeekly(w, r)
-	case method == "POST" && path == "/api/bimbingan/weekly/request":
-		controller.PostBimbinganWeeklyRequest(w, r)
-	case method == "POST" && path == "/api/bimbingan/weekly/approve":
-		controller.ApproveBimbinganWeekly(w, r)
-	case method == "POST" && path == "/admin/bimbingan/changeweek":
-		controller.ChangeWeekNumber(w, r)
-	case method == "GET" && path == "/api/bimbingan/weekly/status":
-		controller.GetBimbinganWeeklyStatus(w, r)
+		//post pengajuan
+	case method == "POST" && path == "/data/proyek/bimbingan/pengajuan":
+		controller.PostBimbinganPengajuan(w, r)
+	case method == "GET" && path == "/data/proyek/bimbingan/pengajuan":
+		controller.GetBimbinganPengajuan(w, r)
+	case method == "PUT" && at.URLParam(path, "/data/proyek/bimbingan/pengajuan/:id"):
+		controller.UpdateBimbinganPengajuanStatus(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)

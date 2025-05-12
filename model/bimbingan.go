@@ -38,3 +38,14 @@ type ChangeWeekRequest struct {
 	WeekLabel  string `json:"weeklabel"`
 	UpdatedBy  string `json:"updatedby,omitempty"`
 }
+
+type BimbinganPengajuan struct {
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Name          string             `bson:"name" json:"name"`
+	NPM           string             `bson:"npm" json:"npm"`
+	NomorKelompok string             `bson:"nomorkelompok" json:"nomorkelompok"`
+	DosenPenguji  string             `bson:"dosenpenguji" json:"dosenpenguji"`
+	PhoneNumber   string             `bson:"phonenumber" json:"phonenumber"`
+	Timestamp     time.Time          `bson:"timestamp" json:"timestamp"`
+	Status        string             `bson:"status" json:"status"` // "pending", "approved", "rejected"
+}
