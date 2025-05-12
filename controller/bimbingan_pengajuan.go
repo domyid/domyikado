@@ -7,8 +7,10 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/watoken"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -86,13 +88,29 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Insert into database
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "bimbingan_pengajuan", newPengajuan)
+	pengajuanID, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan_pengajuan", newPengajuan)
 	if err != nil {
 		respn.Status = "Error : Gagal menyimpan pengajuan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
+
+	// Send notification to admin CS
+	adminCSNumber := "6285312924192"
+	message := "*Pengajuan Sidang Baru*\n" +
+		"Mahasiswa : " + docuser.Name + "\n" +
+		"NPM : " + docuser.NPM + "\n" +
+		"Kelompok : " + pengajuan.NomorKelompok + "\n" +
+		"Dosen Penguji : " + pengajuan.DosenPenguji + "\n" +
+		"ID Pengajuan : " + pengajuanID.Hex()
+
+	dt := &whatsauth.TextMessage{
+		To:       adminCSNumber,
+		IsGroup:  false,
+		Messages: message,
+	}
+	_, _, _ = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
 
 	// Return success response
 	at.WriteJSON(respw, http.StatusOK, model.Response{
@@ -101,7 +119,7 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 	})
 }
 
-// GetBimbinganPengajuan gets all sidang applications for admin view
+// GetBimbinganPengajuan gets all sidang applications (admin view)
 func GetBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 	// Authorization (only for admins/teachers)
 	var respn model.Response
@@ -124,6 +142,31 @@ func GetBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 
 	// Get all applications
 	pengajuans, err := atdb.GetAllDoc[[]model.BimbinganPengajuan](config.Mongoconn, "bimbingan_pengajuan", primitive.M{})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data pengajuan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Return the applications
+	at.WriteJSON(respw, http.StatusOK, pengajuans)
+}
+
+// GetBimbinganPengajuanByUser gets all sidang applications for a specific user
+func GetBimbinganPengajuanByUser(respw http.ResponseWriter, req *http.Request) {
+	// Authorization
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get applications for this user
+	pengajuans, err := atdb.GetAllDoc[[]model.BimbinganPengajuan](config.Mongoconn, "bimbingan_pengajuan", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data pengajuan"
 		respn.Response = err.Error()
@@ -186,6 +229,15 @@ func UpdateBimbinganPengajuanStatus(respw http.ResponseWriter, req *http.Request
 		return
 	}
 
+	// Get the existing pengajuan to access student information
+	pengajuan, err := atdb.GetOneDoc[model.BimbinganPengajuan](config.Mongoconn, "bimbingan_pengajuan", primitive.M{"_id": objectID})
+	if err != nil {
+		respn.Status = "Error : Data pengajuan tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
 	// Update the application status
 	_, err = atdb.UpdateOneDoc(config.Mongoconn, "bimbingan_pengajuan",
 		primitive.M{"_id": objectID},
@@ -198,9 +250,88 @@ func UpdateBimbinganPengajuanStatus(respw http.ResponseWriter, req *http.Request
 		return
 	}
 
+	// Send notification to student about status update
+	var statusText string
+	if updateReq.Status == "approved" {
+		statusText = "DISETUJUI"
+	} else {
+		statusText = "DITOLAK"
+	}
+
+	message := "*Pengajuan Sidang " + statusText + "*\n" +
+		"Mahasiswa: " + pengajuan.Name + "\n" +
+		"NPM: " + pengajuan.NPM + "\n" +
+		"Kelompok: " + pengajuan.NomorKelompok + "\n" +
+		"Dosen Penguji: " + pengajuan.DosenPenguji + "\n" +
+		"Status: " + statusText
+
+	// Send to both student and admin CS
+	studentMessage := &whatsauth.TextMessage{
+		To:       pengajuan.PhoneNumber,
+		IsGroup:  false,
+		Messages: message + "\n\nSilakan hubungi dosen Anda untuk informasi lebih lanjut.",
+	}
+	_, _, _ = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, studentMessage, config.WAAPIMessage)
+
+	adminMessage := &whatsauth.TextMessage{
+		To:       "6285312924192", // Admin CS number
+		IsGroup:  false,
+		Messages: message + "\n\nDiperbarui oleh: " + docuser.Name,
+	}
+	_, _, _ = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, adminMessage, config.WAAPIMessage)
+
 	// Return success response
 	at.WriteJSON(respw, http.StatusOK, model.Response{
 		Status:   "Success",
 		Response: "Status pengajuan sidang berhasil diperbarui",
 	})
+}
+
+// GetBimbinganPengajuanById gets a specific sidang application
+func GetBimbinganPengajuanById(respw http.ResponseWriter, req *http.Request) {
+	// Authorization
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get application ID from URL param
+	id := at.GetParam(req)
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		respn.Status = "Error : ID tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Get the application
+	pengajuan, err := atdb.GetOneDoc[model.BimbinganPengajuan](config.Mongoconn, "bimbingan_pengajuan", primitive.M{"_id": objectID})
+	if err != nil {
+		respn.Status = "Error : Data pengajuan tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Security check - only the owner or dosen can view
+	isOwner := pengajuan.PhoneNumber == payload.Id
+
+	// Check if user is dosen
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	isDosen := err == nil && docuser.IsDosen
+
+	if !isOwner && !isDosen {
+		respn.Status = "Error : Tidak memiliki akses"
+		respn.Response = "Anda tidak berhak melihat data pengajuan ini"
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Return the application
+	at.WriteJSON(respw, http.StatusOK, pengajuan)
 }
