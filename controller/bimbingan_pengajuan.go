@@ -72,12 +72,36 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Get the last bimbingan record to get the current dosen asesor
+	var lastBimbingan model.ActivityScore
+	if len(bimbinganList) > 0 {
+		// Sort the bimbingan by creation date (most recent first)
+		// Note: In a real implementation, you might want to sort the array by createdAt field
+		lastBimbingan = bimbinganList[len(bimbinganList)-1]
+	} else {
+		respn.Status = "Error : Tidak ada data bimbingan"
+		respn.Response = "Tidak dapat menemukan data dosen pembimbing"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
 	// Prepare the submission data
 	pengajuan.PhoneNumber = docuser.PhoneNumber
 	pengajuan.Name = docuser.Name
 	pengajuan.NPM = docuser.NPM
 	pengajuan.Timestamp = time.Now()
 	pengajuan.Status = "pending" // Default status
+
+	// Set the DosenPembimbing field from the last bimbingan's asesor
+	if lastBimbingan.Asesor.Name != "" {
+		pengajuan.DosenPembimbing = lastBimbingan.Asesor.Name
+		pengajuan.DosenPembimbingPhone = lastBimbingan.Asesor.PhoneNumber
+	} else {
+		respn.Status = "Error : Data dosen pembimbing tidak ditemukan"
+		respn.Response = "Tidak dapat menemukan data dosen pembimbing dari riwayat bimbingan"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
 
 	// Insert into database
 	idPengajuan, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan_pengajuan", pengajuan)
@@ -93,6 +117,7 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		"Nama: " + docuser.Name +
 		"\nNPM: " + docuser.NPM +
 		"\nNomor Kelompok: " + pengajuan.NomorKelompok +
+		"\nDosen Pembimbing: " + pengajuan.DosenPembimbing +
 		"\nDosen Penguji: " + pengajuan.DosenPenguji +
 		"\nTanggal Pengajuan: " + pengajuan.Timestamp.Format("02-01-2006 15:04:05")
 
