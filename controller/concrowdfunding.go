@@ -2303,9 +2303,21 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Initialize Ravencoin last transactions before creating the order
-	// This ensures we have a baseline transaction count for comparison
-	InitializeRavencoinLastTransactions()
+	// CRITICAL: Initialize or update Ravencoin transaction count before creating order
+	// This ensures we have a baseline count to compare against when detecting new transactions
+	initErr := InitializeRavencoinLastTransactions()
+	if initErr != nil {
+		log.Printf("Warning: Error initializing Ravencoin transaction count: %v", initErr)
+		sendCrowdfundingDiscordEmbed(
+			"⚠️ Warning: Ravencoin Tracking Initialization",
+			"There was an issue initializing the Ravencoin transaction tracking, but continuing with payment creation.",
+			ColorYellow,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: initErr.Error(), Inline: false},
+			},
+		)
+		// Continue anyway, as we can still attempt to process the payment
+	}
 
 	// Create order ID
 	orderID := uuid.New().String()
@@ -2365,6 +2377,16 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 				{Name: "Error", Value: err.Error(), Inline: false},
 			},
 		)
+
+		// Try to clean up the created order since queue update failed
+		_, cleanupErr := config.Mongoconn.Collection("crowdfundingorders").DeleteOne(
+			context.Background(),
+			bson.M{"orderId": orderID},
+		)
+		if cleanupErr != nil {
+			log.Printf("Error cleaning up order after queue update failure: %v", cleanupErr)
+		}
+
 		at.WriteJSON(w, http.StatusInternalServerError, model.CrowdfundingPaymentResponse{
 			Success: false,
 			Message: "Error updating queue",
@@ -2384,6 +2406,7 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 			{Name: "NPM", Value: npm, Inline: true},
 			{Name: "Expires", Value: expiryTime.Format("15:04:05"), Inline: true},
 			{Name: "Status", Value: "Pending", Inline: true},
+			{Name: "Wallet Address", Value: RavencoinWalletAddress, Inline: true},
 		},
 	)
 
@@ -2457,6 +2480,7 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// Return success response with order details
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success:       true,
 		OrderID:       orderID,
@@ -2980,93 +3004,107 @@ func ConfirmRavencoinPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 // InitializeRavencoinLastTransactions initializes the last Ravencoin transactions collection if it doesn't exist
-func InitializeRavencoinLastTransactions() {
-	var lastTxData model.RavencoinLastTransactions
-	err := config.Mongoconn.Collection("crowdfundinglastraventxs").FindOne(context.Background(), bson.M{}).Decode(&lastTxData)
+func InitializeRavencoinLastTransactions() error {
+	// Always fetch the current transaction count from API for consistency
+	url := "https://blockbook.ravencoin.org/api/v2/address/" + RavencoinWalletAddress
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Get(url)
 	if err != nil {
-		// Get initial transaction count from Ravencoin API
-		url := "https://blockbook.ravencoin.org/api/v2/address/" + RavencoinWalletAddress
-		client := &http.Client{Timeout: 10 * time.Second}
-
-		resp, err := client.Get(url)
-		if err != nil {
-			log.Printf("Error fetching initial Ravencoin transaction count: %v", err)
-			// If we can't get the current count, initialize with 0
-			_, err = config.Mongoconn.Collection("crowdfundinglastraventxs").InsertOne(context.Background(), bson.M{
-				"lastTxCount": 0,
-				"lastUpdated": time.Now(),
-			})
-			if err != nil {
-				log.Printf("Error initializing Ravencoin last transactions: %v", err)
-				sendCrowdfundingDiscordEmbed(
-					"🔴 Error: Ravencoin Transactions Initialization Failed",
-					"Failed to initialize Ravencoin last transactions tracking.",
-					ColorRed,
-					[]DiscordEmbedField{
-						{Name: "Error", Value: err.Error(), Inline: false},
-					},
-				)
-			}
-			return
-		}
-		defer resp.Body.Close()
-
-		// Parse response
-		var addressResp model.RavencoinAddressResponse
-		if err := json.NewDecoder(resp.Body).Decode(&addressResp); err != nil {
-			log.Printf("Error parsing Ravencoin address response: %v", err)
-			// If we can't parse the response, initialize with 0
-			_, err = config.Mongoconn.Collection("crowdfundinglastraventxs").InsertOne(context.Background(), bson.M{
-				"lastTxCount": 0,
-				"lastUpdated": time.Now(),
-			})
-			if err != nil {
-				log.Printf("Error initializing Ravencoin last transactions: %v", err)
-				sendCrowdfundingDiscordEmbed(
-					"🔴 Error: Ravencoin Transactions Initialization Failed",
-					"Failed to initialize Ravencoin last transactions tracking.",
-					ColorRed,
-					[]DiscordEmbedField{
-						{Name: "Error", Value: err.Error(), Inline: false},
-					},
-				)
-			}
-			return
-		}
-
-		// Initialize with current transaction count
-		_, err = config.Mongoconn.Collection("crowdfundinglastraventxs").UpdateOne(
-			context.Background(),
-			bson.M{},
-			bson.M{"$set": bson.M{
-				"lastTxCount": addressResp.Txs,
-				"lastUpdated": time.Now(),
-			}},
-			options.Update().SetUpsert(true), // Use upsert to ensure it's created if it doesn't exist
+		log.Printf("Error fetching Ravencoin transaction count: %v", err)
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Ravencoin API Error",
+			"Failed to fetch transaction count from Ravencoin API.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
 		)
-
-		if err != nil {
-			log.Printf("Error initializing Ravencoin last transactions: %v", err)
-			sendCrowdfundingDiscordEmbed(
-				"🔴 Error: Ravencoin Transactions Initialization Failed",
-				"Failed to initialize Ravencoin last transactions tracking.",
-				ColorRed,
-				[]DiscordEmbedField{
-					{Name: "Error", Value: err.Error(), Inline: false},
-				},
-			)
-		} else {
-			log.Println("Initialized Ravencoin last transactions successfully with txCount:", addressResp.Txs)
-			sendCrowdfundingDiscordEmbed(
-				"✅ System: Ravencoin Transactions Initialized",
-				"Successfully initialized the Ravencoin transactions tracking.",
-				ColorGreen,
-				[]DiscordEmbedField{
-					{Name: "Initial Transaction Count", Value: fmt.Sprintf("%d", addressResp.Txs), Inline: false},
-				},
-			)
-		}
+		return err
 	}
+	defer resp.Body.Close()
+
+	// Parse response
+	var addressResp model.RavencoinAddressResponse
+	if err := json.NewDecoder(resp.Body).Decode(&addressResp); err != nil {
+		log.Printf("Error parsing Ravencoin address response: %v", err)
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Ravencoin API Response Error",
+			"Failed to parse response from Ravencoin API.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		return err
+	}
+
+	// Check if we have an existing record
+	var existingRecord model.RavencoinLastTransactions
+	findErr := config.Mongoconn.Collection("crowdfundinglastraventxs").FindOne(
+		context.Background(),
+		bson.M{},
+	).Decode(&existingRecord)
+
+	// Log the current transaction count and existing record for debugging
+	if findErr == nil {
+		log.Printf("Current Ravencoin tx count from API: %d, Existing record count: %d",
+			addressResp.Txs, existingRecord.LastTxCount)
+	} else {
+		log.Printf("Current Ravencoin tx count from API: %d, No existing record found",
+			addressResp.Txs)
+	}
+
+	// Update with current transaction count using upsert
+	updateResult, err := config.Mongoconn.Collection("crowdfundinglastraventxs").UpdateOne(
+		context.Background(),
+		bson.M{}, // Empty filter to match any document (there should be only one)
+		bson.M{"$set": bson.M{
+			"lastTxCount": addressResp.Txs,
+			"lastUpdated": time.Now(),
+		}},
+		options.Update().SetUpsert(true), // Create if it doesn't exist
+	)
+
+	if err != nil {
+		log.Printf("Error updating Ravencoin last transactions: %v", err)
+		sendCrowdfundingDiscordEmbed(
+			"🔴 Error: Database Update Failed",
+			"Failed to update Ravencoin transaction count in database.",
+			ColorRed,
+			[]DiscordEmbedField{
+				{Name: "Error", Value: err.Error(), Inline: false},
+			},
+		)
+		return err
+	}
+
+	// Log the update result
+	if updateResult.UpsertedCount > 0 {
+		log.Printf("Created new Ravencoin transaction count record with count: %d", addressResp.Txs)
+		sendCrowdfundingDiscordEmbed(
+			"✅ System: Ravencoin Transactions Initialized",
+			"Successfully initialized the Ravencoin transactions tracking.",
+			ColorGreen,
+			[]DiscordEmbedField{
+				{Name: "Initial Transaction Count", Value: fmt.Sprintf("%d", addressResp.Txs), Inline: false},
+			},
+		)
+	} else if updateResult.ModifiedCount > 0 {
+		log.Printf("Updated existing Ravencoin transaction count to: %d", addressResp.Txs)
+		sendCrowdfundingDiscordEmbed(
+			"✅ System: Ravencoin Transactions Updated",
+			"Successfully updated the Ravencoin transactions count.",
+			ColorGreen,
+			[]DiscordEmbedField{
+				{Name: "Transaction Count", Value: fmt.Sprintf("%d", addressResp.Txs), Inline: false},
+			},
+		)
+	} else {
+		log.Printf("Ravencoin transaction count already up to date: %d", addressResp.Txs)
+	}
+
+	return nil
 }
 
 // RecalculatePointsAfterPayment recalculates all user payment points
