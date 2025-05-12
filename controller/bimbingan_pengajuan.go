@@ -15,6 +15,48 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// GetDosenPembimbing retrieves the list of available supervisors (dosen) for the dropdown
+func GetDosenPembimbing(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	// We're validating the token but not using the payload content
+	_, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get all users where isDosen is true
+	dosen, err := atdb.GetAllDoc[[]model.Userdomyikado](config.Mongoconn, "user", primitive.M{"isdosen": true})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data dosen"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Filter the fields to only return what's needed for the dropdown
+	type DosenInfo struct {
+		ID          primitive.ObjectID `json:"_id"`
+		Name        string             `json:"name"`
+		PhoneNumber string             `json:"phonenumber"`
+	}
+
+	dosenList := make([]DosenInfo, 0)
+	for _, d := range dosen {
+		dosenList = append(dosenList, DosenInfo{
+			ID:          d.ID,
+			Name:        d.Name,
+			PhoneNumber: d.PhoneNumber,
+		})
+	}
+
+	at.WriteJSON(respw, http.StatusOK, dosenList)
+}
+
 // PostPengajuanSidang handles the submission of thesis defense requests
 func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 	// Authorize and validate input
@@ -40,9 +82,9 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Validate required fields
-	if pengajuan.DosenPenguji == "" || pengajuan.NomorKelompok == "" {
+	if pengajuan.DosenPenguji == "" || pengajuan.NomorKelompok == "" || pengajuan.DosenPembimbingPhone == "" {
 		respn.Status = "Error : Data pengajuan tidak lengkap"
-		respn.Response = "Isi Dosen Penguji dan Nomor Kelompok terlebih dahulu"
+		respn.Response = "Isi Dosen Penguji, Dosen Pembimbing, dan Nomor Kelompok terlebih dahulu"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
@@ -56,7 +98,7 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validate if the user has at least 1 bimbingan sessions
+	// Validate if the user has at least 8 bimbingan sessions
 	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data bimbingan"
@@ -65,22 +107,18 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(bimbinganList) < 1 {
+	if len(bimbinganList) < 8 {
 		respn.Status = "Error : Syarat bimbingan belum terpenuhi"
-		respn.Response = "Anda memerlukan minimal 1 sesi bimbingan untuk mengajukan sidang"
+		respn.Response = "Anda memerlukan minimal 8 sesi bimbingan untuk mengajukan sidang"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Get the last bimbingan record to get the current dosen asesor
-	var lastBimbingan model.ActivityScore
-	if len(bimbinganList) > 0 {
-		// Sort the bimbingan by creation date (most recent first)
-		// Note: In a real implementation, you might want to sort the array by createdAt field
-		lastBimbingan = bimbinganList[len(bimbinganList)-1]
-	} else {
-		respn.Status = "Error : Tidak ada data bimbingan"
-		respn.Response = "Tidak dapat menemukan data dosen pembimbing"
+	// Get the dosen pembimbing data
+	dosenPembimbing, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": pengajuan.DosenPembimbingPhone, "isdosen": true})
+	if err != nil {
+		respn.Status = "Error : Data dosen pembimbing tidak ditemukan"
+		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
@@ -92,16 +130,8 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 	pengajuan.Timestamp = time.Now()
 	pengajuan.Status = "pending" // Default status
 
-	// Set the DosenPembimbing field from the last bimbingan's asesor
-	if lastBimbingan.Asesor.Name != "" {
-		pengajuan.DosenPembimbing = lastBimbingan.Asesor.Name
-		pengajuan.DosenPembimbingPhone = lastBimbingan.Asesor.PhoneNumber
-	} else {
-		respn.Status = "Error : Data dosen pembimbing tidak ditemukan"
-		respn.Response = "Tidak dapat menemukan data dosen pembimbing dari riwayat bimbingan"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+	// Set the DosenPembimbing field from the selected dosen
+	pengajuan.DosenPembimbing = dosenPembimbing.Name
 
 	// Insert into database
 	idPengajuan, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan_pengajuan", pengajuan)
@@ -112,7 +142,7 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Send notification to the examiner
+	// Send notification to the examiner (dosenPenguji)
 	message := "*Pengajuan Sidang*\n" +
 		"Nama: " + docuser.Name +
 		"\nNPM: " + docuser.NPM +
@@ -123,7 +153,7 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 
 	// You'll need to setup a way to get the examiner's phone number based on their name
 	// For now, this is just a placeholder - in practice, you'd query the database
-	examinerPhone := "6285312924192" // Replace with actual logic to get the examiner's phone
+	examinerPhone := "628111111111" // Replace with actual logic to get the examiner's phone
 
 	dt := &whatsauth.TextMessage{
 		To:       examinerPhone,
