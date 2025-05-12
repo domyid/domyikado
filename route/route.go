@@ -320,8 +320,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.PostPengajuanSidang(w, r)
 	case method == "GET" && path == "/api/bimbingan/pengajuan":
 		controller.GetPengajuanSidang(w, r)
-	case method == "GET" && path == "/api/bimbingan/dosen":
-		controller.GetDosenPembimbing(w, r)
+	case method == "GET" && path == "/api/bimbingan/dosenpenguji":
+		controller.GetDosenPenguji(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)

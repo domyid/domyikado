@@ -45,6 +45,7 @@ type BimbinganPengajuan struct {
 	NPM                  string             `bson:"npm" json:"npm"`
 	NomorKelompok        string             `bson:"nomorkelompok" json:"nomorkelompok"`
 	DosenPenguji         string             `bson:"dosenpenguji" json:"dosenpenguji"`
+	DosenPengujiPhone    string             `bson:"dosenpengujiphone" json:"dosenpengujiphone"`
 	DosenPembimbing      string             `bson:"dosenpembimbing" json:"dosenpembimbing"`
 	DosenPembimbingPhone string             `bson:"dosenpembimbingphone" json:"dosenpembimbingphone"`
 	PhoneNumber          string             `bson:"phonenumber" json:"phonenumber"`
