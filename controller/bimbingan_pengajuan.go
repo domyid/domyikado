@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -51,7 +52,7 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get user information
+	// Get user information - use phonenumber directly instead of ObjectID
 	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Data user tidak ditemukan"
@@ -60,8 +61,12 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if user has enough bimbingan sessions (at least 1)
-	bimbingans, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
+	// Check if user has enough bimbingan sessions (at least 8)
+	// Use CountDocuments directly from MongoDB since atdb.CountDoc doesn't exist
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	count, err := config.Mongoconn.Collection("bimbingan").CountDocuments(ctx, primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data bimbingan"
 		respn.Response = err.Error()
@@ -69,9 +74,10 @@ func PostBimbinganPengajuan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(bimbingans) < 1 {
+	// For testing: uncomment to enable checking for 8 bimbingan
+	if count < 8 {
 		respn.Status = "Error : Tidak memenuhi syarat"
-		respn.Response = "Anda membutuhkan minimal 1 bimbingan untuk mengajukan sidang"
+		respn.Response = "Anda membutuhkan minimal 8 bimbingan untuk mengajukan sidang"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
