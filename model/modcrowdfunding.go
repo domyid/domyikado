@@ -31,6 +31,8 @@ type CrowdfundingOrder struct {
 	ExpiryTime    time.Time          `json:"expiryTime" bson:"expiryTime"`
 	Status        string             `json:"status" bson:"status"` // pending, success, failed
 	UpdatedAt     time.Time          `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
+	Wonpaywallet  string             `json:"wonpaywallet,omitempty" bson:"wonpaywallet,omitempty"`
+	RVNwallet     string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
 }
 
 // CrowdfundingQueue struct to manage payment processing

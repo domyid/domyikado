@@ -101,8 +101,9 @@ func GetUserPaymentPointsHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract phone number from query parameters
 	phoneNumber := r.URL.Query().Get("phoneNumber")
 	if phoneNumber == "" {
-		// Try to get phone number from authentication token
-		phoneNumber, _, _, err := extractUserInfoFromToken(r)
+		// Try to get phone number from authentication token - updated to handle 6 return values
+		var err error
+		phoneNumber, _, _, _, _, err = extractUserInfoFromToken(r)
 		if err != nil || phoneNumber == "" {
 			at.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
 				"success": false,

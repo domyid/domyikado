@@ -288,23 +288,23 @@ func formatAmount(amount float64, paymentMethod model.PaymentMethod) string {
 }
 
 // Extract user info from token
-func extractUserInfoFromToken(r *http.Request) (phoneNumber, name, npm string, err error) {
+func extractUserInfoFromToken(r *http.Request) (phoneNumber, name, npm, wonpaywallet, rvnwallet string, err error) {
 	// Get login token from header - gunakan 'login' bukan 'Authorization'
 	token := at.GetLoginFromHeader(r)
 	if token == "" {
-		return "", "", "", errors.New("token not found in header")
+		return "", "", "", "", "", errors.New("token not found in header")
 	}
 
 	// Decode token menggunakan metode yang sama dengan iqsoal.go
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, token)
 	if err != nil {
-		return "", "", "", fmt.Errorf("invalid token: %v", err)
+		return "", "", "", "", "", fmt.Errorf("invalid token: %v", err)
 	}
 
 	// Extract phone number from payload
 	phoneNumber = payload.Id
 	if phoneNumber == "" {
-		return "", "", "", errors.New("phone number not found in token")
+		return "", "", "", "", "", errors.New("phone number not found in token")
 	}
 
 	// Debugging - tambahkan log seperti pada iqsoal.go
@@ -316,11 +316,11 @@ func extractUserInfoFromToken(r *http.Request) (phoneNumber, name, npm string, e
 	err = userCollection.FindOne(context.TODO(), bson.M{"phonenumber": phoneNumber}).Decode(&user)
 	if err != nil {
 		// User not found, tetapi kita masih punya phoneNumber dan menggunakan alias dari token
-		return phoneNumber, payload.Alias, "", nil
+		return phoneNumber, payload.Alias, "", "", "", nil
 	}
 
 	// Jika user ditemukan, gunakan data dari database
-	return user.PhoneNumber, user.Name, user.NPM, nil
+	return user.PhoneNumber, user.Name, user.NPM, user.Wonpaywallet, user.RVNwallet, nil
 }
 
 // GetUserInfo returns the user information extracted from the authentication token
@@ -359,20 +359,24 @@ func GetUserInfo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Jika user tidak ditemukan, tetap beri respons dengan data minimal
 		at.WriteJSON(w, http.StatusOK, map[string]interface{}{
-			"success":     true,
-			"phoneNumber": phoneNumber,
-			"name":        payload.Alias,
-			"npm":         "",
+			"success":      true,
+			"phoneNumber":  phoneNumber,
+			"name":         payload.Alias,
+			"npm":          "",
+			"wonpaywallet": "",
+			"rvnwallet":    "",
 		})
 		return
 	}
 
 	// Jika user ditemukan, berikan data lengkap
 	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"success":     true,
-		"phoneNumber": user.PhoneNumber,
-		"name":        user.Name,
-		"npm":         user.NPM,
+		"success":      true,
+		"phoneNumber":  user.PhoneNumber,
+		"name":         user.Name,
+		"npm":          user.NPM,
+		"wonpaywallet": user.Wonpaywallet,
+		"rvnwallet":    user.RVNwallet,
 	})
 }
 
@@ -420,8 +424,8 @@ func CreateQRISOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract user info from token
-	phoneNumber, name, npm, err := extractUserInfoFromToken(r)
+	// Extract user info from token - updated to handle 6 return values
+	phoneNumber, name, npm, _, _, err := extractUserInfoFromToken(r)
 	if err != nil {
 		sendCrowdfundingDiscordEmbed(
 			"🔴 Error: Authentication Failed",
@@ -650,7 +654,7 @@ func CreateQRISOrder(w http.ResponseWriter, r *http.Request) {
 // CreateMicroBitcoinOrder creates a new MicroBitcoin payment order
 func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 	// Extract user info from token
-	phoneNumber, name, npm, err := extractUserInfoFromToken(r)
+	phoneNumber, name, npm, wonpaywallet, _, err := extractUserInfoFromToken(r)
 	if err != nil {
 		sendCrowdfundingDiscordEmbed(
 			"🔴 Error: Authentication Failed",
@@ -712,6 +716,7 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 		Timestamp:     time.Now(),
 		ExpiryTime:    expiryTime,
 		Status:        "pending",
+		Wonpaywallet:  wonpaywallet, // Include user's Wonpay wallet
 	}
 
 	_, err = config.Mongoconn.Collection("crowdfundingorders").InsertOne(context.Background(), newOrder)
@@ -760,7 +765,22 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log successful order creation
+	// For MicroBitcoin Discord notification:
+	var userWalletField DiscordEmbedField
+	if wonpaywallet != "" {
+		userWalletField = DiscordEmbedField{
+			Name:   "User Wallet",
+			Value:  wonpaywallet,
+			Inline: true,
+		}
+	} else {
+		userWalletField = DiscordEmbedField{
+			Name:   "User Wallet",
+			Value:  "Not provided",
+			Inline: true,
+		}
+	}
+
 	sendCrowdfundingDiscordEmbed(
 		"🛒 New MicroBitcoin Order Created",
 		"A new MicroBitcoin payment order has been created.",
@@ -770,11 +790,12 @@ func CreateMicroBitcoinOrder(w http.ResponseWriter, r *http.Request) {
 			{Name: "Customer", Value: name, Inline: true},
 			{Name: "Phone", Value: phoneNumber, Inline: true},
 			{Name: "NPM", Value: npm, Inline: true},
+			userWalletField,
+			{Name: "Destination", Value: MicroBitcoinWalletAddress, Inline: true},
 			{Name: "Expires", Value: expiryTime.Format("15:04:05"), Inline: true},
 			{Name: "Status", Value: "Pending", Inline: true},
 		},
 	)
-
 	// Set up expiry timer
 	go func() {
 		time.Sleep(MicroBitcoinExpirySeconds * time.Second)
@@ -1838,8 +1859,8 @@ func GetCrowdfundingTotal(w http.ResponseWriter, r *http.Request) {
 
 // GetUserCrowdfundingHistory gets the payment history for a specific user
 func GetUserCrowdfundingHistory(w http.ResponseWriter, r *http.Request) {
-	// Extract user info from token
-	phoneNumber, _, _, err := extractUserInfoFromToken(r)
+	// Extract user info from token - updated to handle 6 return values
+	phoneNumber, _, _, _, _, err := extractUserInfoFromToken(r)
 	if err != nil {
 		at.WriteJSON(w, http.StatusUnauthorized, model.CrowdfundingPaymentResponse{
 			Success: false,
@@ -2258,7 +2279,7 @@ func GetLogCrowdfundingGlobalReport(w http.ResponseWriter, r *http.Request) {
 // CreateRavencoinOrder creates a new Ravencoin payment order
 func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 	// Extract user info from token
-	phoneNumber, name, npm, err := extractUserInfoFromToken(r)
+	phoneNumber, name, npm, _, rvnwallet, err := extractUserInfoFromToken(r)
 	if err != nil {
 		sendCrowdfundingDiscordEmbed(
 			"🔴 Error: Authentication Failed",
@@ -2303,19 +2324,11 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CRITICAL: Initialize or update Ravencoin transaction count before creating order
-	// This ensures we have a baseline count to compare against when detecting new transactions
+	// Initialize Ravencoin last transactions before creating the order
+	// This ensures we have a baseline transaction count for comparison
 	initErr := InitializeRavencoinLastTransactions()
 	if initErr != nil {
 		log.Printf("Warning: Error initializing Ravencoin transaction count: %v", initErr)
-		sendCrowdfundingDiscordEmbed(
-			"⚠️ Warning: Ravencoin Tracking Initialization",
-			"There was an issue initializing the Ravencoin transaction tracking, but continuing with payment creation.",
-			ColorYellow,
-			[]DiscordEmbedField{
-				{Name: "Error", Value: initErr.Error(), Inline: false},
-			},
-		)
 		// Continue anyway, as we can still attempt to process the payment
 	}
 
@@ -2336,6 +2349,7 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 		Timestamp:     time.Now(),
 		ExpiryTime:    expiryTime,
 		Status:        "pending",
+		RVNwallet:     rvnwallet, // Include user's Ravencoin wallet
 	}
 
 	_, err = config.Mongoconn.Collection("crowdfundingorders").InsertOne(context.Background(), newOrder)
@@ -2394,7 +2408,22 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log successful order creation
+	// For Ravencoin Discord notification:
+	var userRvnWalletField DiscordEmbedField
+	if rvnwallet != "" {
+		userRvnWalletField = DiscordEmbedField{
+			Name:   "User Wallet",
+			Value:  rvnwallet,
+			Inline: true,
+		}
+	} else {
+		userRvnWalletField = DiscordEmbedField{
+			Name:   "User Wallet",
+			Value:  "Not provided",
+			Inline: true,
+		}
+	}
+
 	sendCrowdfundingDiscordEmbed(
 		"🛒 New Ravencoin Order Created",
 		"A new Ravencoin payment order has been created.",
@@ -2404,9 +2433,10 @@ func CreateRavencoinOrder(w http.ResponseWriter, r *http.Request) {
 			{Name: "Customer", Value: name, Inline: true},
 			{Name: "Phone", Value: phoneNumber, Inline: true},
 			{Name: "NPM", Value: npm, Inline: true},
+			userRvnWalletField,
+			{Name: "Destination", Value: RavencoinWalletAddress, Inline: true},
 			{Name: "Expires", Value: expiryTime.Format("15:04:05"), Inline: true},
 			{Name: "Status", Value: "Pending", Inline: true},
-			{Name: "Wallet Address", Value: RavencoinWalletAddress, Inline: true},
 		},
 	)
 
