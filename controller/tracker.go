@@ -58,7 +58,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	userinfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
+	userinfo.Tanggal_Ambil = waktusekarang
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackerip", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
@@ -146,7 +146,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		userInfo.Hostname = parsedURL.Host
 	}
 	userInfo.Browser = userAgent
-	userInfo.Tanggal_Ambil = primitive.NewDateTimeFromTime(waktusekarang)
+	userInfo.Tanggal_Ambil = waktusekarang
 	filter := primitive.M{
 		"ipv4":          userInfo.IPv4,
 		"hostname":      userInfo.Hostname,
