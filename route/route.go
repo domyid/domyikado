@@ -18,7 +18,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	var method, path string = r.Method, r.URL.Path
 	//tracker website yang dipasang di masing2 web peserta
 	origin := r.Header.Get("Origin")
-	if method == http.MethodOptions && (path == "/api/tracker" || path == "/api/trackertesting") {
+	if method == http.MethodOptions && (path == "/api/tracker" || path == "/api/tracker/token" || path == "/api/trackertesting") {
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
 			return
@@ -237,6 +237,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
+	case method == "POST" && path == "/api/tracker/token":
+		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		controller.GenerateTrackerToken(w, r)
 	case method == "GET" && path == "/api/trackertesting":
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
