@@ -66,7 +66,7 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userinfo.Tanggal_Ambil = waktusekarang
-	token, err := watoken.EncodeWithStructDuration[model.UserInfo]("12345", &userinfo, config.PrivateKey, duration)
+	token, err := watoken.EncodeWithStructDuration("12345", &userinfo, config.PrivateKey, duration)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
