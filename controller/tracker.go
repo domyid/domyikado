@@ -12,9 +12,69 @@ import (
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/report"
+	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
+	var userinfo model.UserInfo
+	waktusekarang := time.Now()
+	jam00 := waktusekarang.Truncate(24 * time.Hour)
+	jam24 := jam00.Add(24*time.Hour - time.Second)
+
+	tomorrowMidnight := time.Date(
+		waktusekarang.Year(), waktusekarang.Month(), waktusekarang.Day()+1,
+		0, 0, 0, 0, waktusekarang.Location(),
+	)
+	duration := time.Until(tomorrowMidnight)
+
+	origin := r.Header.Get("Origin")
+	referer := r.Header.Get("Referer")
+	if origin == "" && referer == "" {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return
+	}
+
+	userAgent := r.UserAgent()
+	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak sah",
+		})
+		return
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Error parsing application/json: " + err.Error(),
+		})
+		return
+	}
+	filter := primitive.M{
+		"ipv4":          userinfo.IPv4,
+		"hostname":      userinfo.Hostname,
+		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
+	}
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
+	if err == nil && exist.IPv4 != "" {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Hari ini sudah absen",
+		})
+		return
+	}
+	userinfo.Tanggal_Ambil = waktusekarang
+	token, err := watoken.EncodeWithStructDuration[model.UserInfo]("12345", &userinfo, config.PrivateKey, duration)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Response: token,
+	})
+}
 
 func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	var userinfo model.UserInfo
