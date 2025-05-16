@@ -2,9 +2,7 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -17,19 +15,54 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func FactCheck(w http.ResponseWriter, r *http.Request) {
+func FactCheck1(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
+	userAgent := r.UserAgent()
 	if origin == "" && referer == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
 		return
 	}
-	userAgent := r.UserAgent()
 	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
+		})
+		return
+	}
+}
+
+func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo) {
+	headerToken := r.Header.Get("Tracker")
+	payload, err := watoken.DecodeWithStruct[model.UserInfo](config.PublicKeyWhatsAuth, headerToken)
+	if err != nil {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Response: "Token tidak valid: " + err.Error(),
+		})
+		return
+	}
+	if payload.Data.IPv4 != userinfo.IPv4 {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Response: "Data tidak cocok",
+		})
+		return
+	}
+	if payload.Data.Hostname != userinfo.Hostname {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Response: "Data tidak cocok",
+		})
+		return
+	}
+	if payload.Data.Url != userinfo.Url {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Response: "Data tidak cocok",
+		})
+		return
+	}
+	if payload.Data.Browser != userinfo.Browser {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Response: "Data tidak cocok",
 		})
 		return
 	}
@@ -47,7 +80,7 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 	)
 	duration := time.Until(tomorrowMidnight)
 
-	FactCheck(w, r)
+	FactCheck1(w, r)
 
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
@@ -85,7 +118,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	FactCheck(w, r)
+	FactCheck1(w, r)
 
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
@@ -136,78 +169,35 @@ func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	var urlUserInfo model.UserInfo
-	var userInfo model.UserInfo
+	var userinfo model.UserInfo
 	waktusekarang := time.Now()
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	origin := r.Header.Get("Origin")
-	referer := r.Header.Get("Referer")
-	if origin == "" && referer == "" {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return
-	}
+	FactCheck1(w, r)
 
-	userAgent := r.UserAgent()
-	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak sah",
-		})
-		return
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&urlUserInfo)
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
 			Response: "Error parsing application/json: " + err.Error(),
 		})
 		return
 	}
-
-	userInfo.IPv4 = urlUserInfo.IPv4
-	if urlUserInfo.Url == "" {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Response: "URL tidak boleh kosong",
-		})
-		return
-	}
-	userInfo.Url = urlUserInfo.Url
-	parsedURL, err := url.Parse(userInfo.Url)
-	if err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Response: "URL tidak valid",
-		})
-		return
-	}
-	if parsedURL.Host == "" {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Response: "Hostname tidak boleh kosong",
-		})
-		return
-	}
-	if parsedURL.Host == "t.if.co.id" {
-		userInfo.Hostname = fmt.Sprintf("%s%s", parsedURL.Host, parsedURL.EscapedPath())
-	} else {
-		userInfo.Hostname = parsedURL.Host
-	}
-	userInfo.Browser = userAgent
-	userInfo.Tanggal_Ambil = waktusekarang
 	filter := primitive.M{
-		"ipv4":          userInfo.IPv4,
-		"hostname":      userInfo.Hostname,
+		"ipv4":          userinfo.IPv4,
+		"hostname":      userinfo.Hostname,
 		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
 	}
-	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
 	if err == nil && exist.IPv4 != "" {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
 			Response: "Hari ini sudah absen",
 		})
 		return
 	}
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userInfo)
+	userinfo.Tanggal_Ambil = waktusekarang
+	FactCheck2(w, r, userinfo)
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackerip", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: "Gagal Insert Database: " + err.Error(),
