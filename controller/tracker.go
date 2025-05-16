@@ -17,6 +17,24 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+func FactCheck(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	referer := r.Header.Get("Referer")
+	if origin == "" && referer == "" {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return
+	}
+	userAgent := r.UserAgent()
+	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return
+	}
+}
+
 func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 	var userinfo model.UserInfo
 	waktusekarang := time.Now()
@@ -29,22 +47,7 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 	)
 	duration := time.Until(tomorrowMidnight)
 
-	origin := r.Header.Get("Origin")
-	referer := r.Header.Get("Referer")
-	if origin == "" && referer == "" {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return
-	}
-
-	userAgent := r.UserAgent()
-	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak sah",
-		})
-		return
-	}
+	FactCheck(w, r)
 
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
@@ -82,22 +85,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	origin := r.Header.Get("Origin")
-	referer := r.Header.Get("Referer")
-	if origin == "" && referer == "" {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return
-	}
-
-	userAgent := r.UserAgent()
-	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak sah",
-		})
-		return
-	}
+	FactCheck(w, r)
 
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
