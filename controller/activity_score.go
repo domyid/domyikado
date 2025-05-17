@@ -231,7 +231,7 @@ func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 		return score, err
 	}
 
-	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoin1(config.Mongoconn, userID, tugasai.StravaId)
+	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoin1(config.Mongoconn, userID)
 	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelasAI(config.Mongoconn, userID, tugasai.IQId)
 	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelasAI(config.Mongoconn, userID, tugasai.PomokitId)
 	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelasAI(config.Mongoconn, userID, tugasai.MBCId)

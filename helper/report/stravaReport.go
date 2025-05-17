@@ -439,52 +439,42 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 	return activityscore, nil
 }
 
-func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (resultid []primitive.ObjectID, activityscore model.ScoreKelasAI1, err error) {
+	type TugasAI struct {
+		StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"` //id strava
+	}
+
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	filter := bson.M{
+		"phonenumber": phonenumber,
+		"createdAt": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Tidak ada data, return slice kosong
+			return nil, activityscore, nil
+		}
+		return nil, activityscore, err
+	}
+
+	var usedStravaIDs []primitive.ObjectID
+	for _, tugas := range docsId {
+		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
+	}
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
 	filter1 := bson.M{
-		"_id":          bson.M{"$nin": usedIDs},
+		"_id":          bson.M{"$nin": usedStravaIDs},
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
 			"$gte": oneWeekAgo,
 		},
 	}
-	// var startTime, endTime time.Time
-
-	// loc, _ := time.LoadLocation("Asia/Jakarta")
-	// now := time.Now().In(loc)
-	// weekday := int(now.Weekday())
-	// if weekday == 0 {
-	// 	weekday = 7
-	// }
-
-	// if weekday == 0 {
-	// 	weekday = 7 // Minggu jadi 7
-	// }
-
-	// // Mundur ke Jumat terakhir
-	// // daysSinceFriday := (weekday + 2) % 7
-	// // lastFriday := now.AddDate(0, 0, -daysSinceFriday)
-	// daysSinceSaturday := (weekday + 1) % 7
-	// lastSaturday := now.AddDate(0, 0, -daysSinceSaturday)
-
-	// // Mulai dari Sabtu pukul 00:01 WIB
-	// startTime = time.Date(lastSaturday.Year(), lastSaturday.Month(), lastSaturday.Day(), 0, 1, 0, 0, loc)
-
-	// // Selesai Sabtu pukul 00:00 WIB
-	// nextFriday := lastSaturday.AddDate(0, 0, 7)
-	// endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
-
-	// // Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
-	// filter1 := bson.M{
-	// 	"_id":          bson.M{"$nin": usedIDs},
-	// 	"phone_number": phonenumber,
-	// 	"strava_created_at": bson.M{
-	// 		"$gte": startTime.UTC(),
-	// 		"$lt":  endTime.UTC(),
-	// 	},
-	// }
 
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter1)
 	if err != nil {
@@ -497,13 +487,11 @@ func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs 
 	if len(docs) == 0 {
 		return nil, activityscore, nil
 	}
-
-	var stravaId []primitive.ObjectID
 	var totalKm float64
 	var totalPoin float64
 
 	for _, doc := range docs {
-		stravaId = append(stravaId, doc.ID)
+		resultid = append(resultid, doc.ID)
 		totalKm += doc.TotalKm
 		totalPoin += doc.Poin
 	}
@@ -514,7 +502,7 @@ func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs 
 	activityscore.StravaKM = float32(totalKm)
 	activityscore.Strava = poin
 
-	return stravaId, activityscore, nil
+	return resultid, activityscore, nil
 }
 
 // func GetWeekYear(times time.Time) string {
