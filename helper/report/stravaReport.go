@@ -464,6 +464,10 @@ func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaI
 		for _, tugas := range docsId {
 			usedIDs = append(usedIDs, tugas.StravaId...)
 		}
+	} else {
+		usedIDs = []primitive.ObjectID{
+			primitive.NilObjectID,
+		}
 	}
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
