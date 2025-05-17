@@ -325,19 +325,14 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 		return nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
 	}
 
-	// Filter pomodoros based on the current week
-	startTime, endTime, err := GetWeeklyFridayRange(time.Now())
-	if err != nil {
-		return nil, err
-	}
-
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	// Ganti GetWeeklyFridayRange dengan 7 hari ke belakang
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+	now := time.Now()
 
 	seenUrls := make(map[string]bool)
 	var filteredPomodoros []model.TugasPomodoro
 	for _, pomodoro := range pomodoros {
-		createdAtLocal := pomodoro.CreatedAt.In(loc)
-		if createdAtLocal.After(startTime) && createdAtLocal.Before(endTime) {
+		if pomodoro.CreatedAt.After(oneWeekAgo) && pomodoro.CreatedAt.Before(now) {
 			urlKey := pomodoro.URLPekerjaan
 			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
 				urlKey = pomodoro.GTMetrixURLTarget
@@ -350,11 +345,58 @@ func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.Tuga
 	}
 
 	if len(filteredPomodoros) == 0 {
-		return nil, fmt.Errorf("no pomodoros found for user %s in the current week", phonenumber)
+		return nil, fmt.Errorf("no pomodoros found for user %s in the last 7 days", phonenumber)
 	}
 
 	return filteredPomodoros, nil
 }
+
+// func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.TugasPomodoro, error) {
+// 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	pomokitApi := conf.PomokitUrl + "/" + phonenumber
+// 	scode, pomodoros, err := atapi.Get[[]model.TugasPomodoro](pomokitApi)
+// 	if err != nil || scode != http.StatusOK {
+// 		return nil, err
+// 	}
+
+// 	if len(pomodoros) == 0 {
+// 		return nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
+// 	}
+
+// 	// Filter pomodoros based on the current week
+// 	startTime, endTime, err := GetWeeklyFridayRange(time.Now())
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	loc, _ := time.LoadLocation("Asia/Jakarta")
+
+// 	seenUrls := make(map[string]bool)
+// 	var filteredPomodoros []model.TugasPomodoro
+// 	for _, pomodoro := range pomodoros {
+// 		createdAtLocal := pomodoro.CreatedAt.In(loc)
+// 		if createdAtLocal.After(startTime) && createdAtLocal.Before(endTime) {
+// 			urlKey := pomodoro.URLPekerjaan
+// 			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
+// 				urlKey = pomodoro.GTMetrixURLTarget
+// 			}
+// 			if _, exists := seenUrls[urlKey]; !exists {
+// 				filteredPomodoros = append(filteredPomodoros, pomodoro)
+// 				seenUrls[urlKey] = true
+// 			}
+// 		}
+// 	}
+
+// 	if len(filteredPomodoros) == 0 {
+// 		return nil, fmt.Errorf("no pomodoros found for user %s in the current week", phonenumber)
+// 	}
+
+// 	return filteredPomodoros, nil
+// }
 
 func GetWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Time, err error) {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
@@ -382,8 +424,13 @@ func GetWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Ti
 }
 
 type TugasAI struct {
-	StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"`
-	// IQId     []primitive.ObjectID `bson:"iqid" json:"iqid"`
+	StravaId  []primitive.ObjectID `bson:"stravaid" json:"stravaid"`   //id strava
+	IQId      []primitive.ObjectID `bson:"iqid" json:"iqid"`           //id iq
+	MBCId     []primitive.ObjectID `bson:"mbcid" json:"mbcid"`         //id mbc
+	RavenId   []primitive.ObjectID `bson:"ravenid" json:"ravenid"`     //id ravencoin
+	QrisId    []primitive.ObjectID `bson:"qrisid" json:"qrisid"`       //id qris
+	PomokitId []primitive.ObjectID `bson:"pomokitid" json:"pomokitid"` //id pomokit
+
 }
 
 func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
@@ -407,15 +454,27 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 	}
 
 	var usedStravaIDs []primitive.ObjectID
-	// var usedIQIDs []primitive.ObjectID
+	var usedIQIDs []primitive.ObjectID
+	var usedMBCIDs []primitive.ObjectID
+	var usedRavenIDs []primitive.ObjectID
+	var usedQrisIDs []primitive.ObjectID
+	var usedPomokitIDs []primitive.ObjectID
 	for _, tugas := range docsId {
 		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
-		// usedIQIDs = append(usedIQIDs, tugas.IQId...)
+		usedIQIDs = append(usedIQIDs, tugas.IQId...)
+		usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
+		usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
+		usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
+		usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
 	}
 
 	tugasai := TugasAI{
-		StravaId: usedStravaIDs,
-		// IQId:     usedIQIDs,
+		StravaId:  usedStravaIDs,
+		IQId:      usedIQIDs,
+		MBCId:     usedMBCIDs,
+		RavenId:   usedRavenIDs,
+		QrisId:    usedQrisIDs,
+		PomokitId: usedPomokitIDs,
 	}
 
 	return tugasai, nil

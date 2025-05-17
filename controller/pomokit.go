@@ -19,6 +19,8 @@ import (
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/helper/whatsauth"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func GetPomokitDataUserAPI(respw http.ResponseWriter, req *http.Request) {
@@ -93,7 +95,7 @@ func GetPomokitDataUserAPI(respw http.ResponseWriter, req *http.Request) {
 	// Create response with data and count
 	response := struct {
 		Data  []model.PomodoroReport `json:"data"`
-		Count int                     `json:"count"`
+		Count int                    `json:"count"`
 	}{
 		Data:  matchingReports,
 		Count: len(matchingReports),
@@ -188,87 +190,87 @@ func GetPomokitDataAllUserAPI(respw http.ResponseWriter, req *http.Request) {
 }
 
 func GetPomokitReportTotalSemuaHari(respw http.ResponseWriter, req *http.Request) {
-    var resp model.Response
+	var resp model.Response
 
-    // Ambil parameter dari query
-    groupID := req.URL.Query().Get("groupid")
-    phoneNumber := req.URL.Query().Get("phonenumber")
-    
-    // Ubah logika send: default true kecuali send=false
-    sendParam := req.URL.Query().Get("send")
-    sendMessage := sendParam != "false" // Default true kecuali ada send=false
-    
-    // Buat laporan
-    var msg string
-    var err error
-    
-    // Proses laporan dan optionally kirim pesan
-    if sendMessage {
-        if groupID != "" {
-            // Kirim ke grup WhatsApp jika groupID ada
-            msg, err = report.RekapPomokitTotal(config.Mongoconn, groupID)
-        } else if phoneNumber != "" {
-            // Jika hanya phonenumber yang ada, kirim pesan ke nomor tersebut
-            // Pertama, dapatkan laporan
-            msg, err = report.GetPomokitReportMsg(config.Mongoconn, "", phoneNumber)
-            
-            if err == nil && !strings.Contains(msg, "Tidak ada data Pomokit") {
-                // Kirim pesan ke nomor telepon
-                dt := &whatsauth.TextMessage{
-                    To:       phoneNumber,
-                    IsGroup:  false,
-                    Messages: msg,
-                }
-                
-                _, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
-                if err != nil {
-                    resp.Status = "Error"
-                    resp.Location = "Laporan Pomokit"
-                    resp.Response = "Berhasil membuat laporan, tetapi gagal mengirim pesan: " + err.Error()
-                    at.WriteJSON(respw, http.StatusInternalServerError, resp)
-                    return
-                }
-            }
-        } else {
-            // Jika tidak ada groupID atau phoneNumber, hanya buat laporan
-            msg, err = report.GetPomokitReportMsg(config.Mongoconn, "", "")
-        }
-    } else {
-        // Jika send=false, hanya buat laporan tanpa mengirim
-        msg, err = report.GetPomokitReportMsg(config.Mongoconn, groupID, phoneNumber)
-    }
-    
-    if err != nil {
-        resp.Status = "Error"
-        resp.Location = "Laporan Pomokit"
-        resp.Response = "Gagal memproses laporan: " + err.Error()
-        at.WriteJSON(respw, http.StatusInternalServerError, resp)
-        return
-    }
-    
-    // Siapkan respons berdasarkan hasil
-    if strings.Contains(msg, "Tidak ada data Pomokit") {
-        resp.Status = "Warning"
-    } else {
-        resp.Status = "Success"
-    }
-    
-    resp.Location = "Laporan Pomokit"
-    
-    // Beri tahu user jika pesan berhasil dikirim atau hanya dibuat
-    if sendMessage {
-        if groupID != "" && !strings.Contains(groupID, "-") {
-            resp.Response = "Laporan Pomokit berhasil dikirim ke grup " + groupID
-        } else if phoneNumber != "" && !strings.Contains(msg, "Tidak ada data Pomokit") {
-            resp.Response = "Laporan Pomokit berhasil dikirim ke nomor " + phoneNumber
-        } else {
-            resp.Response = msg
-        }
-    } else {
-        resp.Response = msg
-    }
-    
-    at.WriteJSON(respw, http.StatusOK, resp)
+	// Ambil parameter dari query
+	groupID := req.URL.Query().Get("groupid")
+	phoneNumber := req.URL.Query().Get("phonenumber")
+
+	// Ubah logika send: default true kecuali send=false
+	sendParam := req.URL.Query().Get("send")
+	sendMessage := sendParam != "false" // Default true kecuali ada send=false
+
+	// Buat laporan
+	var msg string
+	var err error
+
+	// Proses laporan dan optionally kirim pesan
+	if sendMessage {
+		if groupID != "" {
+			// Kirim ke grup WhatsApp jika groupID ada
+			msg, err = report.RekapPomokitTotal(config.Mongoconn, groupID)
+		} else if phoneNumber != "" {
+			// Jika hanya phonenumber yang ada, kirim pesan ke nomor tersebut
+			// Pertama, dapatkan laporan
+			msg, err = report.GetPomokitReportMsg(config.Mongoconn, "", phoneNumber)
+
+			if err == nil && !strings.Contains(msg, "Tidak ada data Pomokit") {
+				// Kirim pesan ke nomor telepon
+				dt := &whatsauth.TextMessage{
+					To:       phoneNumber,
+					IsGroup:  false,
+					Messages: msg,
+				}
+
+				_, _, err = atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+				if err != nil {
+					resp.Status = "Error"
+					resp.Location = "Laporan Pomokit"
+					resp.Response = "Berhasil membuat laporan, tetapi gagal mengirim pesan: " + err.Error()
+					at.WriteJSON(respw, http.StatusInternalServerError, resp)
+					return
+				}
+			}
+		} else {
+			// Jika tidak ada groupID atau phoneNumber, hanya buat laporan
+			msg, err = report.GetPomokitReportMsg(config.Mongoconn, "", "")
+		}
+	} else {
+		// Jika send=false, hanya buat laporan tanpa mengirim
+		msg, err = report.GetPomokitReportMsg(config.Mongoconn, groupID, phoneNumber)
+	}
+
+	if err != nil {
+		resp.Status = "Error"
+		resp.Location = "Laporan Pomokit"
+		resp.Response = "Gagal memproses laporan: " + err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, resp)
+		return
+	}
+
+	// Siapkan respons berdasarkan hasil
+	if strings.Contains(msg, "Tidak ada data Pomokit") {
+		resp.Status = "Warning"
+	} else {
+		resp.Status = "Success"
+	}
+
+	resp.Location = "Laporan Pomokit"
+
+	// Beri tahu user jika pesan berhasil dikirim atau hanya dibuat
+	if sendMessage {
+		if groupID != "" && !strings.Contains(groupID, "-") {
+			resp.Response = "Laporan Pomokit berhasil dikirim ke grup " + groupID
+		} else if phoneNumber != "" && !strings.Contains(msg, "Tidak ada data Pomokit") {
+			resp.Response = "Laporan Pomokit berhasil dikirim ke nomor " + phoneNumber
+		} else {
+			resp.Response = msg
+		}
+	} else {
+		resp.Response = msg
+	}
+
+	at.WriteJSON(respw, http.StatusOK, resp)
 }
 
 func SendPomokitReportKemarinPerGrup(respw http.ResponseWriter, req *http.Request) {
@@ -421,7 +423,7 @@ func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Reque
 	// Ambil groupID dan phoneNumber dari parameter query
 	groupID := req.URL.Query().Get("groupid")
 	phoneNumber := req.URL.Query().Get("phonenumber")
-	
+
 	// Setidaknya satu dari groupID atau phoneNumber harus diisi
 	if groupID == "" && phoneNumber == "" {
 		resp.Status = "Error"
@@ -454,7 +456,7 @@ func SendPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Reque
 	dt := &whatsauth.TextMessage{
 		Messages: msg,
 	}
-	
+
 	// Tentukan tujuan pengiriman berdasarkan parameter yang tersedia
 	if phoneNumber != "" {
 		// Jika ada phoneNumber, kirim ke user tersebut
@@ -490,7 +492,7 @@ func GetPomokitReportMingguanPerGrup(respw http.ResponseWriter, req *http.Reques
 	// Ambil groupID dan phoneNumber dari parameter query
 	groupID := req.URL.Query().Get("groupid")
 	phoneNumber := req.URL.Query().Get("phonenumber")
-	
+
 	// Setidaknya satu dari groupID atau phoneNumber harus diisi
 	if groupID == "" && phoneNumber == "" {
 		resp.Status = "Error"
@@ -578,55 +580,95 @@ func RefreshPomokitMingguanReport(respw http.ResponseWriter, req *http.Request) 
 
 // Fungsi untuk mendapatkan skor Pomokit semua waktu
 func GetPomokitScoreForUser(phoneNumber string) (model.ActivityScore, error) {
-    var score model.ActivityScore
-    
-    // Ambil semua data Pomokit
-    allPomokitData, err := report.GetAllPomokitDataAPI(config.Mongoconn)
-    if err != nil {
-        return score, err
-    }
-    
-    // Filter dan hitung untuk user spesifik
-    var sessionCount int
-    
-    for _, report := range allPomokitData {
-        if report.PhoneNumber == phoneNumber {
-            sessionCount++
-        }
-    }
-    
-    // Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
-    score.Pomokitsesi = sessionCount
-    score.Pomokit = sessionCount * 20 // 20 per cycle
-    
-    return score, nil
+	var score model.ActivityScore
+
+	// Ambil semua data Pomokit
+	allPomokitData, err := report.GetAllPomokitDataAPI(config.Mongoconn)
+	if err != nil {
+		return score, err
+	}
+
+	// Filter dan hitung untuk user spesifik
+	var sessionCount int
+
+	for _, report := range allPomokitData {
+		if report.PhoneNumber == phoneNumber {
+			sessionCount++
+		}
+	}
+
+	// Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
+	score.Pomokitsesi = sessionCount
+	score.Pomokit = sessionCount * 20 // 20 per cycle
+
+	return score, nil
 }
 
 // Fungsi untuk mendapatkan skor Pomokit seminggu terakhir
 func GetLastWeekPomokitScoreForUser(phoneNumber string) (model.ActivityScore, error) {
-    var score model.ActivityScore
-    
-    // Ambil semua data Pomokit
-    allPomokitData, err := report.GetAllPomokitDataAPI(config.Mongoconn)
-    if err != nil {
-        return score, err
-    }
-    
-    // Tentukan waktu seminggu yang lalu
-    weekAgo := time.Now().AddDate(0, 0, -7)
-    
-    // Filter dan hitung untuk user spesifik dalam seminggu terakhir
-    var sessionCount int
-    
-    for _, report := range allPomokitData {
-        if report.PhoneNumber == phoneNumber && report.CreatedAt.After(weekAgo) {
-            sessionCount++
-        }
-    }
-    
-    // Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
-    score.Pomokitsesi = sessionCount
-    score.Pomokit = sessionCount * 20 // 20 per cycle
-    
-    return score, nil
+	var score model.ActivityScore
+
+	// Ambil semua data Pomokit
+	allPomokitData, err := report.GetAllPomokitDataAPI(config.Mongoconn)
+	if err != nil {
+		return score, err
+	}
+
+	// Tentukan waktu seminggu yang lalu
+	weekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Filter dan hitung untuk user spesifik dalam seminggu terakhir
+	var sessionCount int
+
+	for _, report := range allPomokitData {
+		if report.PhoneNumber == phoneNumber && report.CreatedAt.After(weekAgo) {
+			sessionCount++
+		}
+	}
+
+	// Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
+	score.Pomokitsesi = sessionCount
+	score.Pomokit = sessionCount * 20 // 20 per cycle
+
+	return score, nil
+}
+
+// Fungsi untuk mendapatkan skor Pomokit seminggu terakhir kelas ai
+func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+	var score model.ActivityScore
+	var resultIDs []primitive.ObjectID
+
+	// Buat map dari usedIDs untuk efisiensi pengecekan
+	usedMap := make(map[primitive.ObjectID]bool)
+	for _, id := range usedIDs {
+		usedMap[id] = true
+	}
+
+	// Ambil semua data Pomokit
+	allPomokitData, err := report.GetAllPomokitDataAPI(db)
+	if err != nil {
+		return nil, score, err
+	}
+
+	// Tentukan waktu seminggu yang lalu
+	weekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Filter dan hitung untuk user spesifik dalam seminggu terakhir
+	var sessionCount int
+
+	for _, report := range allPomokitData {
+		if report.PhoneNumber == phoneNumber &&
+			report.CreatedAt.After(weekAgo) &&
+			!usedMap[report.ID] {
+
+			resultIDs = append(resultIDs, report.ID)
+			sessionCount++
+		}
+	}
+
+	// Sesuai dengan komentar di struct, setiap sesi bernilai 20 poin
+	score.Pomokitsesi = sessionCount
+	score.Pomokit = sessionCount * 20 // 20 per cycle
+
+	return resultIDs, score, nil
 }

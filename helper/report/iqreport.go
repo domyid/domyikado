@@ -8,8 +8,10 @@ import (
 
 	"fmt"
 
+	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -391,4 +393,45 @@ func GetLastWeekDataIQScoress(db *mongo.Database, phonenumber, mode string) (mod
 	activityscore.CreatedAt = time.Now() // catat kapan dipanggil
 
 	return activityscore, nil
+}
+
+func GetLastWeekDataIQScoreKelasAI(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+	var activityscore model.ActivityScore
+
+	oneWeekAgo := time.Now().AddDate(0, 0, -7).Format("2006-01-02 15:04:05")
+
+	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
+	filter1 := bson.M{
+		"_id":         bson.M{"$nin": usedIDs},
+		"phonenumber": phonenumber,
+		"strava_created_at": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	type IQDoc struct {
+		ID    primitive.ObjectID `bson:"_id"`
+		Score string             `bson:"score"`
+		IQ    string             `bson:"iq"`
+	}
+
+	doc, err := atdb.GetOneDoc[IQDoc](db, "iqscore", filter1)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, activityscore, nil
+		}
+		return nil, activityscore, err
+	}
+
+	// Ambil data dari dokumen yang ditemukan
+	scoreInt, _ := strconv.Atoi(doc.Score)
+	iqInt, _ := strconv.Atoi(doc.IQ)
+
+	activityscore.IQresult = scoreInt
+	activityscore.IQ = iqInt
+
+	// Ambil ID dokumen yang digunakan
+	usedIDs = append(usedIDs, doc.ID)
+
+	return usedIDs, activityscore, nil
 }

@@ -439,7 +439,7 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 	return activityscore, nil
 }
 
-func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+func GetLastWeekDataStravaPoinKelasAI(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)

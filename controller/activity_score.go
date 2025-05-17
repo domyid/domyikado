@@ -231,12 +231,12 @@ func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 		return score, err
 	}
 
-	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoin1(config.Mongoconn, userID, tugasai.StravaId)
-	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
-	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
-	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
-	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
-	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
+	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoinKelasAI(config.Mongoconn, userID, tugasai.StravaId)
+	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelasAI(config.Mongoconn, userID, tugasai.IQId)
+	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelasAI(config.Mongoconn, userID, tugasai.PomokitId)
+	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelasAI(config.Mongoconn, userID, tugasai.MBCId)
+	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelasAI(config.Mongoconn, userID, tugasai.RavenId)
+	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelasAI(config.Mongoconn, userID, tugasai.QrisId)
 	urlTugas, _ := GetPomokitDataKelasAI(config.Mongoconn, userID)
 
 	urls := make([]string, 0, len(urlTugas))
@@ -265,6 +265,11 @@ func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 		QRISPoints:      dataQRIS.QRISPoints,
 		AllTugas:        urls,
 		StravaId:        stravaId,
+		IQId:            iqId,
+		MBCId:           mbcId,
+		RavenId:         ravenId,
+		QrisId:          qrisId,
+		PomokitId:       pomokitId,
 	}
 
 	return score, nil

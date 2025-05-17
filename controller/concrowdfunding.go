@@ -22,6 +22,7 @@ import (
 	"github.com/gocroot/model"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -3850,4 +3851,159 @@ func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod 
 	}
 
 	return score
+}
+
+// GetLastWeekDataMicroBitcoinScore gets MBC data for the last week only
+func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Calculate the date one week ago
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query successful MicroBitcoin payments for this user from the last week
+	filter := bson.M{
+		"_id":           bson.M{"$nin": usedIDs},
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.MicroBitcoin,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return usedIDs, activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalMBC float32 = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return usedIDs, activityScore, err
+	}
+
+	// Sum up the total MBC amount
+	for _, payment := range payments {
+		usedIDs = append(usedIDs, payment.ID)
+		totalMBC += float32(payment.Amount)
+	}
+
+	// Calculate blockchain score based on total MBC
+	blockchainScore := calculateBlockchainScore(db, totalMBC, model.MicroBitcoin)
+
+	// Calculate MBC points
+	mbcPoints := calculateMBCPoints(db, totalMBC)
+
+	// Set the activity score values
+	activityScore.MBC = totalMBC
+	activityScore.MBCPoints = mbcPoints
+	activityScore.BlockChain = blockchainScore
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return usedIDs, activityScore, nil
+}
+
+// GetLastWeekDataRavencoinScore gets RVN data for the last week only
+func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Calculate the date one week ago
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query successful Ravencoin payments for this user from the last week
+	filter := bson.M{
+		"_id":           bson.M{"$nin": usedIDs},
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.Ravencoin,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return usedIDs, activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalRVN float32 = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return usedIDs, activityScore, err
+	}
+
+	// Sum up the total RVN amount
+	for _, payment := range payments {
+		usedIDs = append(usedIDs, payment.ID)
+		totalRVN += float32(payment.Amount)
+	}
+
+	// Calculate Ravencoin points
+	ravencoinPoints := calculateRavencoinPoints(db, totalRVN)
+
+	// Set the activity score values
+	activityScore.RVN = totalRVN
+	activityScore.RavencoinPoints = ravencoinPoints
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return usedIDs, activityScore, nil
+}
+
+// GetLastWeekDataQRISScore gets QRIS data for the last week only
+func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+	var activityScore model.ActivityScore
+
+	// Calculate the date one week ago
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query successful QRIS payments for this user from the last week
+	filter := bson.M{
+		"_id":           bson.M{"$nin": usedIDs},
+		"phoneNumber":   phoneNumber,
+		"paymentMethod": model.QRIS,
+		"status":        "success",
+		"timestamp": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
+	if err != nil {
+		return usedIDs, activityScore, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Process payments
+	var totalRupiah int = 0
+	var payments []model.CrowdfundingOrder
+	if err = cursor.All(context.Background(), &payments); err != nil {
+		return usedIDs, activityScore, err
+	}
+
+	// Sum up the total QRIS amount
+	for _, payment := range payments {
+		usedIDs = append(usedIDs, payment.ID)
+		totalRupiah += int(payment.Amount)
+	}
+
+	// Calculate QRIS score based on total amount
+	qrisScore := calculateQRISScore(db, totalRupiah)
+
+	// Calculate QRIS points
+	qrisPoints := calculateQRISPoints(db, totalRupiah)
+
+	// Set the activity score values
+	activityScore.Rupiah = totalRupiah
+	activityScore.QRISPoints = qrisPoints
+	activityScore.QRIS = qrisScore
+	activityScore.PhoneNumber = phoneNumber
+	activityScore.CreatedAt = time.Now()
+
+	return usedIDs, activityScore, nil
 }
