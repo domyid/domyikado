@@ -18,7 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type StravaInfo struct {
@@ -441,9 +440,9 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 }
 
 func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaId []primitive.ObjectID, activityscore model.ActivityScore, err error) {
-	// type TugasAI struct {
-	// 	StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"`
-	// }
+	type TugasAI struct {
+		StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"`
+	}
 
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
@@ -455,39 +454,21 @@ func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaI
 		},
 	}
 
-	options := options.Find().SetProjection(bson.M{"stravaid": 1})
-
-	cursor, err := db.Collection("tugaskelasai1").Find(context.TODO(), filter, options)
-	if err != nil {
-		return nil, activityscore, err
-	}
-	defer cursor.Close(context.TODO())
-	var usedIDs []primitive.ObjectID
-	err = cursor.All(context.TODO(), &usedIDs)
+	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// Jika tidak ada data di tugaskelasai1, artinya semua strava boleh diambil
-			usedIDs = []primitive.ObjectID{}
+			docsId = []TugasAI{}
 		} else {
 			return nil, activityscore, err
 		}
 	}
 
-	// docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
-	// if err != nil {
-	// 	if err == mongo.ErrNoDocuments {
-	// 		// Jika tidak ada data di tugaskelasai1, artinya semua strava boleh diambil
-	// 		docsId = []TugasAI{}
-	// 	} else {
-	// 		return nil, activityscore, err
-	// 	}
-	// }
-
-	// // Kumpulkan semua ObjectID stravaid dari docsId ke satu slice
-	// var usedIDs []primitive.ObjectID
-	// for _, tugas := range docsId {
-	// 	usedIDs = append(usedIDs, tugas.StravaId...)
-	// }
+	// Kumpulkan semua ObjectID stravaid dari docsId ke satu slice
+	var usedIDs []primitive.ObjectID
+	for _, tugas := range docsId {
+		usedIDs = append(usedIDs, tugas.StravaId...)
+	}
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
 	filter1 := bson.M{
