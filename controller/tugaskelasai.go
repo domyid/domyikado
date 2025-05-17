@@ -187,6 +187,7 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	tugasAI.RavenId = score.RavenId
 	tugasAI.QrisId = score.QrisId
 	tugasAI.PomokitId = score.PomokitId
+	tugasAI.TugasId = score.TugasId
 
 	// startTime, endTime, err := GetWeeklyFridayRange(time.Now())
 	// if err != nil {
