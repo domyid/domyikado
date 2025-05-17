@@ -219,22 +219,22 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	// 		return
 	// 	}
 	// } else {
-		allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
-		if err != nil {
-			respn.Status = "Error : Data tugasAI tidak di temukan"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusBadRequest, respn)
-			return
-		}
-		// Insert data baru
-		tugasAI.TugasKe = len(allDoc) + 1
-		_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai1", tugasAI)
-		if err != nil {
-			respn.Status = "Error : Gagal Insert Database"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusNotModified, respn)
-			return
-		}
+	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Data tugasAI tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	// Insert data baru
+	tugasAI.TugasKe = len(allDoc) + 1
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai1", tugasAI)
+	if err != nil {
+		respn.Status = "Error : Gagal Insert Database"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotModified, respn)
+		return
+	}
 	// }
 
 	at.WriteJSON(respw, http.StatusOK, tugasAI)
@@ -312,6 +312,53 @@ func GetDataTugasAI(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	at.WriteJSON(respw, http.StatusOK, tugasailist)
+}
+
+func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]model.TugasPomodoro, error) {
+	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+	if err != nil {
+		return nil, err
+	}
+
+	// Buat map dari usedIDs untuk efisiensi pengecekan
+	usedMap := make(map[primitive.ObjectID]bool)
+	for _, id := range usedIDs {
+		usedMap[id] = true
+	}
+
+	pomokitApi := conf.PomokitUrl + "/" + phonenumber
+	scode, pomodoros, err := atapi.Get[[]model.TugasPomodoro](pomokitApi)
+	if err != nil || scode != http.StatusOK {
+		return nil, err
+	}
+
+	if len(pomodoros) == 0 {
+		return nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
+	}
+
+	// Ganti GetWeeklyFridayRange dengan 7 hari ke belakang
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	seenUrls := make(map[string]bool)
+	var filteredPomodoros []model.TugasPomodoro
+	for _, pomodoro := range pomodoros {
+		if pomodoro.CreatedAt.After(oneWeekAgo) && !usedMap[pomodoro.ID] {
+			urlKey := pomodoro.URLPekerjaan
+			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
+				urlKey = pomodoro.GTMetrixURLTarget
+			}
+			if _, exists := seenUrls[urlKey]; !exists {
+				filteredPomodoros = append(filteredPomodoros, pomodoro)
+				seenUrls[urlKey] = true
+			}
+		}
+	}
+
+	if len(filteredPomodoros) == 0 {
+		return nil, fmt.Errorf("no pomodoros found for user %s in the last 7 days", phonenumber)
+	}
+
+	return filteredPomodoros, nil
 }
 
 func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.TugasPomodoro, error) {
@@ -435,7 +482,6 @@ type TugasAI struct {
 	RavenId   []primitive.ObjectID `bson:"ravenid" json:"ravenid"`     //id ravencoin
 	QrisId    []primitive.ObjectID `bson:"qrisid" json:"qrisid"`       //id qris
 	PomokitId []primitive.ObjectID `bson:"pomokitid" json:"pomokitid"` //id pomokit
-
 }
 
 func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
