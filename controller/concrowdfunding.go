@@ -3862,7 +3862,7 @@ func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber str
 
 	// Query successful MicroBitcoin payments for this user from the last week
 	filter := bson.M{
-		// "_id":           bson.M{"$nin": usedIDs},
+		"_id":           bson.M{"$nin": usedIDs},
 		"phoneNumber":   phoneNumber,
 		"paymentMethod": model.MicroBitcoin,
 		"status":        "success",
@@ -3964,7 +3964,7 @@ func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, use
 
 	// Query successful QRIS payments for this user from the last week
 	filter := bson.M{
-		// "_id":           bson.M{"$nin": usedIDs},
+		"_id":           bson.M{"$nin": usedIDs},
 		"phoneNumber":   phoneNumber,
 		"paymentMethod": model.QRIS,
 		"status":        "success",
