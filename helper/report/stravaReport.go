@@ -455,18 +455,15 @@ func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaI
 	}
 
 	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
-	if err != nil {
+	if err != nil && err != mongo.ErrNoDocuments {
 		return nil, activityscore, err
 	}
 
-	if len(docsId) == 0 {
-		docsId = []TugasAI{} // Artinya tidak ada Strava yang sudah digunakan
-	}
-
-	// Kumpulkan semua ObjectID stravaid dari docsId ke satu slice
 	var usedIDs []primitive.ObjectID
-	for _, tugas := range docsId {
-		usedIDs = append(usedIDs, tugas.StravaId...)
+	if len(docsId) != 0 {
+		for _, tugas := range docsId {
+			usedIDs = append(usedIDs, tugas.StravaId...)
+		}
 	}
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
