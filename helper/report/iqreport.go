@@ -395,9 +395,7 @@ func GetLastWeekDataIQScoress(db *mongo.Database, phonenumber, mode string) (mod
 	return activityscore, nil
 }
 
-func GetLastWeekDataIQScoreKelasAI(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
-	var activityscore model.ActivityScore
-
+func GetLastWeekDataIQScoreKelasAI(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	oneWeekAgo := time.Now().AddDate(0, 0, -7).Format("2006-01-02 15:04:05")
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
@@ -431,7 +429,7 @@ func GetLastWeekDataIQScoreKelasAI(db *mongo.Database, phonenumber string, usedI
 	activityscore.IQ = iqInt
 
 	// Ambil ID dokumen yang digunakan
-	usedIDs = append(usedIDs, doc.ID)
+	resultid = append(resultid, doc.ID)
 
-	return usedIDs, activityscore, nil
+	return resultid, activityscore, nil
 }
