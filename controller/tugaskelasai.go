@@ -380,3 +380,43 @@ func GetWeeklyFridayRange(times time.Time) (startTime time.Time, endTime time.Ti
 
 	return startTime, endTime, nil
 }
+
+type TugasAI struct {
+	StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"`
+	// IQId     []primitive.ObjectID `bson:"iqid" json:"iqid"`
+}
+
+func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Filter untuk mengambil data tugaskelasai1 milik user dalam 7 hari terakhir
+	filter := bson.M{
+		"phonenumber": userID,
+		"createdAt": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Tidak ada data, return slice kosong
+			return TugasAI{}, nil
+		}
+		return TugasAI{}, err
+	}
+
+	var usedStravaIDs []primitive.ObjectID
+	// var usedIQIDs []primitive.ObjectID
+	for _, tugas := range docsId {
+		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
+		// usedIQIDs = append(usedIQIDs, tugas.IQId...)
+	}
+
+	tugasai := TugasAI{
+		StravaId: usedStravaIDs,
+		// IQId:     usedIQIDs,
+	}
+
+	return tugasai, nil
+}
