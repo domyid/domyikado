@@ -16,6 +16,7 @@ import (
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -436,6 +437,47 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 	activityscore.Strava = poin
 
 	return activityscore, nil
+}
+
+func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaId []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// Query ke MongoDB
+	filter := bson.M{
+		"phone_number": phonenumber,
+		"strava_created_at": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return stravaId, activityscore, nil
+		}
+		return stravaId, activityscore, err
+	}
+
+	if len(docs) == 0 {
+		return stravaId, activityscore, nil
+	}
+
+	var totalKm float64
+	var totalPoin float64
+
+	for _, doc := range docs {
+		stravaId = append(stravaId, doc.ID)
+		totalKm += doc.TotalKm
+		totalPoin += doc.Poin
+	}
+
+	// Menjamin poin tidak melebihi 100
+	poin := int(math.Min(totalPoin, 100))
+
+	activityscore.StravaKM = float32(totalKm)
+	activityscore.Strava = poin
+
+	return stravaId, activityscore, nil
 }
 
 // func GetWeekYear(times time.Time) string {

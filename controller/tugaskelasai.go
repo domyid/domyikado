@@ -126,6 +126,138 @@ func PostTugasKelasAI(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, tugasAI)
 }
 
+func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
+	//otorisasi dan validasi inputan
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+	var tugasAI model.ScoreKelasAI1
+	err = json.NewDecoder(req.Body).Decode(&tugasAI)
+	if err != nil {
+		respn.Status = "Error : Body tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	if tugasAI.Kelas == "" {
+		respn.Status = "Error : Kelas tidak boleh kosong"
+		respn.Response = "Isi lebih lengkap terlebih dahulu"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	//validasi eksistensi user di db
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Data user tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	score, _ := GetLastWeekScoreKelasAIData1(payload.Id)
+
+	// logic inputan post
+	tugasAI.Username = docuser.Name
+	tugasAI.PhoneNumber = docuser.PhoneNumber
+	tugasAI.CreatedAt = time.Now()
+	tugasAI.StravaKM = score.StravaKM
+	tugasAI.Strava = score.Strava
+	tugasAI.IQresult = score.IQresult
+	tugasAI.IQ = score.IQ
+	tugasAI.MBC = score.MBC
+	tugasAI.MBCPoints = score.MBCPoints
+	tugasAI.RVN = score.RVN
+	tugasAI.RavencoinPoints = score.RavencoinPoints
+	tugasAI.QRIS = score.QRIS
+	tugasAI.QRISPoints = score.QRISPoints
+	tugasAI.Pomokitsesi = score.Pomokitsesi
+	tugasAI.Pomokit = score.Pomokit
+	tugasAI.AllTugas = score.AllTugas
+	tugasAI.StravaId = score.StravaId
+
+	startTime, endTime, err := GetWeeklyFridayRange(time.Now())
+	if err != nil {
+		respn.Status = "Error : Gagal mendapatkan range waktu"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	filter := primitive.M{
+		"phonenumber": payload.Id,
+		"createdAt": primitive.M{
+			"$gte": startTime.UTC(),
+			"$lt":  endTime.UTC(),
+		},
+	}
+
+	// Cari apakah ada data existing yang belum approved
+	existing, err := atdb.GetOneDoc[model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", filter)
+	if err == nil {
+		// Update data yang di minggu ini
+		tugasAI.ID = existing.ID
+		tugasAI.TugasKe = existing.TugasKe
+		tugasAI.CreatedAt = existing.CreatedAt
+		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "tugaskelasai1", primitive.M{"_id": existing.ID}, tugasAI)
+		if err != nil {
+			respn.Status = "Error : Gagal Update Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+	} else {
+		allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+		if err != nil {
+			respn.Status = "Error : Data tugasAI tidak di temukan"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusBadRequest, respn)
+			return
+		}
+		// Insert data baru
+		tugasAI.TugasKe = len(allDoc) + 1
+		_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai1", tugasAI)
+		if err != nil {
+			respn.Status = "Error : Gagal Insert Database"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusNotModified, respn)
+			return
+		}
+	}
+
+	at.WriteJSON(respw, http.StatusOK, tugasAI)
+}
+
+func GetDataTugasAI1(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	tugasailist, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data tugas ai"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	at.WriteJSON(respw, http.StatusOK, tugasailist)
+}
+
 func GetDataTugasAIById(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	id := at.GetParam(req)
@@ -161,9 +293,9 @@ func GetDataTugasAI(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	type TugasAI struct {
-		ID      primitive.ObjectID `json:"_id" bson:"_id"`
-		TugasKe int                `json:"tugaske" bson:"tugaske"`
-		Phonenumber string `json:"phonenumber" bson:"phonenumber"`
+		ID          primitive.ObjectID `json:"_id" bson:"_id"`
+		TugasKe     int                `json:"tugaske" bson:"tugaske"`
+		Phonenumber string             `json:"phonenumber" bson:"phonenumber"`
 	}
 
 	tugasailist, err := atdb.GetAllDoc[[]TugasAI](config.Mongoconn, "tugaskelasai", primitive.M{"phonenumber": payload.Id})
