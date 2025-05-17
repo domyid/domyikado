@@ -440,17 +440,46 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 }
 
 func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaId []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+	type TugasAI struct {
+		StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"`
+	}
+
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
 	// Query ke MongoDB
 	filter := bson.M{
+		"phonenumber": phonenumber,
+		"createdAt": bson.M{
+			"$gte": oneWeekAgo,
+		},
+	}
+
+	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Jika tidak ada data di tugaskelasai1, artinya semua strava boleh diambil
+			docsId = []TugasAI{}
+		} else {
+			return nil, activityscore, err
+		}
+	}
+
+	// Kumpulkan semua ObjectID stravaid dari docsId ke satu slice
+	var usedIDs []primitive.ObjectID
+	for _, tugas := range docsId {
+		usedIDs = append(usedIDs, tugas.StravaId...)
+	}
+
+	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
+	filter1 := bson.M{
+		"_id":          bson.M{"$nin": usedIDs},
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
 			"$gte": oneWeekAgo,
 		},
 	}
 
-	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter)
+	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter1)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return stravaId, activityscore, nil
