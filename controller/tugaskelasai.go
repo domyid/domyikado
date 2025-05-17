@@ -532,13 +532,13 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 			usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
 		}
 	} else {
-		usedStravaIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedIQIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedMBCIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedRavenIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedQrisIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedPomokitIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedTugasIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedStravaIDs = []primitive.ObjectID{}
+		usedIQIDs = []primitive.ObjectID{}
+		usedMBCIDs = []primitive.ObjectID{}
+		usedRavenIDs = []primitive.ObjectID{}
+		usedQrisIDs = []primitive.ObjectID{}
+		usedPomokitIDs = []primitive.ObjectID{}
+		usedTugasIDs = []primitive.ObjectID{}
 	}
 
 	tugasai := TugasAI{
