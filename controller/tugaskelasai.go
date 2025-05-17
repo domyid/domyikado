@@ -345,6 +345,7 @@ func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []pr
 	var filteredPomodoros []model.TugasPomodoro
 	for _, pomodoro := range pomodoros {
 		if pomodoro.CreatedAt.After(oneWeekAgo) && !usedMap[pomodoro.ID] {
+			resultIDs = append(resultIDs, pomodoro.ID)
 			urlKey := pomodoro.URLPekerjaan
 			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
 				urlKey = pomodoro.GTMetrixURLTarget
@@ -352,7 +353,6 @@ func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []pr
 			if _, exists := seenUrls[urlKey]; !exists {
 				filteredPomodoros = append(filteredPomodoros, pomodoro)
 				seenUrls[urlKey] = true
-				resultIDs = append(resultIDs, pomodoro.ID)
 			}
 		}
 	}
