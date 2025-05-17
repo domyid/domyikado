@@ -439,7 +439,7 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 	return activityscore, nil
 }
 
-func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaId []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+func GetLastWeekDataStravaPoin2(db *mongo.Database, phonenumber string) (stravaId []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	type TugasAI struct {
 		StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"`
 	}
@@ -509,37 +509,12 @@ func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string) (stravaI
 	return stravaId, activityscore, nil
 }
 
-func GetLastWeekDataStravaPoin2(db *mongo.Database, phonenumber string) (resultid []primitive.ObjectID, activityscore model.ScoreKelasAI1, err error) {
-	type TugasAI struct {
-		StravaId []primitive.ObjectID `bson:"stravaid" json:"stravaid"` //id strava
-	}
-
+func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ScoreKelasAI1, err error) {
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
-
-	filter := bson.M{
-		"phonenumber": phonenumber,
-		"createdAt": bson.M{
-			"$gte": oneWeekAgo,
-		},
-	}
-
-	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			// Tidak ada data, return slice kosong
-			return nil, activityscore, nil
-		}
-		return nil, activityscore, err
-	}
-
-	var usedStravaIDs []primitive.ObjectID
-	for _, tugas := range docsId {
-		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
-	}
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
 	filter1 := bson.M{
-		"_id":          bson.M{"$nin": usedStravaIDs},
+		"_id":          bson.M{"$nin": usedIDs},
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
 			"$gte": oneWeekAgo,

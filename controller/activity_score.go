@@ -223,63 +223,16 @@ func GetLastWeekScoreKelasAIData(userID string) (model.ScoreKelasAI, error) {
 	return score, nil
 }
 
-func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
-	var score model.ScoreKelasAI1
-
-	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoin1(config.Mongoconn, userID)
-	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
-	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
-	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
-	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
-	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
-	urlTugas, _ := GetPomokitDataKelasAI(config.Mongoconn, userID)
-
-	urls := make([]string, 0, len(urlTugas))
-	for _, tugas := range urlTugas {
-		if strings.Contains(tugas.URLPekerjaan, "gtmetrix.com") {
-			urls = append(urls, tugas.GTMetrixURLTarget)
-		} else {
-			urls = append(urls, tugas.URLPekerjaan)
-		}
-	}
-
-	score = model.ScoreKelasAI1{
-		StravaKM:        datastravapoin.StravaKM,
-		Strava:          datastravapoin.Strava,
-		IQresult:        dataIQ.IQresult,
-		IQ:              dataIQ.IQ,
-		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
-		Pomokit:         dataPomokitScore.Pomokit,
-		MBC:             dataMicroBitcoin.MBC,
-		MBCPoints:       dataMicroBitcoin.MBCPoints,
-		BlockChain:      dataMicroBitcoin.BlockChain,
-		RVN:             dataRavencoin.RVN,
-		RavencoinPoints: dataRavencoin.RavencoinPoints,
-		Rupiah:          dataQRIS.Rupiah,
-		QRIS:            dataQRIS.QRIS,
-		QRISPoints:      dataQRIS.QRISPoints,
-		AllTugas:        urls,
-		StravaId:        stravaId,
-	}
-
-	return score, nil
-}
-
 // func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 // 	var score model.ScoreKelasAI1
 
-// 	tugasai, err := GetUsedIDsKelasAI(config.Mongoconn, userID)
-// 	if err != nil {
-// 		return score, err
-// 	}
-
 // 	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoin1(config.Mongoconn, userID)
-// 	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelasAI(config.Mongoconn, userID, tugasai.IQId)
-// 	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelasAI(config.Mongoconn, userID, tugasai.PomokitId)
-// 	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelasAI(config.Mongoconn, userID, tugasai.MBCId)
-// 	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelasAI(config.Mongoconn, userID, tugasai.RavenId)
-// 	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelasAI(config.Mongoconn, userID, tugasai.QrisId)
-// 	tugasId, urlTugas, _ := GetPomokitDataKelasAI1(config.Mongoconn, userID, tugasai.TugasId)
+// 	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
+// 	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
+// 	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
+// 	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
+// 	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
+// 	urlTugas, _ := GetPomokitDataKelasAI(config.Mongoconn, userID)
 
 // 	urls := make([]string, 0, len(urlTugas))
 // 	for _, tugas := range urlTugas {
@@ -307,16 +260,63 @@ func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 // 		QRISPoints:      dataQRIS.QRISPoints,
 // 		AllTugas:        urls,
 // 		StravaId:        stravaId,
-// 		IQId:            iqId,
-// 		MBCId:           mbcId,
-// 		RavenId:         ravenId,
-// 		QrisId:          qrisId,
-// 		PomokitId:       pomokitId,
-// 		TugasId:         tugasId,
 // 	}
 
 // 	return score, nil
 // }
+
+func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
+	var score model.ScoreKelasAI1
+
+	tugasai, err := GetUsedIDsKelasAI(config.Mongoconn, userID)
+	if err != nil {
+		return score, err
+	}
+
+	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoin1(config.Mongoconn, userID, tugasai.StravaId)
+	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelasAI(config.Mongoconn, userID, tugasai.IQId)
+	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelasAI(config.Mongoconn, userID, tugasai.PomokitId)
+	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelasAI(config.Mongoconn, userID, tugasai.MBCId)
+	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelasAI(config.Mongoconn, userID, tugasai.RavenId)
+	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelasAI(config.Mongoconn, userID, tugasai.QrisId)
+	tugasId, urlTugas, _ := GetPomokitDataKelasAI1(config.Mongoconn, userID, tugasai.TugasId)
+
+	urls := make([]string, 0, len(urlTugas))
+	for _, tugas := range urlTugas {
+		if strings.Contains(tugas.URLPekerjaan, "gtmetrix.com") {
+			urls = append(urls, tugas.GTMetrixURLTarget)
+		} else {
+			urls = append(urls, tugas.URLPekerjaan)
+		}
+	}
+
+	score = model.ScoreKelasAI1{
+		StravaKM:        datastravapoin.StravaKM,
+		Strava:          datastravapoin.Strava,
+		IQresult:        dataIQ.IQresult,
+		IQ:              dataIQ.IQ,
+		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
+		Pomokit:         dataPomokitScore.Pomokit,
+		MBC:             dataMicroBitcoin.MBC,
+		MBCPoints:       dataMicroBitcoin.MBCPoints,
+		BlockChain:      dataMicroBitcoin.BlockChain,
+		RVN:             dataRavencoin.RVN,
+		RavencoinPoints: dataRavencoin.RavencoinPoints,
+		Rupiah:          dataQRIS.Rupiah,
+		QRIS:            dataQRIS.QRIS,
+		QRISPoints:      dataQRIS.QRISPoints,
+		AllTugas:        urls,
+		StravaId:        stravaId,
+		IQId:            iqId,
+		MBCId:           mbcId,
+		RavenId:         ravenId,
+		QrisId:          qrisId,
+		PomokitId:       pomokitId,
+		TugasId:         tugasId,
+	}
+
+	return score, nil
+}
 
 func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
 	var score model.ScoreKelasWS

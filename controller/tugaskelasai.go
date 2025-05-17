@@ -500,12 +500,17 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		},
 	}
 
+	// docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
+	// if err != nil {
+	// 	if err == mongo.ErrNoDocuments {
+	// 		// Tidak ada data, return slice kosong
+	// 		return TugasAI{}, nil
+	// 	}
+	// 	return TugasAI{}, err
+	// }
+
 	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			// Tidak ada data, return slice kosong
-			return TugasAI{}, nil
-		}
+	if err != nil && err != mongo.ErrNoDocuments {
 		return TugasAI{}, err
 	}
 
@@ -516,14 +521,24 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 	var usedQrisIDs []primitive.ObjectID
 	var usedPomokitIDs []primitive.ObjectID
 	var usedTugasIDs []primitive.ObjectID
-	for _, tugas := range docsId {
-		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
-		usedIQIDs = append(usedIQIDs, tugas.IQId...)
-		usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
-		usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
-		usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
-		usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
-		usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
+	if len(docsId) != 0 {
+		for _, tugas := range docsId {
+			usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
+			usedIQIDs = append(usedIQIDs, tugas.IQId...)
+			usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
+			usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
+			usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
+			usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
+			usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
+		}
+	} else {
+		usedStravaIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedIQIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedMBCIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedRavenIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedQrisIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedPomokitIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedTugasIDs = []primitive.ObjectID{primitive.NilObjectID}
 	}
 
 	tugasai := TugasAI{
