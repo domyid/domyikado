@@ -439,7 +439,7 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 	return activityscore, nil
 }
 
-func GetLastWeekDataStravaPoinKelasAI(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
@@ -456,13 +456,13 @@ func GetLastWeekDataStravaPoinKelasAI(db *mongo.Database, phonenumber string, us
 	docs, err := atdb.GetAllDoc[[]model.StravaPoin](db, "stravapoin1", filter1)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, activityscore, nil
+			return nil, model.ActivityScore{}, nil
 		}
-		return nil, activityscore, err
+		return nil, model.ActivityScore{}, err
 	}
 
 	if len(docs) == 0 {
-		return nil, activityscore, nil
+		return nil, model.ActivityScore{}, nil
 	}
 
 	var stravaId []primitive.ObjectID
