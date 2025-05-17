@@ -535,8 +535,8 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		usedStravaIDs = []primitive.ObjectID{}
 		usedIQIDs = []primitive.ObjectID{}
 		usedRavenIDs = []primitive.ObjectID{}
-		usedMBCIDs = []primitive.ObjectID{primitive.NilObjectID}
-		usedQrisIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedMBCIDs = []primitive.ObjectID{}
+		usedQrisIDs = []primitive.ObjectID{}
 		usedPomokitIDs = []primitive.ObjectID{}
 		usedTugasIDs = []primitive.ObjectID{}
 	}
