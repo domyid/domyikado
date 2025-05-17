@@ -237,7 +237,7 @@ func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelasAI(config.Mongoconn, userID, tugasai.MBCId)
 	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelasAI(config.Mongoconn, userID, tugasai.RavenId)
 	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelasAI(config.Mongoconn, userID, tugasai.QrisId)
-	urlTugas, _ := GetPomokitDataKelasAI1(config.Mongoconn, userID, pomokitId)
+	tugasId, urlTugas, _ := GetPomokitDataKelasAI1(config.Mongoconn, userID, tugasai.TugasId)
 
 	urls := make([]string, 0, len(urlTugas))
 	for _, tugas := range urlTugas {
@@ -270,6 +270,7 @@ func GetLastWeekScoreKelasAIData1(userID string) (model.ScoreKelasAI1, error) {
 		RavenId:         ravenId,
 		QrisId:          qrisId,
 		PomokitId:       pomokitId,
+		TugasId:         tugasId,
 	}
 
 	return score, nil

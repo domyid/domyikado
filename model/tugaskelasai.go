@@ -66,6 +66,7 @@ type ScoreKelasAI1 struct {
 	RavenId         []primitive.ObjectID `bson:"ravenid,omitempty" json:"ravenid,omitempty"`     //id ravencoin
 	QrisId          []primitive.ObjectID `bson:"qrisid,omitempty" json:"qrisid,omitempty"`       //id qris
 	PomokitId       []primitive.ObjectID `bson:"pomokitid,omitempty" json:"pomokitid,omitempty"` //id pomokit
+	TugasId         []primitive.ObjectID `bson:"tugasid,omitempty" json:"tugasid,omitempty"`     //id tugas
 }
 
 // type TugasKelasAI struct {

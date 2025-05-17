@@ -314,11 +314,13 @@ func GetDataTugasAI(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, tugasailist)
 }
 
-func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]model.TugasPomodoro, error) {
+func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, []model.TugasPomodoro, error) {
 	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	var resultIDs []primitive.ObjectID
 
 	// Buat map dari usedIDs untuk efisiensi pengecekan
 	usedMap := make(map[primitive.ObjectID]bool)
@@ -329,11 +331,11 @@ func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []pr
 	pomokitApi := conf.PomokitUrl + "/" + phonenumber
 	scode, pomodoros, err := atapi.Get[[]model.TugasPomodoro](pomokitApi)
 	if err != nil || scode != http.StatusOK {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(pomodoros) == 0 {
-		return nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
+		return nil, nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
 	}
 
 	// Ganti GetWeeklyFridayRange dengan 7 hari ke belakang
@@ -350,15 +352,16 @@ func GetPomokitDataKelasAI1(db *mongo.Database, phonenumber string, usedIDs []pr
 			if _, exists := seenUrls[urlKey]; !exists {
 				filteredPomodoros = append(filteredPomodoros, pomodoro)
 				seenUrls[urlKey] = true
+				resultIDs = append(resultIDs, pomodoro.ID)
 			}
 		}
 	}
 
 	if len(filteredPomodoros) == 0 {
-		return nil, fmt.Errorf("no pomodoros found for user %s in the last 7 days", phonenumber)
+		return nil, nil, fmt.Errorf("no pomodoros found for user %s in the last 7 days", phonenumber)
 	}
 
-	return filteredPomodoros, nil
+	return resultIDs, filteredPomodoros, nil
 }
 
 func GetPomokitDataKelasAI(db *mongo.Database, phonenumber string) ([]model.TugasPomodoro, error) {
@@ -482,6 +485,7 @@ type TugasAI struct {
 	RavenId   []primitive.ObjectID `bson:"ravenid" json:"ravenid"`     //id ravencoin
 	QrisId    []primitive.ObjectID `bson:"qrisid" json:"qrisid"`       //id qris
 	PomokitId []primitive.ObjectID `bson:"pomokitid" json:"pomokitid"` //id pomokit
+	TugasId   []primitive.ObjectID `bson:"tugasid" json:"tugasid"`     //id tugas
 }
 
 func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
@@ -510,6 +514,7 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 	var usedRavenIDs []primitive.ObjectID
 	var usedQrisIDs []primitive.ObjectID
 	var usedPomokitIDs []primitive.ObjectID
+	var usedTugasIDs []primitive.ObjectID
 	for _, tugas := range docsId {
 		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
 		usedIQIDs = append(usedIQIDs, tugas.IQId...)
@@ -517,6 +522,7 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
 		usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
 		usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
+		usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
 	}
 
 	tugasai := TugasAI{
@@ -526,6 +532,7 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		RavenId:   usedRavenIDs,
 		QrisId:    usedQrisIDs,
 		PomokitId: usedPomokitIDs,
+		TugasId:   usedTugasIDs,
 	}
 
 	return tugasai, nil
