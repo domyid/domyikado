@@ -442,14 +442,49 @@ func GetLastWeekDataStravaPoin(db *mongo.Database, phonenumber string, mode stri
 func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
 	var activityscore model.ActivityScore
 
-	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+	// oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	// // Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
+	// filter1 := bson.M{
+	// 	"_id":          bson.M{"$nin": usedIDs},
+	// 	"phone_number": phonenumber,
+	// 	"strava_created_at": bson.M{
+	// 		"$gte": oneWeekAgo,
+	// 	},
+	// }
+	var startTime, endTime time.Time
+
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+
+	if weekday == 0 {
+		weekday = 7 // Minggu jadi 7
+	}
+
+	// Mundur ke Jumat terakhir
+	// daysSinceFriday := (weekday + 2) % 7
+	// lastFriday := now.AddDate(0, 0, -daysSinceFriday)
+	daysSinceSaturday := (weekday + 1) % 7
+	lastSaturday := now.AddDate(0, 0, -daysSinceSaturday)
+
+	// Mulai dari Sabtu pukul 00:01 WIB
+	startTime = time.Date(lastSaturday.Year(), lastSaturday.Month(), lastSaturday.Day(), 0, 1, 0, 0, loc)
+
+	// Selesai Sabtu pukul 00:00 WIB
+	nextFriday := lastSaturday.AddDate(0, 0, 7)
+	endTime = time.Date(nextFriday.Year(), nextFriday.Month(), nextFriday.Day(), 0, 0, 0, 0, loc)
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs
 	filter1 := bson.M{
 		"_id":          bson.M{"$nin": usedIDs},
 		"phone_number": phonenumber,
 		"strava_created_at": bson.M{
-			"$gte": oneWeekAgo,
+			"$gte": startTime.UTC(),
+			"$lt":  endTime.UTC(),
 		},
 	}
 
