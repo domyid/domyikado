@@ -509,7 +509,7 @@ func GetLastWeekDataStravaPoin2(db *mongo.Database, phonenumber string) (stravaI
 	return stravaId, activityscore, nil
 }
 
-func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ScoreKelasAI1, err error) {
+func GetLastWeekDataStravaPoin1(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
 	// Buat filter untuk stravapoin1 agar id nya tidak ada di usedIDs

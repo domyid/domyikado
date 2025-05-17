@@ -3854,7 +3854,7 @@ func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod 
 }
 
 // GetLastWeekDataMicroBitcoinScore gets MBC data for the last week only
-func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
 	// Calculate the date one week ago
@@ -3873,7 +3873,7 @@ func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber str
 
 	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
 	if err != nil {
-		return usedIDs, activityScore, err
+		return nil, activityScore, err
 	}
 	defer cursor.Close(context.Background())
 
@@ -3881,12 +3881,12 @@ func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber str
 	var totalMBC float32 = 0
 	var payments []model.CrowdfundingOrder
 	if err = cursor.All(context.Background(), &payments); err != nil {
-		return usedIDs, activityScore, err
+		return nil, activityScore, err
 	}
 
 	// Sum up the total MBC amount
 	for _, payment := range payments {
-		usedIDs = append(usedIDs, payment.ID)
+		resultid = append(resultid, payment.ID)
 		totalMBC += float32(payment.Amount)
 	}
 
@@ -3903,11 +3903,11 @@ func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber str
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
-	return usedIDs, activityScore, nil
+	return resultid, activityScore, nil
 }
 
 // GetLastWeekDataRavencoinScore gets RVN data for the last week only
-func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
 	// Calculate the date one week ago
@@ -3926,7 +3926,7 @@ func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string
 
 	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
 	if err != nil {
-		return usedIDs, activityScore, err
+		return nil, activityScore, err
 	}
 	defer cursor.Close(context.Background())
 
@@ -3934,12 +3934,12 @@ func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string
 	var totalRVN float32 = 0
 	var payments []model.CrowdfundingOrder
 	if err = cursor.All(context.Background(), &payments); err != nil {
-		return usedIDs, activityScore, err
+		return nil, activityScore, err
 	}
 
 	// Sum up the total RVN amount
 	for _, payment := range payments {
-		usedIDs = append(usedIDs, payment.ID)
+		resultid = append(resultid, payment.ID)
 		totalRVN += float32(payment.Amount)
 	}
 
@@ -3952,11 +3952,11 @@ func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
-	return usedIDs, activityScore, nil
+	return resultid, activityScore, nil
 }
 
 // GetLastWeekDataQRISScore gets QRIS data for the last week only
-func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
 	// Calculate the date one week ago
@@ -3975,7 +3975,7 @@ func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, use
 
 	cursor, err := db.Collection("crowdfundingorders").Find(context.Background(), filter)
 	if err != nil {
-		return usedIDs, activityScore, err
+		return nil, activityScore, err
 	}
 	defer cursor.Close(context.Background())
 
@@ -3983,12 +3983,12 @@ func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, use
 	var totalRupiah int = 0
 	var payments []model.CrowdfundingOrder
 	if err = cursor.All(context.Background(), &payments); err != nil {
-		return usedIDs, activityScore, err
+		return nil, activityScore, err
 	}
 
 	// Sum up the total QRIS amount
 	for _, payment := range payments {
-		usedIDs = append(usedIDs, payment.ID)
+		resultid = append(resultid, payment.ID)
 		totalRupiah += int(payment.Amount)
 	}
 
@@ -4005,5 +4005,5 @@ func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, use
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
-	return usedIDs, activityScore, nil
+	return resultid, activityScore, nil
 }

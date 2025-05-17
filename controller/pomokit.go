@@ -634,9 +634,8 @@ func GetLastWeekPomokitScoreForUser(phoneNumber string) (model.ActivityScore, er
 }
 
 // Fungsi untuk mendapatkan skor Pomokit seminggu terakhir kelas ai
-func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, model.ActivityScore, error) {
+func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var score model.ActivityScore
-	var resultIDs []primitive.ObjectID
 
 	// Buat map dari usedIDs untuk efisiensi pengecekan
 	usedMap := make(map[primitive.ObjectID]bool)
@@ -661,7 +660,7 @@ func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, used
 			report.CreatedAt.After(weekAgo) &&
 			!usedMap[report.ID] {
 
-			resultIDs = append(resultIDs, report.ID)
+			resultid = append(resultid, report.ID)
 			sessionCount++
 		}
 	}
@@ -670,5 +669,5 @@ func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, used
 	score.Pomokitsesi = sessionCount
 	score.Pomokit = sessionCount * 20 // 20 per cycle
 
-	return resultIDs, score, nil
+	return resultid, score, nil
 }
