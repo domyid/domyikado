@@ -500,45 +500,29 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		},
 	}
 
-	// docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
-	// if err != nil {
-	// 	if err == mongo.ErrNoDocuments {
-	// 		// Tidak ada data, return slice kosong
-	// 		return TugasAI{}, nil
-	// 	}
-	// 	return TugasAI{}, err
-	// }
-
 	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return TugasAI{}, err
 	}
 
-	var usedStravaIDs []primitive.ObjectID
-	var usedIQIDs []primitive.ObjectID
-	var usedMBCIDs []primitive.ObjectID
-	var usedRavenIDs []primitive.ObjectID
-	var usedQrisIDs []primitive.ObjectID
-	var usedPomokitIDs []primitive.ObjectID
-	var usedTugasIDs []primitive.ObjectID
-	if len(docsId) != 0 {
-		for _, tugas := range docsId {
-			usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
-			usedIQIDs = append(usedIQIDs, tugas.IQId...)
-			usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
-			usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
-			usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
-			usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
-			usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
-		}
-	} else {
-		usedStravaIDs = []primitive.ObjectID{}
-		usedIQIDs = []primitive.ObjectID{}
-		usedRavenIDs = []primitive.ObjectID{}
-		usedMBCIDs = []primitive.ObjectID{}
-		usedQrisIDs = []primitive.ObjectID{}
-		usedPomokitIDs = []primitive.ObjectID{}
-		usedTugasIDs = []primitive.ObjectID{}
+	// Inisialisasi dengan slice kosong
+	usedStravaIDs := []primitive.ObjectID{}
+	usedIQIDs := []primitive.ObjectID{}
+	usedMBCIDs := []primitive.ObjectID{}
+	usedRavenIDs := []primitive.ObjectID{}
+	usedQrisIDs := []primitive.ObjectID{}
+	usedPomokitIDs := []primitive.ObjectID{}
+	usedTugasIDs := []primitive.ObjectID{}
+
+	// Tambahkan jika ada data
+	for _, tugas := range docsId {
+		usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
+		usedIQIDs = append(usedIQIDs, tugas.IQId...)
+		usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
+		usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
+		usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
+		usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
+		usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
 	}
 
 	tugasai := TugasAI{
