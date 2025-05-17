@@ -404,7 +404,7 @@ func GetLastWeekDataIQScoreKelasAI(db *mongo.Database, phonenumber string, usedI
 	filter1 := bson.M{
 		"_id":         bson.M{"$nin": usedIDs},
 		"phonenumber": phonenumber,
-		"strava_created_at": bson.M{
+		"created_at": bson.M{
 			"$gte": oneWeekAgo,
 		},
 	}
