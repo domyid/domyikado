@@ -525,8 +525,8 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		for _, tugas := range docsId {
 			usedStravaIDs = append(usedStravaIDs, tugas.StravaId...)
 			usedIQIDs = append(usedIQIDs, tugas.IQId...)
-			usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
 			usedRavenIDs = append(usedRavenIDs, tugas.RavenId...)
+			usedMBCIDs = append(usedMBCIDs, tugas.MBCId...)
 			usedQrisIDs = append(usedQrisIDs, tugas.QrisId...)
 			usedPomokitIDs = append(usedPomokitIDs, tugas.PomokitId...)
 			usedTugasIDs = append(usedTugasIDs, tugas.TugasId...)
@@ -534,9 +534,9 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 	} else {
 		usedStravaIDs = []primitive.ObjectID{}
 		usedIQIDs = []primitive.ObjectID{}
-		usedMBCIDs = []primitive.ObjectID{}
 		usedRavenIDs = []primitive.ObjectID{}
-		usedQrisIDs = []primitive.ObjectID{}
+		usedMBCIDs = []primitive.ObjectID{primitive.NilObjectID}
+		usedQrisIDs = []primitive.ObjectID{primitive.NilObjectID}
 		usedPomokitIDs = []primitive.ObjectID{}
 		usedTugasIDs = []primitive.ObjectID{}
 	}
