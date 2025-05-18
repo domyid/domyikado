@@ -3862,6 +3862,11 @@ func calculateQRISPoints(db *mongo.Database, amount int) float64 {
 	// Calculate points: (user's amount / average amount) * 100
 	points := (float64(amount) / avgAmount) * 100
 
+	// Cap points at 100
+	if points > 100 {
+		points = 100
+	}
+
 	return points
 }
 
@@ -3905,13 +3910,12 @@ func calculateQRISScore(db *mongo.Database, amount int) int {
 		avgAmount = 10000 // Default average QRIS amount (IDR)
 	}
 
-	// Calculate score: (user's amount / average amount) * 100, max 100
+	// Calculate score: (user's amount / average amount) * 100
 	score := int((float64(amount) / avgAmount) * 100)
 
-	// Cap score at 100
-	if score > 100 {
-		score = 100
-	}
+	// if score > 100 {
+	//     score = 100
+	// }
 
 	return score
 }
