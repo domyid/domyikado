@@ -381,8 +381,93 @@ func GetUserInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CleanupExpiredQueue automatically cleans up any expired payment queue entries
+func CleanupExpiredQueue() {
+	// Get current queue status
+	var queue model.CrowdfundingQueue
+	err := config.Mongoconn.Collection("crowdfundingqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
+
+	if err != nil {
+		// If queue document doesn't exist, no cleanup needed
+		return
+	}
+
+	// Check if there's an active payment that has expired
+	if queue.IsProcessing && !queue.ExpiryTime.IsZero() && time.Now().After(queue.ExpiryTime) {
+		log.Printf("Found expired payment in queue, order ID: %s, expiry time: %v", queue.CurrentOrderID, queue.ExpiryTime)
+
+		// The payment has expired, reset the queue
+		_, err = config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
+			context.Background(),
+			bson.M{},
+			bson.M{"$set": bson.M{
+				"isProcessing":   false,
+				"currentOrderId": "",
+				"paymentMethod":  "",
+				"expiryTime":     time.Time{},
+			}},
+		)
+
+		if err != nil {
+			log.Printf("Error resetting expired queue: %v", err)
+			sendCrowdfundingDiscordEmbed(
+				"🔴 Error: Queue Reset Failed",
+				"Failed to reset expired queue during cleanup.",
+				ColorRed,
+				[]DiscordEmbedField{
+					{Name: "Error", Value: err.Error(), Inline: false},
+					{Name: "Order ID", Value: queue.CurrentOrderID, Inline: true},
+					{Name: "Expiry Time", Value: queue.ExpiryTime.Format(time.RFC3339), Inline: true},
+				},
+			)
+		} else {
+			log.Println("Successfully reset expired payment queue")
+			sendCrowdfundingDiscordEmbed(
+				"🕒 Queue: Expired Payment Cleaned Up",
+				"Successfully reset expired payment queue during cleanup.",
+				ColorYellow,
+				[]DiscordEmbedField{
+					{Name: "Order ID", Value: queue.CurrentOrderID, Inline: true},
+					{Name: "Payment Method", Value: string(queue.PaymentMethod), Inline: true},
+					{Name: "Expiry Time", Value: queue.ExpiryTime.Format(time.RFC3339), Inline: true},
+				},
+			)
+
+			// Also update the order status if it exists
+			if queue.CurrentOrderID != "" {
+				_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(
+					context.Background(),
+					bson.M{"orderId": queue.CurrentOrderID},
+					bson.M{"$set": bson.M{
+						"status":    "failed",
+						"updatedAt": time.Now(),
+					}},
+				)
+
+				if err != nil {
+					log.Printf("Error updating expired order status: %v", err)
+					sendCrowdfundingDiscordEmbed(
+						"🔴 Error: Order Status Update Failed",
+						"Failed to update expired order status during cleanup.",
+						ColorRed,
+						[]DiscordEmbedField{
+							{Name: "Error", Value: err.Error(), Inline: false},
+							{Name: "Order ID", Value: queue.CurrentOrderID, Inline: true},
+						},
+					)
+				} else {
+					log.Printf("Successfully updated order status to 'failed' for expired payment: %s", queue.CurrentOrderID)
+				}
+			}
+		}
+	}
+}
+
 // CheckQueueStatus checks if there's an active payment in the queue
 func CheckQueueStatus(w http.ResponseWriter, r *http.Request) {
+	// Clean up any expired queues first
+	CleanupExpiredQueue()
+
 	var queue model.CrowdfundingQueue
 	err := config.Mongoconn.Collection("crowdfundingqueue").FindOne(context.Background(), bson.M{}).Decode(&queue)
 	if err != nil {
@@ -398,6 +483,39 @@ func CheckQueueStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Additional check for expired payments
+	// This is a double-check in case cleanup didn't work for some reason
+	if queue.IsProcessing && !queue.ExpiryTime.IsZero() && time.Now().After(queue.ExpiryTime) {
+		log.Printf("Detected expired payment in CheckQueueStatus: %s, expired at %v",
+			queue.CurrentOrderID, queue.ExpiryTime)
+
+		// Try once more to reset the queue
+		_, updateErr := config.Mongoconn.Collection("crowdfundingqueue").UpdateOne(
+			context.Background(),
+			bson.M{},
+			bson.M{"$set": bson.M{
+				"isProcessing":   false,
+				"currentOrderId": "",
+				"paymentMethod":  "",
+				"expiryTime":     time.Time{},
+			}},
+		)
+
+		if updateErr != nil {
+			log.Printf("Error in CheckQueueStatus when trying to reset expired queue: %v", updateErr)
+		}
+
+		// If payment has expired, return non-processing status regardless of DB update
+		// This ensures front-end can proceed even if DB update failed
+		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
+			Success:      true,
+			IsProcessing: false,
+			Message:      "Previous payment session expired",
+		})
+		return
+	}
+
+	// Normal response with current queue status
 	at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 		Success:       true,
 		IsProcessing:  queue.IsProcessing,
