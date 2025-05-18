@@ -3575,9 +3575,14 @@ func GetAllDataRavencoinScore(db *mongo.Database, phoneNumber string) (model.Act
 	// Calculate Ravencoin points
 	ravencoinPoints := calculateRavencoinPoints(db, totalRVN)
 
+	// Calculate Ravencoin score using the new function
+	ravencoinScore := calculateRavencoinScore(db, totalRVN)
+
 	// Set the activity score values
 	activityScore.RVN = totalRVN
 	activityScore.RavencoinPoints = ravencoinPoints
+	// Add the Ravencoin score to the Blockchain field
+	activityScore.BlockChain = ravencoinScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
@@ -3622,9 +3627,14 @@ func GetLastWeekDataRavencoinScore(db *mongo.Database, phoneNumber string) (mode
 	// Calculate Ravencoin points
 	ravencoinPoints := calculateRavencoinPoints(db, totalRVN)
 
+	// Calculate Ravencoin score using the new function
+	ravencoinScore := calculateRavencoinScore(db, totalRVN)
+
 	// Set the activity score values
 	activityScore.RVN = totalRVN
 	activityScore.RavencoinPoints = ravencoinPoints
+	// Add the Ravencoin score to the Blockchain field
+	activityScore.BlockChain = ravencoinScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
@@ -3769,6 +3779,10 @@ func calculateMBCPoints(db *mongo.Database, amount float32) float64 {
 
 	// Calculate points: (user's amount / average amount) * 100
 	points := (float64(amount) / avgAmount) * 100
+	// Cap points at 100
+	if points > 100 {
+		points = 100
+	}
 
 	return points
 }
@@ -3815,6 +3829,10 @@ func calculateRavencoinPoints(db *mongo.Database, amount float32) float64 {
 
 	// Calculate points: (user's amount / average amount) * 100
 	points := (float64(amount) / avgAmount) * 100
+
+	if points > 100 {
+		points = 100
+	}
 
 	return points
 }
@@ -3920,6 +3938,53 @@ func calculateQRISScore(db *mongo.Database, amount int) int {
 	return score
 }
 
+// Helper function to calculate Ravencoin score based on payment amount
+func calculateRavencoinScore(db *mongo.Database, amount float32) int {
+	// Get average Ravencoin payment amount
+	var avgAmount float64
+
+	// Aggregate to find average - using properly keyed fields
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"paymentMethod": model.Ravencoin,
+			"status":        "success",
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":       nil,
+			"avgAmount": bson.M{"$avg": "$amount"},
+		}}},
+	}
+
+	cursor, err := db.Collection("crowdfundingorders").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return 0
+	}
+	defer cursor.Close(context.Background())
+
+	// Extract result
+	var result struct {
+		AvgAmount float64 `bson:"avgAmount"`
+	}
+
+	if cursor.Next(context.Background()) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0
+		}
+		avgAmount = result.AvgAmount
+	}
+
+	// If no average found or it's zero, use a default value
+	if avgAmount <= 0 {
+		avgAmount = 1 // Default average for Ravencoin
+	}
+
+	// Calculate score: (user's amount / average amount) * 100
+	score := int((float64(amount) / avgAmount) * 100)
+
+	// No capping at 100 for score calculation
+	return score
+}
+
 // Helper function to calculate blockchain score based on payment amount
 func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod model.PaymentMethod) int {
 	// Get average payment amount for this payment method
@@ -3967,10 +4032,10 @@ func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod 
 	// Calculate score: (user's amount / average amount) * 100, max 100
 	score := int((float64(amount) / avgAmount) * 100)
 
-	// Cap score at 100
-	if score > 100 {
-		score = 100
-	}
+	// // Cap score at 100
+	// if score > 100 {
+	// 	score = 100
+	// }
 
 	return score
 }
@@ -4028,7 +4093,7 @@ func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber str
 	return resultid, activityScore, nil
 }
 
-// GetLastWeekDataRavencoinScore gets RVN data for the last week only
+// GetLastWeekDataRavencoinScoreKelasAI gets RVN data for the last week only for KelasAI
 func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
@@ -4059,7 +4124,7 @@ func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string
 		return nil, activityScore, err
 	}
 
-	// Sum up the total RVN amount
+	// Sum up the total RVN amount and collect IDs
 	for _, payment := range payments {
 		resultid = append(resultid, payment.ID)
 		totalRVN += float32(payment.Amount)
@@ -4068,9 +4133,14 @@ func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string
 	// Calculate Ravencoin points
 	ravencoinPoints := calculateRavencoinPoints(db, totalRVN)
 
+	// Calculate Ravencoin score using the new function
+	ravencoinScore := calculateRavencoinScore(db, totalRVN)
+
 	// Set the activity score values
 	activityScore.RVN = totalRVN
 	activityScore.RavencoinPoints = ravencoinPoints
+	// Add the Ravencoin score to the Blockchain field
+	activityScore.BlockChain = ravencoinScore
 	activityScore.PhoneNumber = phoneNumber
 	activityScore.CreatedAt = time.Now()
 
