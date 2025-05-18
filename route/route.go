@@ -351,22 +351,24 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "GET" && at.URLParam(path, "/data/tugaskelasws/:id"):
 		controller.GetDataTugasWSById(w, r)
 	// kelas ai
+	// case method == "POST" && path == "/data/tugaskelasai1":
+	// 	controller.PostTugasKelasAI(w, r)
+	// case method == "GET" && path == "/data/tugaskelasai1/weekly":
+	// 	controller.GetLastWeekScoreKelasAI(w, r)
+	// case method == "GET" && path == "/data/tugaskelasai1":
+	// 	controller.GetDataTugasAI(w, r)
+	// case method == "GET" && at.URLParam(path, "/data/tugaskelasai/:id"):
+	// 	controller.GetDataTugasAIById(w, r)
+
+		// kelas ai
 	case method == "POST" && path == "/data/tugaskelasai":
-		controller.PostTugasKelasAI(w, r)
+		controller.PostTugasKelasAI1(w, r)
 	case method == "GET" && path == "/data/tugaskelasai/weekly":
-		controller.GetLastWeekScoreKelasAI(w, r)
+		controller.GetLastWeekScoreKelasAI1(w, r)
 	case method == "GET" && path == "/data/tugaskelasai":
-		controller.GetDataTugasAI(w, r)
+		controller.GetDataTugasAI1(w, r)
 	case method == "GET" && at.URLParam(path, "/data/tugaskelasai/:id"):
 		controller.GetDataTugasAIById(w, r)
-
-		// coba
-	case method == "POST" && path == "/data/tugaskelasai1":
-		controller.PostTugasKelasAI1(w, r)
-	case method == "GET" && path == "/data/tugaskelasai1/weekly":
-		controller.GetLastWeekScoreKelasAI1(w, r)
-	case method == "GET" && path == "/data/tugaskelasai1":
-		controller.GetDataTugasAI1(w, r)
 	default:
 		controller.NotFound(w, r)
 	}

@@ -500,7 +500,7 @@ func GetUsedIDsKelasAI(db *mongo.Database, userID string) (TugasAI, error) {
 		},
 	}
 
-	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai1", filter)
+	docsId, err := atdb.GetAllDoc[[]TugasAI](db, "tugaskelasai", filter)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return TugasAI{}, err
 	}
