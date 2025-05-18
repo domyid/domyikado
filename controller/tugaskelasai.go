@@ -220,7 +220,7 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	// 		return
 	// 	}
 	// } else {
-	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+	allDoc, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Data tugasAI tidak di temukan"
 		respn.Response = err.Error()
@@ -229,7 +229,7 @@ func PostTugasKelasAI1(respw http.ResponseWriter, req *http.Request) {
 	}
 	// Insert data baru
 	tugasAI.TugasKe = len(allDoc) + 1
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai1", tugasAI)
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "tugaskelasai", tugasAI)
 	if err != nil {
 		respn.Status = "Error : Gagal Insert Database"
 		respn.Response = err.Error()
@@ -253,7 +253,7 @@ func GetDataTugasAI1(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	tugasailist, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai1", primitive.M{"phonenumber": payload.Id})
+	tugasailist, err := atdb.GetAllDoc[[]model.ScoreKelasAI1](config.Mongoconn, "tugaskelasai", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data tugas ai"
 		respn.Response = err.Error()
