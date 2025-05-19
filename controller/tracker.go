@@ -140,6 +140,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userinfo.Tanggal_Ambil = waktusekarang
+	FactCheck2(w, r, userinfo)
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackerip", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
