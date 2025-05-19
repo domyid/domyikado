@@ -244,7 +244,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.GenerateTrackerToken(w, r)
-	case method == "GET" && path == "/api/tracker/testing":
+	case method == "POST" && path == "/api/tracker/testing":
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
 			return
