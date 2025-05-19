@@ -18,7 +18,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	var method, path string = r.Method, r.URL.Path
 	//tracker website yang dipasang di masing2 web peserta
 	origin := r.Header.Get("Origin")
-	if method == http.MethodOptions && (path == "/api/tracker" || path == "/api/tracker/token" || path == "/api/trackertesting") {
+	if method == http.MethodOptions && (path == "/api/tracker" || path == "/api/tracker/token" || path == "/api/tracker/testing") {
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
 			return
