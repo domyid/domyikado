@@ -4041,7 +4041,7 @@ func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod 
 }
 
 // GetLastWeekDataMicroBitcoinScore gets MBC data for the last week only
-func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+func GetLastWeekDataMicroBitcoinScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
 	// Calculate the date one week ago
@@ -4094,7 +4094,7 @@ func GetLastWeekDataMicroBitcoinScoreKelasAI(db *mongo.Database, phoneNumber str
 }
 
 // GetLastWeekDataRavencoinScoreKelasAI gets RVN data for the last week only for KelasAI
-func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+func GetLastWeekDataRavencoinScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
 	// Calculate the date one week ago
@@ -4148,7 +4148,7 @@ func GetLastWeekDataRavencoinScoreKelasAI(db *mongo.Database, phoneNumber string
 }
 
 // GetLastWeekDataQRISScore gets QRIS data for the last week only
-func GetLastWeekDataQRISScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+func GetLastWeekDataQRISScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var activityScore model.ActivityScore
 
 	// Calculate the date one week ago

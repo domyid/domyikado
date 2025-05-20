@@ -15,6 +15,7 @@ import (
 
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atapi"
+	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/helper/whatsauth"
@@ -634,7 +635,7 @@ func GetLastWeekPomokitScoreForUser(phoneNumber string) (model.ActivityScore, er
 }
 
 // Fungsi untuk mendapatkan skor Pomokit seminggu terakhir kelas ai
-func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
+func GetLastWeekPomokitScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
 	var score model.ActivityScore
 
 	// Buat map dari usedIDs untuk efisiensi pengecekan
@@ -670,4 +671,53 @@ func GetLastWeekPomokitScoreKelasAI(db *mongo.Database, phoneNumber string, used
 	score.Pomokit = sessionCount * 20 // 20 per cycle
 
 	return resultid, score, nil
+}
+
+func GetPomokitDataKelas(db *mongo.Database, phonenumber string, usedIDs []primitive.ObjectID) ([]primitive.ObjectID, []model.TugasPomodoro, error) {
+	conf, err := atdb.GetOneDoc[model.Config](db, "config", bson.M{"phonenumber": "62895601060000"})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var resultIDs []primitive.ObjectID
+
+	// Buat map dari usedIDs untuk efisiensi pengecekan
+	usedMap := make(map[primitive.ObjectID]bool)
+	for _, id := range usedIDs {
+		usedMap[id] = true
+	}
+
+	pomokitApi := conf.PomokitUrl + "/" + phonenumber
+	scode, pomodoros, err := atapi.Get[[]model.TugasPomodoro](pomokitApi)
+	if err != nil || scode != http.StatusOK {
+		return nil, nil, err
+	}
+
+	if len(pomodoros) == 0 {
+		return nil, nil, fmt.Errorf("no pomodoros found for user %s", phonenumber)
+	}
+
+	oneWeekAgo := time.Now().AddDate(0, 0, -7)
+
+	seenUrls := make(map[string]bool)
+	var filteredPomodoros []model.TugasPomodoro
+	for _, pomodoro := range pomodoros {
+		if pomodoro.CreatedAt.After(oneWeekAgo) && !usedMap[pomodoro.ID] {
+			resultIDs = append(resultIDs, pomodoro.ID)
+			urlKey := pomodoro.URLPekerjaan
+			if strings.Contains(pomodoro.URLPekerjaan, "gtmetrix.com") {
+				urlKey = pomodoro.GTMetrixURLTarget
+			}
+			if _, exists := seenUrls[urlKey]; !exists {
+				filteredPomodoros = append(filteredPomodoros, pomodoro)
+				seenUrls[urlKey] = true
+			}
+		}
+	}
+
+	if len(filteredPomodoros) == 0 {
+		return nil, nil, fmt.Errorf("no pomodoros found for user %s in the last 7 days", phonenumber)
+	}
+
+	return resultIDs, filteredPomodoros, nil
 }
