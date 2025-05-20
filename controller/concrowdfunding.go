@@ -4041,9 +4041,7 @@ func calculateBlockchainScore(db *mongo.Database, amount float32, paymentMethod 
 }
 
 // GetLastWeekDataMicroBitcoinScore gets MBC data for the last week only
-func GetLastWeekDataMicroBitcoinScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
-	var activityScore model.ActivityScore
-
+func GetLastWeekDataMicroBitcoinScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityScore model.ActivityScore, err error) {
 	// Calculate the date one week ago
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
@@ -4087,16 +4085,12 @@ func GetLastWeekDataMicroBitcoinScoreKelas(db *mongo.Database, phoneNumber strin
 	activityScore.MBC = totalMBC
 	activityScore.MBCPoints = mbcPoints
 	activityScore.BlockChain = blockchainScore
-	activityScore.PhoneNumber = phoneNumber
-	activityScore.CreatedAt = time.Now()
 
 	return resultid, activityScore, nil
 }
 
 // GetLastWeekDataRavencoinScoreKelasAI gets RVN data for the last week only for KelasAI
-func GetLastWeekDataRavencoinScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
-	var activityScore model.ActivityScore
-
+func GetLastWeekDataRavencoinScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityScore model.ActivityScore, err error) {
 	// Calculate the date one week ago
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
@@ -4141,16 +4135,12 @@ func GetLastWeekDataRavencoinScoreKelas(db *mongo.Database, phoneNumber string, 
 	activityScore.RavencoinPoints = ravencoinPoints
 	// Add the Ravencoin score to the Blockchain field
 	activityScore.BlockChain = ravencoinScore
-	activityScore.PhoneNumber = phoneNumber
-	activityScore.CreatedAt = time.Now()
 
 	return resultid, activityScore, nil
 }
 
 // GetLastWeekDataQRISScore gets QRIS data for the last week only
-func GetLastWeekDataQRISScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityscore model.ActivityScore, err error) {
-	var activityScore model.ActivityScore
-
+func GetLastWeekDataQRISScoreKelas(db *mongo.Database, phoneNumber string, usedIDs []primitive.ObjectID) (resultid []primitive.ObjectID, activityScore model.ActivityScore, err error) {
 	// Calculate the date one week ago
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
@@ -4194,8 +4184,6 @@ func GetLastWeekDataQRISScoreKelas(db *mongo.Database, phoneNumber string, usedI
 	activityScore.Rupiah = totalRupiah
 	activityScore.QRISPoints = qrisPoints
 	activityScore.QRIS = qrisScore
-	activityScore.PhoneNumber = phoneNumber
-	activityScore.CreatedAt = time.Now()
 
 	return resultid, activityScore, nil
 }
