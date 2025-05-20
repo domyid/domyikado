@@ -184,21 +184,21 @@ func GetDataTugasById(col string, objectId primitive.ObjectID) (model.ScoreKelas
 	return tugas, nil
 }
 
-func GetLastWeekScoreKelasData(col, userID string) (model.ScoreKelas, error) {
+func GetLastWeekScoreKelasData(col, phonenumber string) (model.ScoreKelas, error) {
 	var score model.ScoreKelas
 
-	tugasai, err := GetUsedIDKelas(config.Mongoconn, userID, col)
+	tugasai, err := GetUsedIDKelas(config.Mongoconn, phonenumber, col)
 	if err != nil {
 		return score, err
 	}
 
-	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoinKelas(config.Mongoconn, userID, tugasai.StravaId)
-	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelas(config.Mongoconn, userID, tugasai.IQId)
-	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelas(config.Mongoconn, userID, tugasai.PomokitId)
-	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelas(config.Mongoconn, userID, tugasai.MBCId)
-	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelas(config.Mongoconn, userID, tugasai.RavenId)
-	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelas(config.Mongoconn, userID, tugasai.QrisId)
-	tugasId, urlTugas, _ := GetPomokitDataKelas(config.Mongoconn, userID, tugasai.TugasId)
+	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoinKelas(config.Mongoconn, phonenumber, tugasai.StravaId)
+	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelas(config.Mongoconn, phonenumber, tugasai.IQId)
+	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelas(config.Mongoconn, phonenumber, tugasai.PomokitId)
+	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelas(config.Mongoconn, phonenumber, tugasai.MBCId)
+	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelas(config.Mongoconn, phonenumber, tugasai.RavenId)
+	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelas(config.Mongoconn, phonenumber, tugasai.QrisId)
+	tugasId, urlTugas, _ := GetPomokitDataKelas(config.Mongoconn, phonenumber, tugasai.TugasId)
 
 	urls := make([]string, 0, len(urlTugas))
 	for _, tugas := range urlTugas {
@@ -237,12 +237,12 @@ func GetLastWeekScoreKelasData(col, userID string) (model.ScoreKelas, error) {
 	return score, nil
 }
 
-func GetUsedIDKelas(db *mongo.Database, userID, col string) (model.TugasKelasId, error) {
+func GetUsedIDKelas(db *mongo.Database, phonenumber, col string) (model.TugasKelasId, error) {
 	oneWeekAgo := time.Now().AddDate(0, 0, -7)
 
 	// Filter untuk mengambil data tugaskelas milik user dalam 7 hari terakhir
 	filter := bson.M{
-		"phonenumber": userID,
+		"phonenumber": phonenumber,
 		"createdAt": bson.M{
 			"$gte": oneWeekAgo,
 		},
