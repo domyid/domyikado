@@ -55,4 +55,5 @@ type Tugas struct {
 	ID          primitive.ObjectID `json:"_id" bson:"_id"`
 	TugasKe     int                `json:"tugaske" bson:"tugaske"`
 	Phonenumber string             `json:"phonenumber" bson:"phonenumber"`
+	Kelas       string             `bson:"kelas" json:"kelas"`
 }
