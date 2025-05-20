@@ -3,11 +3,13 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
 	"github.com/gocroot/helper/atdb"
+	"github.com/gocroot/helper/report"
 	"github.com/gocroot/helper/watoken"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson"
@@ -99,6 +101,22 @@ func GetDataTugasAI(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, tugasailist)
 }
 
+func GetLastWeekScoreKelasAI(w http.ResponseWriter, r *http.Request) {
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	score, _ := GetLastWeekScoreKelasData("tugaskelasai", authorization.Id)
+	at.WriteJSON(w, http.StatusOK, score)
+}
+
 // helper function
 func PostTugasKelas(col, phonenumber string, tugas model.ScoreKelas) (model.ScoreKelas, error) {
 	//validasi eksistensi user di db
@@ -164,6 +182,59 @@ func GetDataTugasById(col string, objectId primitive.ObjectID) (model.ScoreKelas
 	}
 
 	return tugas, nil
+}
+
+func GetLastWeekScoreKelasData(col, userID string) (model.ScoreKelas, error) {
+	var score model.ScoreKelas
+
+	tugasai, err := GetUsedIDKelas(config.Mongoconn, userID, col)
+	if err != nil {
+		return score, err
+	}
+
+	stravaId, datastravapoin, _ := report.GetLastWeekDataStravaPoinKelas(config.Mongoconn, userID, tugasai.StravaId)
+	iqId, dataIQ, _ := report.GetLastWeekDataIQScoreKelas(config.Mongoconn, userID, tugasai.IQId)
+	pomokitId, dataPomokitScore, _ := GetLastWeekPomokitScoreKelas(config.Mongoconn, userID, tugasai.PomokitId)
+	mbcId, dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScoreKelas(config.Mongoconn, userID, tugasai.MBCId)
+	ravenId, dataRavencoin, _ := GetLastWeekDataRavencoinScoreKelas(config.Mongoconn, userID, tugasai.RavenId)
+	qrisId, dataQRIS, _ := GetLastWeekDataQRISScoreKelas(config.Mongoconn, userID, tugasai.QrisId)
+	tugasId, urlTugas, _ := GetPomokitDataKelas(config.Mongoconn, userID, tugasai.TugasId)
+
+	urls := make([]string, 0, len(urlTugas))
+	for _, tugas := range urlTugas {
+		if strings.Contains(tugas.URLPekerjaan, "gtmetrix.com") {
+			urls = append(urls, tugas.GTMetrixURLTarget)
+		} else {
+			urls = append(urls, tugas.URLPekerjaan)
+		}
+	}
+
+	score = model.ScoreKelas{
+		StravaKM:        datastravapoin.StravaKM,
+		Strava:          datastravapoin.Strava,
+		IQresult:        dataIQ.IQresult,
+		IQ:              dataIQ.IQ,
+		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
+		Pomokit:         dataPomokitScore.Pomokit,
+		MBC:             dataMicroBitcoin.MBC,
+		MBCPoints:       dataMicroBitcoin.MBCPoints,
+		BlockChain:      dataMicroBitcoin.BlockChain,
+		RVN:             dataRavencoin.RVN,
+		RavencoinPoints: dataRavencoin.RavencoinPoints,
+		Rupiah:          dataQRIS.Rupiah,
+		QRIS:            dataQRIS.QRIS,
+		QRISPoints:      dataQRIS.QRISPoints,
+		AllTugas:        urls,
+		StravaId:        stravaId,
+		IQId:            iqId,
+		MBCId:           mbcId,
+		RavenId:         ravenId,
+		QrisId:          qrisId,
+		PomokitId:       pomokitId,
+		TugasId:         tugasId,
+	}
+
+	return score, nil
 }
 
 func GetUsedIDKelas(db *mongo.Database, userID, col string) (model.TugasKelasId, error) {
