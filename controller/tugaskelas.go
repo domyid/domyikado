@@ -117,6 +117,106 @@ func GetLastWeekScoreKelasAI(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, score)
 }
 
+// tugas kelas web service
+func PostTugasKelasWS(respw http.ResponseWriter, req *http.Request) {
+	//otorisasi dan validasi inputan
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+	var tugasWS model.ScoreKelas
+	err = json.NewDecoder(req.Body).Decode(&tugasWS)
+	if err != nil {
+		respn.Status = "Error : Body tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	if tugasWS.Kelas == "" {
+		respn.Status = "Error : Kelas tidak boleh kosong"
+		respn.Response = "Isi lebih lengkap terlebih dahulu"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	doctugas, err := PostTugasKelas("tugaskelasws", payload.Id, tugasWS)
+	if err != nil {
+		respn.Status = "Error : Gagal menyimpan data tugas ws"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	at.WriteJSON(respw, http.StatusOK, doctugas)
+}
+
+func GetDataTugasWSById(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	id := at.GetParam(req)
+	objectId, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		respn.Status = "Error : ObjectID Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Encode Object ID Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	tugasws, err := GetDataTugasById("tugaskelasws", objectId)
+	if err != nil {
+		respn.Status = "Error : Data tugas ws tidak di temukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+	at.WriteJSON(respw, http.StatusOK, tugasws)
+}
+
+func GetDataTugasWS(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	tugaswslist, err := GetDataTugas("tugaskelasws", payload.Id)
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data tugas ws"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	at.WriteJSON(respw, http.StatusOK, tugaswslist)
+}
+
+func GetLastWeekScoreKelasWS(w http.ResponseWriter, r *http.Request) {
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	score, _ := GetLastWeekScoreKelasData("tugaskelasws", authorization.Id)
+	at.WriteJSON(w, http.StatusOK, score)
+}
+
 // helper function
 func PostTugasKelas(col, phonenumber string, tugas model.ScoreKelas) (model.ScoreKelas, error) {
 	//validasi eksistensi user di db

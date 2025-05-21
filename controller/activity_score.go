@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
@@ -150,47 +149,6 @@ func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	return score, nil
 }
 
-func GetLastWeekScoreKelasWSData(userID string) (model.ScoreKelasWS, error) {
-	var score model.ScoreKelasWS
-
-	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "kelasai")
-	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "kelasws")
-	dataPomokitScore, _ := GetLastWeekPomokitScoreForUser(userID)
-	dataMicroBitcoin, _ := GetLastWeekDataMicroBitcoinScore(config.Mongoconn, userID)
-	dataRavencoin, _ := GetLastWeekDataRavencoinScore(config.Mongoconn, userID)
-	dataQRIS, _ := GetLastWeekDataQRISScore(config.Mongoconn, userID)
-	urlTugas, _ := GetPomokitDataKelasWS(config.Mongoconn, userID)
-
-	urls := make([]string, 0, len(urlTugas))
-	for _, tugas := range urlTugas {
-		if strings.Contains(tugas.URLPekerjaan, "gtmetrix.com") {
-			urls = append(urls, tugas.GTMetrixURLTarget)
-		} else {
-			urls = append(urls, tugas.URLPekerjaan)
-		}
-	}
-
-	score = model.ScoreKelasWS{
-		StravaKM:        datastravapoin.StravaKM,
-		Strava:          datastravapoin.Strava,
-		IQresult:        dataIQ.IQresult,
-		IQ:              dataIQ.IQ,
-		Pomokitsesi:     dataPomokitScore.Pomokitsesi,
-		Pomokit:         dataPomokitScore.Pomokit,
-		MBC:             dataMicroBitcoin.MBC,
-		MBCPoints:       dataMicroBitcoin.MBCPoints,
-		BlockChain:      dataMicroBitcoin.BlockChain,
-		RVN:             dataRavencoin.RVN,
-		RavencoinPoints: dataRavencoin.RavencoinPoints,
-		Rupiah:          dataQRIS.Rupiah,
-		QRIS:            dataQRIS.QRIS,
-		QRISPoints:      dataQRIS.QRISPoints,
-		AllTugas:        urls,
-	}
-
-	return score, nil
-}
-
 func HitungTotalScore(a *model.ActivityScore) int {
 	total := 0
 
@@ -209,21 +167,4 @@ func HitungTotalScore(a *model.ActivityScore) int {
 	total += a.Presensi
 
 	return total
-}
-
-// tugas kelas WS
-func GetLastWeekScoreKelasWS(w http.ResponseWriter, r *http.Request) {
-	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-	if err != nil {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Status:   "Error: Invalid Token",
-			Info:     at.GetSecretFromHeader(r),
-			Location: "Token Validation",
-			Response: err.Error(),
-		})
-		return
-	}
-
-	score, _ := GetLastWeekScoreKelasWSData(authorization.Id)
-	at.WriteJSON(w, http.StatusOK, score)
 }
