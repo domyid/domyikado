@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func FactCheck1(w http.ResponseWriter, r *http.Request) {
+func FactCheck1(w http.ResponseWriter, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 	userAgent := r.UserAgent()
@@ -23,24 +23,25 @@ func FactCheck1(w http.ResponseWriter, r *http.Request) {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
-		return
+		return false
 	}
 	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
-		return
+		return false
 	}
+	return true
 }
 
-func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo) {
+func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo) bool {
 	headerToken := r.Header.Get("Tracker")
 	payload, err := watoken.DecodeWithStruct[model.UserInfo](config.PublicKeyWhatsAuth, headerToken)
 	if err != nil {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Token tidak valid: " + err.Error(),
 		})
-		return
+		return false
 	}
 	cookie, err := r.Cookie("Tracker")
 	cookieToken := cookie.Value
@@ -48,38 +49,39 @@ func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Cookie tidak valid: " + err.Error(),
 		})
-		return
+		return false
 	}
 	if cookieToken != headerToken {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
-		return
+		return false
 	}
 	if payload.Data.IPv4 != userinfo.IPv4 {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Data tidak cocok",
 		})
-		return
+		return false
 	}
 	if payload.Data.Hostname != userinfo.Hostname {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Data tidak cocok",
 		})
-		return
+		return false
 	}
 	if payload.Data.Url != userinfo.Url {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Data tidak cocok",
 		})
-		return
+		return false
 	}
 	if payload.Data.Browser != userinfo.Browser {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Data tidak cocok",
 		})
-		return
+		return false
 	}
+	return true
 }
 
 func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
