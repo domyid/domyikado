@@ -19,8 +19,6 @@ func FactCheck1(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 	userAgent := r.UserAgent()
-	cookie, err := r.Cookie("Tracker")
-	cookieToken := cookie.Value
 	headerToken := r.Header.Get("Tracker")
 	if origin == "" && referer == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
@@ -34,20 +32,7 @@ func FactCheck1(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err != nil {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return
-	}
-
 	if headerToken == "" {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return
-	}
-	if cookieToken != headerToken {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
@@ -61,6 +46,20 @@ func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Token tidak valid: " + err.Error(),
+		})
+		return
+	}
+	cookie, err := r.Cookie("Tracker")
+	cookieToken := cookie.Value
+	if err != nil {
+		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
+			Response: "Cookie tidak valid: " + err.Error(),
+		})
+		return
+	}
+	if cookieToken != headerToken {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
 		})
 		return
 	}
