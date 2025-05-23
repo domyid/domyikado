@@ -143,6 +143,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	FactCheck2(w, r, userinfo)
 	filter := primitive.M{
 		"ipv4":          userinfo.IPv4,
 		"hostname":      userinfo.Hostname,
@@ -156,7 +157,6 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userinfo.Tanggal_Ambil = waktusekarang
-	FactCheck2(w, r, userinfo)
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackerip", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
