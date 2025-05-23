@@ -136,7 +136,9 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	FactCheck1(w, r)
+	if !FactCheck1(w, r) {
+		return
+	}
 
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
@@ -145,7 +147,9 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	FactCheck2(w, r, userinfo)
+	if !FactCheck2(w, r, userinfo) {
+		return
+	}
 	filter := primitive.M{
 		"ipv4":          userinfo.IPv4,
 		"hostname":      userinfo.Hostname,
