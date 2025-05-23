@@ -19,7 +19,6 @@ func FactCheck1(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 	userAgent := r.UserAgent()
-	headerToken := r.Header.Get("Tracker")
 	if origin == "" && referer == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
@@ -27,12 +26,6 @@ func FactCheck1(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return
-	}
-	if headerToken == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
