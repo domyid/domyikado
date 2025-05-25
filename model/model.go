@@ -1,10 +1,11 @@
 package model
 
 type Response struct {
-	Response string `json:"response"`
-	Info     string `json:"info,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Location string `json:"location,omitempty"`
+	Response string      `json:"response"`
+	Info     string      `json:"info,omitempty"`
+	Status   string      `json:"status,omitempty"`
+	Location string      `json:"location,omitempty"`
+	Data     interface{} `json:"data,omitempty"`
 }
 
 type Profile struct {
@@ -41,5 +42,5 @@ type Config struct {
 	PomokitUrl             string `json:"pomokiturl,omitempty" bson:"pomokiturl,omitempty"`
 	StravaUrl              string `json:"stravaurl,omitempty" bson:"stravaurl,omitempty"`
 	StravaUrl2             string `json:"stravaurl2,omitempty" bson:"stravaurl2,omitempty"`
-	DataMemberBukped	   string `json:"datamemberbukped,omitempty" bson:"datamemberbukped,omitempty"`
+	DataMemberBukped       string `json:"datamemberbukped,omitempty" bson:"datamemberbukped,omitempty"`
 }
