@@ -150,6 +150,18 @@ func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore 
 	return activityscore, err
 }
 
+func GetStatistikTracker(db *mongo.Database, hostname string) (data []model.UserInfo, err error) {
+	filter := bson.M{
+		"hostname": hostname,
+	}
+
+	data, err = atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
+	if err != nil {
+		return data, err
+	}
+	return data, err
+}
+
 func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": YesterdayFilter(), "project.wagroupid": groupId}
 	pushrepodata, err := atdb.GetAllDoc[[]model.PushReport](db, "pushrepo", filter)
