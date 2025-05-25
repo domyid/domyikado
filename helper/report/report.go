@@ -150,12 +150,12 @@ func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore 
 	return activityscore, err
 }
 
-func GetStatistikTracker(db *mongo.Database, hostname string) (data []model.UserInfo, err error) {
+func GetStatistikTracker(db *mongo.Database, hostname string) (data []model.HostnameTanggal, err error) {
 	filter := bson.M{
 		"hostname": hostname,
 	}
 
-	data, err = atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
+	data, err = atdb.GetAllDoc[[]model.HostnameTanggal](db, "trackerip", filter)
 	if err != nil {
 		return data, err
 	}
