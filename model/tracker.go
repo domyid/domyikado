@@ -10,6 +10,11 @@ type UserInfo struct {
 	Tanggal_Ambil time.Time `json:"tanggal_ambil"`
 }
 
+type HostnameTanggal struct {
+	Hostname      string    `json:"hostname" bson:"hostname"`
+	Tanggal_Ambil time.Time `json:"tanggal_ambil" bson:"tanggal_ambil"`
+}
+
 type PhoneDomain struct {
 	PhoneNumber      string
 	Project_Hostname string
