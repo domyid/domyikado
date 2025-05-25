@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -192,43 +193,17 @@ func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	var userinfo model.UserInfo
-	waktusekarang := time.Now()
-	jam00 := waktusekarang.Truncate(24 * time.Hour)
-	jam24 := jam00.Add(24*time.Hour - time.Second)
-
-	FactCheck1(w, r)
-
-	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	hostname, err := os.Hostname()
 	if err != nil {
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Response: "Error parsing application/json: " + err.Error(),
+		at.WriteJSON(w, http.StatusOK, model.Response{
+			Response: "Gagal mengambil hostname",
 		})
 		return
 	}
-	filter := primitive.M{
-		"ipv4":          userinfo.IPv4,
-		"hostname":      userinfo.Hostname,
-		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
-	}
-	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
-	if err == nil && exist.IPv4 != "" {
-		at.WriteJSON(w, http.StatusConflict, model.Response{
-			Response: "Hari ini sudah absen",
-		})
-		return
-	}
-	userinfo.Tanggal_Ambil = waktusekarang
-	FactCheck2(w, r, userinfo)
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userinfo)
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Response: "Gagal Insert Database: " + err.Error(),
-		})
-		return
-	}
+	datatracker, _ := report.GetAllDataTracker(config.Mongoconn, "befous.com")
 	at.WriteJSON(w, http.StatusOK, model.Response{
-		Response: "Berhasil simpan data",
+		Response: hostname,
+		Data:     datatracker,
 	})
 }
 
