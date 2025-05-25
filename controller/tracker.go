@@ -3,7 +3,6 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -193,17 +192,20 @@ func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		at.WriteJSON(w, http.StatusOK, model.Response{
-			Response: "Gagal mengambil hostname",
-		})
-		return
-	}
-	datatracker, _ := report.GetStatistikTracker(config.Mongoconn, "befous.com")
+	// authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	// if err != nil {
+	// 	at.WriteJSON(w, http.StatusForbidden, model.Response{
+	// 		Status:   "Error: Invalid Token",
+	// 		Info:     at.GetSecretFromHeader(r),
+	// 		Location: "Token Validation",
+	// 		Response: err.Error(),
+	// 	})
+	// 	return
+	// }
+	// datatracker, _ := report.GetStatistikTracker(config.Mongoconn, GetHostname(authorization.Id))
+	datatracker, _ := report.GetStatistikTracker(config.Mongoconn, "befous.github.io")
 	at.WriteJSON(w, http.StatusOK, model.Response{
-		Response: hostname,
-		Data:     datatracker,
+		Data: datatracker,
 	})
 }
 
