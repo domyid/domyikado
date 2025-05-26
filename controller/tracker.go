@@ -43,20 +43,6 @@ func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 		})
 		return false
 	}
-	cookie, err := r.Cookie("Tracker")
-	cookieToken := cookie.Value
-	if err != nil {
-		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
-			Response: "Cookie tidak valid: " + err.Error(),
-		})
-		return false
-	}
-	if cookieToken != headerToken {
-		at.WriteJSON(w, http.StatusForbidden, model.Response{
-			Response: "Akses tidak diizinkan",
-		})
-		return false
-	}
 	if payload.Data.IPv4 != userinfo.IPv4 {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Data tidak cocok",
