@@ -178,18 +178,33 @@ func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	// authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
-	// if err != nil {
-	// 	at.WriteJSON(w, http.StatusForbidden, model.Response{
-	// 		Status:   "Error: Invalid Token",
-	// 		Info:     at.GetSecretFromHeader(r),
-	// 		Location: "Token Validation",
-	// 		Response: err.Error(),
-	// 	})
-	// 	return
-	// }
-	// datatracker, _ := report.GetStatistikTracker(config.Mongoconn, GetHostname(authorization.Id))
-	datatracker, _ := report.GetStatistikTracker(config.Mongoconn, "befous.com")
+	howLong := GetUrlQuery(r, "how_long", "last_week")
+
+	var startDate time.Time
+	endDate := time.Now()
+
+	switch howLong {
+	case "last_week":
+		startDate = endDate.AddDate(0, 0, -7)
+	case "last_month":
+		startDate = endDate.AddDate(0, -1, 0)
+	case "all_time":
+		startDate = time.Time{}
+	default:
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Request tidak valid",
+		})
+		return
+	}
+
+	datatracker, err := report.GetStatistikTracker(config.Mongoconn, "befous.com", startDate, endDate)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: "Gagal mengambil data",
+		})
+		return
+	}
+
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Data: datatracker,
 	})
@@ -199,4 +214,13 @@ func TestAmbilValueRemoteAddr(w http.ResponseWriter, r *http.Request) {
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Response: r.RemoteAddr,
 	})
+}
+
+func GetUrlQuery(r *http.Request, queryKey string, defaultValue string) string {
+	query := r.URL.Query()
+	v := query.Get(queryKey)
+	if v == "" {
+		return defaultValue
+	}
+	return v
 }
