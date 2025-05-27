@@ -189,7 +189,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 	// 	return
 	// }
 	// datatracker, _ := report.GetStatistikTracker(config.Mongoconn, GetHostname(authorization.Id))
-	datatracker, _ := report.GetStatistikTracker(config.Mongoconn, "befous.github.io")
+	datatracker, _ := report.GetStatistikTracker(config.Mongoconn, "befous.com")
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Data: datatracker,
 	})
