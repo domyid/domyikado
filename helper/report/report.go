@@ -162,6 +162,18 @@ func GetStatistikTracker(db *mongo.Database, hostname string, startDate, endDate
 	}
 	return data, err
 }
+func GetStatistikTrackerTesting(db *mongo.Database, hostname string, startDate, endDate time.Time) (data []model.HostnameTanggal, err error) {
+	filter := bson.M{
+		"hostname":      hostname,
+		"tanggal_ambil": bson.M{"$gte": startDate, "$lte": endDate},
+	}
+
+	data, err = atdb.GetAllDoc[[]model.HostnameTanggal](db, "trackeriptest", filter)
+	if err != nil {
+		return data, err
+	}
+	return data, err
+}
 
 func GetDataRepoMasukKemarinPerWaGroupID(db *mongo.Database, groupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": YesterdayFilter(), "project.wagroupid": groupId}

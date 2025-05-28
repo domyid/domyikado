@@ -245,7 +245,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datatracker, err := report.GetStatistikTracker(config.Mongoconn, "befous.com", startDate, endDate)
+	datatracker, err := report.GetStatistikTrackerTesting(config.Mongoconn, "befous.com", startDate, endDate)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: "Gagal mengambil data",
