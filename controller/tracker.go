@@ -177,6 +177,52 @@ func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
+	howLong := GetUrlQuery(r, "how_long", "last_day")
+
+	var startDate time.Time
+	endDate := time.Now()
+
+	switch howLong {
+	case "last_day":
+		startDate = endDate.AddDate(0, 0, -1)
+	case "last_week":
+		startDate = endDate.AddDate(0, 0, -7)
+	case "last_month":
+		startDate = endDate.AddDate(0, -1, 0)
+	case "all_time":
+		startDate = time.Time{}
+	default:
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Request tidak valid",
+		})
+		return
+	}
+
+	authorization, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(r))
+	if err != nil {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Status:   "Error: Invalid Token",
+			Info:     at.GetSecretFromHeader(r),
+			Location: "Token Validation",
+			Response: err.Error(),
+		})
+		return
+	}
+
+	datatracker, err := report.GetStatistikTracker(config.Mongoconn, GetHostname(authorization.Id), startDate, endDate)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: "Gagal mengambil data",
+		})
+		return
+	}
+
+	at.WriteJSON(w, http.StatusOK, model.Response{
+		Data: datatracker,
+	})
+}
+
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 	howLong := GetUrlQuery(r, "how_long", "last_day")
 

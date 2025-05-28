@@ -156,7 +156,7 @@ func GetStatistikTracker(db *mongo.Database, hostname string, startDate, endDate
 		"tanggal_ambil": bson.M{"$gte": startDate, "$lte": endDate},
 	}
 
-	data, err = atdb.GetAllDoc[[]model.HostnameTanggal](db, "trackeriptest", filter)
+	data, err = atdb.GetAllDoc[[]model.HostnameTanggal](db, "trackerip", filter)
 	if err != nil {
 		return data, err
 	}
