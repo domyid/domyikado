@@ -31,8 +31,12 @@ var DomainProyek1 = []model.PhoneDomain{
 		PhoneNumber:      "6285314627451",
 		Project_Hostname: "kucingnanda.github.io",
 	},
+	// {
+	// 	PhoneNumber:      "6282116301579",
+	// 	Project_Hostname: "sateayammadurajihan.github.io",
+	// },
 	{
-		PhoneNumber:      "6282116301579",
+		PhoneNumber:      "6281271720763",
 		Project_Hostname: "sateayammadurajihan.github.io",
 	},
 	{
