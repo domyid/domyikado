@@ -178,12 +178,14 @@ func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	howLong := GetUrlQuery(r, "how_long", "last_week")
+	howLong := GetUrlQuery(r, "how_long", "last_day")
 
 	var startDate time.Time
 	endDate := time.Now()
 
 	switch howLong {
+	case "last_day":
+		startDate = endDate.AddDate(0, 0, -1)
 	case "last_week":
 		startDate = endDate.AddDate(0, 0, -7)
 	case "last_month":
