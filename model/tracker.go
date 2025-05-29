@@ -11,7 +11,7 @@ type UserInfo struct {
 	Timezone          string    `json:"timezone"`
 	Ontouchstart      string    `json:"ontouchstart"`
 	Tanggal_Ambil     time.Time `json:"tanggal_ambil"`
-	ISP               time.Time `json:"isp"`
+	ISP               ISP       `json:"isp"`
 }
 
 type HostnameTanggal struct {
