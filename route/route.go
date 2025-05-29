@@ -18,7 +18,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	var method, path string = r.Method, r.URL.Path
 	//tracker website yang dipasang di masing2 web peserta
 	origin := r.Header.Get("Origin")
-	if method == http.MethodOptions && (path == "/api/tracker" || path == "/api/tracker/token") {
+	if method == http.MethodOptions && (path == "/api/tracker") {
 		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
 			w.WriteHeader(http.StatusForbidden)
 			return
@@ -30,7 +30,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if method == http.MethodOptions && (path == "/api/tracker/testing") {
+	if method == http.MethodOptions && (path == "/api/tracker/testing" || path == "/api/tracker/token") {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Tracker")
@@ -246,10 +246,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUser(w, r)
 	case method == "POST" && path == "/api/tracker/token":
-		if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.GenerateTrackerToken(w, r)
 	case method == "POST" && path == "/api/tracker/testing":
