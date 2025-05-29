@@ -9,7 +9,7 @@ type UserInfo struct {
 	Browser_Language  string    `json:"browser_language" bson:"browser_language"`
 	Screen_Resolution string    `json:"screen_resolution" bson:"screen_resolution"`
 	Timezone          string    `json:"timezone" bson:"timezone"`
-	OnTouchStart      string    `json:"ontouchstart" bson:"ontouchstart"`
+	OnTouchStart      bool      `json:"ontouchstart" bson:"ontouchstart"`
 	Tanggal_Ambil     time.Time `json:"tanggal_ambil" bson:"tanggal_ambil"`
 	ISP               ISP       `json:"isp" bson:"isp"`
 }

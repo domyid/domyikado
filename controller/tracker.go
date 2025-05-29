@@ -218,37 +218,47 @@ func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	howLong := GetUrlQuery(r, "how_long", "last_day")
+	var userinfo model.UserInfo
+	waktusekarang := time.Now()
+	jam00 := waktusekarang.Truncate(24 * time.Hour)
+	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	var startDate time.Time
-	endDate := time.Now()
-
-	switch howLong {
-	case "last_day":
-		startDate = endDate.AddDate(0, 0, -1)
-	case "last_week":
-		startDate = endDate.AddDate(0, 0, -7)
-	case "last_month":
-		startDate = endDate.AddDate(0, -1, 0)
-	case "all_time":
-		startDate = time.Time{}
-	default:
-		at.WriteJSON(w, http.StatusBadRequest, model.Response{
-			Response: "Request tidak valid",
-		})
+	if !FactCheck1(w, r) {
 		return
 	}
 
-	datatracker, err := report.GetStatistikTrackerTesting(config.Mongoconn, "befous.com", startDate, endDate)
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Error parsing application/json: " + err.Error(),
+		})
+		return
+	}
+	if !FactCheck2(w, r, userinfo) {
+		return
+	}
+	filter := primitive.M{
+		"hostname":      userinfo.Hostname,
+		"browser":       userinfo.Browser,
+		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
+	}
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
+	if err == nil && exist.Browser != "" {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Hari ini sudah absen",
+		})
+		return
+	}
+	userinfo.Tanggal_Ambil = waktusekarang
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Response: "Gagal mengambil data",
+			Response: "Gagal Insert Database: " + err.Error(),
 		})
 		return
 	}
-
 	at.WriteJSON(w, http.StatusOK, model.Response{
-		Data: datatracker,
+		Response: r.Header.Get("Referer"),
 	})
 }
 
