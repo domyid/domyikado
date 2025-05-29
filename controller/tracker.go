@@ -43,12 +43,6 @@ func FactCheck2(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 		})
 		return false
 	}
-	if payload.Data.IPv4 != userinfo.IPv4 {
-		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
-			Response: "Data tidak cocok",
-		})
-		return false
-	}
 	if payload.Data.Hostname != userinfo.Hostname {
 		at.WriteJSON(w, http.StatusUnauthorized, model.Response{
 			Response: "Data tidak cocok",
@@ -92,12 +86,12 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := primitive.M{
-		"ipv4":          userinfo.IPv4,
 		"hostname":      userinfo.Hostname,
+		"browser":       userinfo.Browser,
 		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
-	if err == nil && exist.IPv4 != "" {
+	if err == nil && exist.Browser != "" {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
 			Response: "Hari ini sudah absen",
 		})
@@ -137,12 +131,12 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := primitive.M{
-		"ipv4":          userinfo.IPv4,
 		"hostname":      userinfo.Hostname,
+		"browser":       userinfo.Browser,
 		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
-	if err == nil && exist.IPv4 != "" {
+	if err == nil && exist.Browser != "" {
 		at.WriteJSON(w, http.StatusConflict, model.Response{
 			Response: "Hari ini sudah absen",
 		})
