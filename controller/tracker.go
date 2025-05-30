@@ -82,8 +82,6 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 	)
 	duration := time.Until(tomorrowMidnight)
 
-	FactCheck1(w, r, userinfo)
-
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
@@ -91,6 +89,11 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	if !FactCheck1(w, r, userinfo) {
+		return
+	}
+
 	filter := primitive.M{
 		"hostname":          userinfo.Hostname,
 		"browser":           userinfo.Browser,
@@ -125,10 +128,6 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	if !FactCheck1(w, r, userinfo) {
-		return
-	}
-
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
@@ -136,6 +135,11 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	if !FactCheck1(w, r, userinfo) {
+		return
+	}
+
 	if !FactCheck2(w, r, userinfo) {
 		return
 	}
@@ -235,10 +239,6 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	if !FactCheck1(w, r, userinfo) {
-		return
-	}
-
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
 		at.WriteJSON(w, http.StatusBadRequest, model.Response{
@@ -246,6 +246,11 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	if !FactCheck1(w, r, userinfo) {
+		return
+	}
+
 	if !FactCheck2(w, r, userinfo) {
 		return
 	}
