@@ -86,9 +86,12 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := primitive.M{
-		"hostname":      userinfo.Hostname,
-		"browser":       userinfo.Browser,
-		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
+		"hostname":          userinfo.Hostname,
+		"browser":           userinfo.Browser,
+		"browser_language":  userinfo.Browser_Language,
+		"screen_resolution": userinfo.Screen_Resolution,
+		"timezone":          userinfo.Timezone,
+		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
 	if err == nil && exist.Browser != "" {
@@ -131,9 +134,12 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := primitive.M{
-		"hostname":      userinfo.Hostname,
-		"browser":       userinfo.Browser,
-		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
+		"hostname":          userinfo.Hostname,
+		"browser":           userinfo.Browser,
+		"browser_language":  userinfo.Browser_Language,
+		"screen_resolution": userinfo.Screen_Resolution,
+		"timezone":          userinfo.Timezone,
+		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
 	if err == nil && exist.Browser != "" {
@@ -238,9 +244,12 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := primitive.M{
-		"hostname":      userinfo.Hostname,
-		"browser":       userinfo.Browser,
-		"tanggal_ambil": primitive.M{"$gte": jam00, "$lte": jam24},
+		"hostname":          userinfo.Hostname,
+		"browser":           userinfo.Browser,
+		"browser_language":  userinfo.Browser_Language,
+		"screen_resolution": userinfo.Screen_Resolution,
+		"timezone":          userinfo.Timezone,
+		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
 	if err == nil && exist.Browser != "" {
