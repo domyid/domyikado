@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func FactCheck1(w http.ResponseWriter, r *http.Request) bool {
+func FactCheck1(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo) bool {
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 	userAgent := r.UserAgent()
@@ -26,6 +26,12 @@ func FactCheck1(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return false
+	}
+	if userinfo.Hostname == "" || userinfo.Url == "" || userinfo.Browser == "" || userinfo.Browser_Language == "" || userinfo.Screen_Resolution == "" || userinfo.Timezone == "" || userinfo.ISP.IP == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
@@ -76,7 +82,7 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 	)
 	duration := time.Until(tomorrowMidnight)
 
-	FactCheck1(w, r)
+	FactCheck1(w, r, userinfo)
 
 	err := json.NewDecoder(r.Body).Decode(&userinfo)
 	if err != nil {
@@ -119,7 +125,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	if !FactCheck1(w, r) {
+	if !FactCheck1(w, r, userinfo) {
 		return
 	}
 
@@ -229,7 +235,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 	jam00 := waktusekarang.Truncate(24 * time.Hour)
 	jam24 := jam00.Add(24*time.Hour - time.Second)
 
-	if !FactCheck1(w, r) {
+	if !FactCheck1(w, r, userinfo) {
 		return
 	}
 
