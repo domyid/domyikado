@@ -101,6 +101,7 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 		"screen_resolution": userinfo.Screen_Resolution,
 		"timezone":          userinfo.Timezone,
 		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
+		"isp.ip":            userinfo.ISP.IP,
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
 	if err == nil && exist.Browser != "" {
@@ -150,6 +151,7 @@ func SimpanInformasiUser(w http.ResponseWriter, r *http.Request) {
 		"screen_resolution": userinfo.Screen_Resolution,
 		"timezone":          userinfo.Timezone,
 		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
+		"isp.ip":            userinfo.ISP.IP,
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackerip", filter)
 	if err == nil && exist.Browser != "" {
@@ -261,6 +263,7 @@ func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
 		"screen_resolution": userinfo.Screen_Resolution,
 		"timezone":          userinfo.Timezone,
 		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
+		"isp.ip":            userinfo.ISP.IP,
 	}
 	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
 	if err == nil && exist.Browser != "" {
