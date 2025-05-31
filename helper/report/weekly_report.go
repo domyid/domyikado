@@ -23,18 +23,6 @@ func WeeklyFilter() bson.M {
 	}
 }
 
-func TrackerWeeklyFilter() bson.M {
-	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
-	now := time.Now()
-
-	return bson.M{
-		"tanggal_ambil": bson.M{
-			"$gte": weekAgo,
-			"$lt":  now,
-		},
-	}
-}
-
 // Get laporan mingguan dari satu grup wa
 func GetDataRepoMasukMingguIniPerWaGroupID(db *mongo.Database, groupId string) (phoneNumberCount map[string]PhoneNumberInfo, err error) {
 	filter := bson.M{"_id": WeeklyFilter(), "project.wagroupid": groupId}

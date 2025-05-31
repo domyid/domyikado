@@ -133,8 +133,12 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 }
 
 func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
-	filter := TrackerWeeklyFilter()
-	filter["hostname"] = hostname
+	now := time.Now().UTC()
+	weekAgo := now.Add(-7 * 24 * time.Hour)
+	filter := bson.M{
+		"hostname":      hostname,
+		"tanggal_ambil": bson.M{"$gte": weekAgo, "$lt": now},
+	}
 
 	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
 	if err != nil {
