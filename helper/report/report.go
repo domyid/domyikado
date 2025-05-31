@@ -134,7 +134,7 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 
 func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
 	filter := bson.M{
-		"_id":      WeeklyFilter(),
+		"_id":      TrackerWeeklyFilter(),
 		"hostname": hostname,
 	}
 
