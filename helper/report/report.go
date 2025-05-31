@@ -133,7 +133,7 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 }
 
 func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
-	filter := WeeklyFilter()
+	filter := TrackerWeeklyFilter()
 	filter["hostname"] = hostname
 
 	laps, err := atdb.GetAllDoc[[]model.UserInfo](db, "trackerip", filter)
