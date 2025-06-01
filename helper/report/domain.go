@@ -21,7 +21,7 @@ var DomainProyek1 = []model.PhoneDomain{
 	},
 	{
 		PhoneNumber:      "6285179935117",
-		Project_Hostname: "gas.renz.my.id",
+		Project_Hostname: "sajuju.github.io",
 	},
 	{
 		PhoneNumber:      "6281366299487",
