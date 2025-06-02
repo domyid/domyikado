@@ -27,20 +27,21 @@ type MasterEnrool struct {
 }
 
 type Project struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	Enroll       string             `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
-	MasterEnrool MasterEnrool       `bson:"masterenroll,omitempty" json:"masterenroll,omitempty"`
-	Secret       string             `bson:"secret" json:"secret"`
-	GithubToken  string             `bson:"githubtoken" json:"githubtoken"`
-	Name         string             `bson:"name" json:"name"`
-	Description  string             `bson:"description" json:"description"`
-	Owner        Userdomyikado      `bson:"owner" json:"owner"`
-	WAGroupID    string             `bson:"wagroupid,omitempty" json:"wagroupid,omitempty"`
-	RepoOrg      string             `bson:"repoorg,omitempty" json:"repoorg,omitempty"`
-	RepoLogName  string             `bson:"repologname,omitempty" json:"repologname,omitempty"`
-	Members      []Userdomyikado    `bson:"members,omitempty" json:"members,omitempty"`
-	Closed       bool               `bson:"closed,omitempty" json:"closed,omitempty"`
-	Pembimbing   []Userdomyikado    `bson:"pembimbing,omitempty" json:"pembimbing,omitempty"`
+	ID               primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Enroll           string             `bson:"enroll,omitempty" json:"enroll,omitempty"` //kelas atau proyek atau bimbingan
+	MasterEnrool     MasterEnrool       `bson:"masterenroll,omitempty" json:"masterenroll,omitempty"`
+	Secret           string             `bson:"secret" json:"secret"`
+	GithubToken      string             `bson:"githubtoken" json:"githubtoken"`
+	Name             string             `bson:"name" json:"name"`
+	Description      string             `bson:"description" json:"description"`
+	Owner            Userdomyikado      `bson:"owner" json:"owner"`
+	WAGroupID        string             `bson:"wagroupid,omitempty" json:"wagroupid,omitempty"`
+	RepoOrg          string             `bson:"repoorg,omitempty" json:"repoorg,omitempty"`
+	RepoLogName      string             `bson:"repologname,omitempty" json:"repologname,omitempty"`
+	Members          []Userdomyikado    `bson:"members,omitempty" json:"members,omitempty"`
+	Closed           bool               `bson:"closed,omitempty" json:"closed,omitempty"`
+	Pembimbing       []Userdomyikado    `bson:"pembimbing,omitempty" json:"pembimbing,omitempty"`
+	Project_Hostname []Userdomyikado    `bson:"project_hostname,omitempty" json:"project_hostname,omitempty"`
 }
 
 type Userdomyikado struct {
