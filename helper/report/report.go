@@ -152,9 +152,9 @@ func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore 
 	return activityscore, err
 }
 
-func GetStatistikTracker(db *mongo.Database, hostname string, startDate, endDate time.Time) (data []model.HostnameTanggal, err error) {
+func GetStatistikTracker(db *mongo.Database, hostnames []string, startDate, endDate time.Time) (data []model.HostnameTanggal, err error) {
 	filter := bson.M{
-		"hostname":      hostname,
+		"hostname":      bson.M{"$in": hostnames},
 		"tanggal_ambil": bson.M{"$gte": startDate, "$lte": endDate},
 	}
 
