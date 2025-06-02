@@ -41,7 +41,7 @@ type Project struct {
 	Members          []Userdomyikado    `bson:"members,omitempty" json:"members,omitempty"`
 	Closed           bool               `bson:"closed,omitempty" json:"closed,omitempty"`
 	Pembimbing       []Userdomyikado    `bson:"pembimbing,omitempty" json:"pembimbing,omitempty"`
-	Project_Hostname []Userdomyikado    `bson:"project_hostname,omitempty" json:"project_hostname,omitempty"`
+	Project_Hostname string             `bson:"project_hostname,omitempty" json:"project_hostname,omitempty"`
 }
 
 type Userdomyikado struct {
