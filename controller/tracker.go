@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -182,6 +183,27 @@ func GetHostname(auth string) string {
 	return ""
 }
 
+func GetHostnameFromProject(nomorhp string) ([]string, error) {
+	filter := primitive.M{"members.phonenumber": nomorhp}
+	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", filter)
+	if err != nil {
+		return nil, fmt.Errorf("gagal ambil project: %v", err)
+	}
+
+	var hostnames []string
+	for _, p := range projects {
+		if p.Project_Hostname != "" {
+			hostnames = append(hostnames, p.Project_Hostname)
+		}
+	}
+
+	if len(hostnames) == 0 {
+		return nil, fmt.Errorf("tidak ada hostname ditemukan")
+	}
+
+	return hostnames, nil
+}
+
 func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
 	report.KirimLaporanPengunjungWebKeGrup(config.Mongoconn)
 	at.WriteJSON(w, http.StatusOK, model.Response{
@@ -222,7 +244,15 @@ func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datatracker, err := report.GetStatistikTracker(config.Mongoconn, GetHostname(authorization.Id), startDate, endDate)
+	hostnames, err := GetHostnameFromProject(authorization.Id)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: err.Error(),
+		})
+		return
+	}
+
+	datatracker, err := report.GetStatistikTracker(config.Mongoconn, hostnames, startDate, endDate)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: "Gagal mengambil data",
