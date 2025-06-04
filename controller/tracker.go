@@ -2,7 +2,6 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -183,12 +182,9 @@ func GetHostname(auth string) string {
 	return ""
 }
 
-func GetHostnameFromProject(nomorhp string) ([]string, error) {
+func GetHostnameFromProject(nomorhp string) []string {
 	filter := primitive.M{"members.phonenumber": nomorhp}
-	projects, err := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", filter)
-	if err != nil {
-		return nil, fmt.Errorf("gagal ambil project: %v", err)
-	}
+	projects, _ := atdb.GetAllDoc[[]model.Project](config.Mongoconn, "project", filter)
 
 	var hostnames []string
 	for _, p := range projects {
@@ -197,11 +193,7 @@ func GetHostnameFromProject(nomorhp string) ([]string, error) {
 		}
 	}
 
-	if len(hostnames) == 0 {
-		return nil, fmt.Errorf("tidak ada hostname ditemukan")
-	}
-
-	return hostnames, nil
+	return hostnames
 }
 
 func LaporanPengunjungWeb(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +236,7 @@ func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostnames, err := GetHostnameFromProject(authorization.Id)
+	hostnames := GetHostnameFromProject(authorization.Id)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: err.Error(),
@@ -266,7 +258,8 @@ func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
 }
 
 func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, "sakhaclothing.shop")
+	hostnames := []string{"asd", "dsa"}
+	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, hostnames)
 	at.WriteJSON(w, http.StatusOK, model.Response{
 		Data: datatracker,
 	})
