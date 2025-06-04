@@ -100,9 +100,8 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 
 func GetLastWeekActivityScoreData(userID string) (model.ActivityScore, error) {
 	var score model.ActivityScore
-
 	datasponsor, _ := GetAllDataSponsorPoin(config.Mongoconn, userID)
-	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostname(userID))
+	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, GetHostnameFromProject(userID))
 	datastravapoin, _ := report.GetLastWeekDataStravaPoin(config.Mongoconn, userID, "proyek1")
 	dataIQ, _ := report.GetLastWeekDataIQScoress(config.Mongoconn, userID, "proyek1")
 	dataPresensi, _ := report.GetLastWeekPresensiPoin(config.Mongoconn, userID)
