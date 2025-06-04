@@ -51,7 +51,7 @@ func GetAllActivityScoreData(userID string) (model.ActivityScore, error) {
 	var score model.ActivityScore
 
 	datasponsor, _ := GetAllDataSponsorPoin(config.Mongoconn, userID)
-	datatracker, _ := report.GetAllDataTracker(config.Mongoconn, GetHostname(userID))
+	datatracker, _ := report.GetAllDataTracker(config.Mongoconn, GetHostnameFromProject(userID))
 	datastravapoin, _ := report.GetAllDataStravaPoin(config.Mongoconn, userID)
 	dataWebhook, _ := report.GetAllWebhookPoin(config.Mongoconn, userID)
 	dataPresensi, _ := report.GetAllPresensiPoin(config.Mongoconn, userID)
