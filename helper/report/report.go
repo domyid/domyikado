@@ -132,11 +132,11 @@ func GetAllDataTracker(db *mongo.Database, hostname string) (activityscore model
 	return activityscore, err
 }
 
-func GetLastWeekDataTracker(db *mongo.Database, hostname string) (activityscore model.ActivityScore, err error) {
+func GetLastWeekDataTracker(db *mongo.Database, hostnames []string) (activityscore model.ActivityScore, err error) {
 	now := time.Now().UTC()
 	weekAgo := now.Add(-7 * 24 * time.Hour)
 	filter := bson.M{
-		"hostname":      hostname,
+		"hostname":      hostnames,
 		"tanggal_ambil": bson.M{"$gte": weekAgo, "$lt": now},
 	}
 
