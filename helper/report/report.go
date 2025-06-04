@@ -136,7 +136,7 @@ func GetLastWeekDataTracker(db *mongo.Database, hostnames []string) (activitysco
 	now := time.Now().UTC()
 	weekAgo := now.Add(-7 * 24 * time.Hour)
 	filter := bson.M{
-		"hostname":      hostnames,
+		"hostname":      bson.M{"$in": hostnames},
 		"tanggal_ambil": bson.M{"$gte": weekAgo, "$lt": now},
 	}
 
