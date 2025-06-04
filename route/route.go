@@ -331,6 +331,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetPengajuanSidang(w, r)
 	case method == "GET" && path == "/api/bimbingan/dosenpenguji":
 		controller.GetDosenPenguji(w, r)
+		// New Referral Event Endpoints
+	case method == "GET" && path == "/api/event/generatecode":
+		controller.GenerateEventCode(w, r)
+	case method == "POST" && path == "/api/event/claimcode":
+		controller.ClaimEventCode(w, r)
+	case method == "GET" && path == "/api/event/claimstatus":
+		controller.CheckEventClaimStatus(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
