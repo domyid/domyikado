@@ -16,29 +16,37 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// QRSession struct untuk tracking session QR code
-type QRSession struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	SessionID string             `bson:"sessionid" json:"sessionid"`
-	CreatedBy string             `bson:"createdby" json:"createdby"`
-	CreatedAt time.Time          `bson:"createdat" json:"createdat"`
-	IsActive  bool               `bson:"isactive" json:"isactive"`
-	StoppedAt time.Time          `bson:"stoppedat,omitempty" json:"stoppedat,omitempty"`
-	StoppedBy string             `bson:"stoppedby,omitempty" json:"stoppedby,omitempty"`
-	ExpiresAt time.Time          `bson:"expiresat" json:"expiresat"`
+// QRCodeSession struct untuk tracking QR code session
+type QRCodeSession struct {
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Code       string             `bson:"code" json:"code"`
+	CreatedBy  string             `bson:"createdby" json:"createdby"`
+	CreatedAt  time.Time          `bson:"createdat" json:"createdat"`
+	ExpiresAt  time.Time          `bson:"expiresat" json:"expiresat"`
+	IsActive   bool               `bson:"isactive" json:"isactive"`
+	ClaimedBy  []string           `bson:"claimedby,omitempty" json:"claimedby,omitempty"`
+	ClaimCount int                `bson:"claimcount" json:"claimcount"`
 }
 
-// EventQRClaimUsers struct untuk tracking user yang sudah claim via QR
+// EventQRClaimUsers struct untuk tracking user yang sudah claim QR
 type EventQRClaimUsers struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	PhoneNumber string             `bson:"phonenumber" json:"phonenumber"`
-	SessionID   string             `bson:"sessionid" json:"sessionid"`
 	ClaimedAt   time.Time          `bson:"claimedat" json:"claimedat"`
-	BimbinganID primitive.ObjectID `bson:"bimbinganid" json:"bimbinganid"`
+	QRCode      string             `bson:"qrcode" json:"qrcode"`
+	BimbinganID primitive.ObjectID `bson:"bimbinganid,omitempty" json:"bimbinganid,omitempty"`
 }
 
-// GenerateQRSession untuk generate session QR code (khusus owner)
-func GenerateQRSession(respw http.ResponseWriter, req *http.Request) {
+// QRCodeStatus struct untuk tracking status QR system
+type QRCodeStatus struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	IsActive  bool               `bson:"isactive" json:"isactive"`
+	UpdatedBy string             `bson:"updatedby" json:"updatedby"`
+	UpdatedAt time.Time          `bson:"updatedat" json:"updatedat"`
+}
+
+// StartQRCodeSession untuk memulai sesi QR code (khusus owner)
+func StartQRCodeSession(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
@@ -60,40 +68,130 @@ func GenerateQRSession(respw http.ResponseWriter, req *http.Request) {
 
 	if !isOwner {
 		respn.Status = "Error : Unauthorized"
-		respn.Response = "Anda tidak memiliki akses untuk generate QR session"
+		respn.Response = "Anda tidak memiliki akses untuk memulai sesi QR"
 		at.WriteJSON(respw, http.StatusUnauthorized, respn)
 		return
 	}
 
-	// Stop semua session yang masih aktif terlebih dahulu dengan loop
-	activeSessions, _ := atdb.GetAllDoc[[]QRSession](config.Mongoconn, "qrsessions", bson.M{"isactive": true})
-	for _, session := range activeSessions {
-		session.IsActive = false
-		session.StoppedAt = time.Now()
-		session.StoppedBy = payload.Id
-		atdb.ReplaceOneDoc(config.Mongoconn, "qrsessions", bson.M{"_id": session.ID}, session)
+	// Update status QR system menjadi aktif
+	qrStatus := QRCodeStatus{
+		IsActive:  true,
+		UpdatedBy: payload.Id,
+		UpdatedAt: time.Now(),
 	}
 
-	// Generate random session ID
-	bytes := make([]byte, 8)
-	if _, err := rand.Read(bytes); err != nil {
-		respn.Status = "Error : Gagal generate session ID"
+	// Upsert status
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "qrcodestatus", bson.M{}, qrStatus)
+	if err != nil {
+		// Jika tidak ada document, insert baru
+		_, err = atdb.InsertOneDoc(config.Mongoconn, "qrcodestatus", qrStatus)
+		if err != nil {
+			respn.Status = "Error : Gagal mengaktifkan sesi QR"
+			respn.Response = err.Error()
+			at.WriteJSON(respw, http.StatusInternalServerError, respn)
+			return
+		}
+	}
+
+	respn.Status = "Success"
+	respn.Response = "Sesi QR code telah dimulai"
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// StopQRCodeSession untuk menghentikan sesi QR code (khusus owner)
+func StopQRCodeSession(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Cek apakah user adalah owner
+	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	isOwner := false
+	for _, num := range allowedNumbers {
+		if payload.Id == num {
+			isOwner = true
+			break
+		}
+	}
+
+	if !isOwner {
+		respn.Status = "Error : Unauthorized"
+		respn.Response = "Anda tidak memiliki akses untuk menghentikan sesi QR"
+		at.WriteJSON(respw, http.StatusUnauthorized, respn)
+		return
+	}
+
+	// Update status QR system menjadi tidak aktif
+	qrStatus := QRCodeStatus{
+		IsActive:  false,
+		UpdatedBy: payload.Id,
+		UpdatedAt: time.Now(),
+	}
+
+	// Update status
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "qrcodestatus", bson.M{}, qrStatus)
+	if err != nil {
+		respn.Status = "Error : Gagal menghentikan sesi QR"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
-	sessionID := "QR" + hex.EncodeToString(bytes)
 
-	// Buat session baru dengan expires 20 detik
-	newSession := QRSession{
-		SessionID: sessionID,
-		CreatedBy: payload.Id,
-		CreatedAt: time.Now(),
-		IsActive:  true,
-		ExpiresAt: time.Now().Add(20 * time.Second),
+	respn.Status = "Success"
+	respn.Response = "Sesi QR code telah dihentikan"
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// GenerateQRCode untuk generate QR code baru setiap 20 detik
+func GenerateQRCode(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+
+	// Cek status QR system
+	qrStatus, err := atdb.GetOneDoc[QRCodeStatus](config.Mongoconn, "qrcodestatus", bson.M{})
+	if err != nil || !qrStatus.IsActive {
+		respn.Status = "Error : Sesi QR tidak aktif"
+		respn.Response = "Sesi QR code sedang tidak aktif. Hubungi admin."
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
 	}
 
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "qrsessions", newSession)
+	// Generate random code
+	bytes := make([]byte, 6)
+	if _, err := rand.Read(bytes); err != nil {
+		respn.Status = "Error : Gagal generate kode"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+	code := "QR" + hex.EncodeToString(bytes)
+
+	// Create QR session
+	qrSession := QRCodeSession{
+		Code:       code,
+		CreatedBy:  "system",
+		CreatedAt:  time.Now(),
+		ExpiresAt:  time.Now().Add(25 * time.Second), // 25 detik untuk buffer
+		IsActive:   true,
+		ClaimedBy:  []string{},
+		ClaimCount: 0,
+	}
+
+	// Deactivate previous QR codes
+	activeQRSessions, err := atdb.GetAllDoc[[]QRCodeSession](config.Mongoconn, "qrcodesessions", bson.M{"isactive": true})
+	if err == nil {
+		for _, session := range activeQRSessions {
+			session.IsActive = false
+			_, _ = atdb.ReplaceOneDoc(config.Mongoconn, "qrcodesessions", bson.M{"_id": session.ID}, session)
+		}
+	}
+
+	// Insert new QR session
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "qrcodesessions", qrSession)
 	if err != nil {
 		respn.Status = "Error : Gagal menyimpan QR session"
 		respn.Response = err.Error()
@@ -102,105 +200,16 @@ func GenerateQRSession(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	result := map[string]interface{}{
-		"sessionId": sessionID,
-		"expiresAt": newSession.ExpiresAt,
+		"qrcode":    code,
+		"expiresAt": qrSession.ExpiresAt,
 		"isActive":  true,
 	}
 
 	at.WriteJSON(respw, http.StatusOK, result)
 }
 
-// StopQRSession untuk menghentikan session QR code (khusus owner)
-func StopQRSession(respw http.ResponseWriter, req *http.Request) {
-	var respn model.Response
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
-	if err != nil {
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
-		return
-	}
-
-	// Cek apakah user adalah owner
-	allowedNumbers := []string{"6285312924192", "6282117252716"}
-	isOwner := false
-	for _, num := range allowedNumbers {
-		if payload.Id == num {
-			isOwner = true
-			break
-		}
-	}
-
-	if !isOwner {
-		respn.Status = "Error : Unauthorized"
-		respn.Response = "Anda tidak memiliki akses untuk stop QR session"
-		at.WriteJSON(respw, http.StatusUnauthorized, respn)
-		return
-	}
-
-	// Stop semua session yang masih aktif dengan loop
-	activeSessions, err := atdb.GetAllDoc[[]QRSession](config.Mongoconn, "qrsessions", bson.M{"isactive": true})
-	if err != nil {
-		respn.Status = "Error : Gagal ambil session aktif"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
-
-	stopCount := 0
-	for _, session := range activeSessions {
-		session.IsActive = false
-		session.StoppedAt = time.Now()
-		session.StoppedBy = payload.Id
-		_, err := atdb.ReplaceOneDoc(config.Mongoconn, "qrsessions", bson.M{"_id": session.ID}, session)
-		if err == nil {
-			stopCount++
-		}
-	}
-
-	if err != nil {
-		respn.Status = "Error : Gagal stop QR session"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
-
-	respn.Status = "Success"
-	respn.Response = "QR Session berhasil dihentikan"
-	at.WriteJSON(respw, http.StatusOK, respn)
-}
-
-// GetActiveQRSession untuk mendapatkan session aktif
-func GetActiveQRSession(respw http.ResponseWriter, req *http.Request) {
-	// Cari session yang masih aktif dan belum expired
-	activeSession, err := atdb.GetOneDoc[QRSession](config.Mongoconn, "qrsessions",
-		bson.M{
-			"isactive":  true,
-			"expiresat": bson.M{"$gt": time.Now()},
-		})
-
-	if err != nil {
-		result := map[string]interface{}{
-			"isActive":  false,
-			"sessionId": "",
-			"message":   "Tidak ada session QR aktif",
-		}
-		at.WriteJSON(respw, http.StatusOK, result)
-		return
-	}
-
-	result := map[string]interface{}{
-		"isActive":  true,
-		"sessionId": activeSession.SessionID,
-		"expiresAt": activeSession.ExpiresAt,
-		"createdBy": activeSession.CreatedBy,
-	}
-
-	at.WriteJSON(respw, http.StatusOK, result)
-}
-
-// ClaimQRBimbingan untuk claim bimbingan via QR code
-func ClaimQRBimbingan(respw http.ResponseWriter, req *http.Request) {
+// ClaimQRCode untuk claim bimbingan melalui QR code
+func ClaimQRCode(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
@@ -212,7 +221,7 @@ func ClaimQRBimbingan(respw http.ResponseWriter, req *http.Request) {
 
 	// Parse request body
 	var claimReq struct {
-		SessionID string `json:"sessionId"`
+		QRCode string `json:"qrcode"`
 	}
 	err = json.NewDecoder(req.Body).Decode(&claimReq)
 	if err != nil {
@@ -222,26 +231,24 @@ func ClaimQRBimbingan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah user sudah pernah claim via QR
-	existingClaim, _ := atdb.GetOneDoc[EventQRClaimUsers](config.Mongoconn, "eventqrclaimusers",
-		bson.M{"phonenumber": payload.Id})
+	// Cek apakah user sudah pernah claim QR sebelumnya
+	existingClaim, _ := atdb.GetOneDoc[EventQRClaimUsers](config.Mongoconn, "eventqrclaimusers", bson.M{"phonenumber": payload.Id})
 	if existingClaim.PhoneNumber != "" {
 		respn.Status = "Error : Sudah pernah claim"
-		respn.Response = "Anda sudah pernah menggunakan QR code untuk mendapatkan bimbingan"
+		respn.Response = "Anda sudah pernah menggunakan QR code claim bimbingan sebelumnya"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Cek session QR
-	_, err = atdb.GetOneDoc[QRSession](config.Mongoconn, "qrsessions",
-		bson.M{
-			"sessionid": claimReq.SessionID,
-			"isactive":  true,
-			"expiresat": bson.M{"$gt": time.Now()},
-		})
+	// Cek QR code session
+	qrSession, err := atdb.GetOneDoc[QRCodeSession](config.Mongoconn, "qrcodesessions", bson.M{
+		"code":      claimReq.QRCode,
+		"isactive":  true,
+		"expiresat": bson.M{"$gt": time.Now()},
+	})
 	if err != nil {
-		respn.Status = "Error : Session tidak valid"
-		respn.Response = "Session QR tidak ditemukan atau sudah expired"
+		respn.Status = "Error : QR code tidak valid"
+		respn.Response = "QR code tidak ditemukan atau sudah kadaluarsa"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
@@ -320,8 +327,8 @@ func ClaimQRBimbingan(respw http.ResponseWriter, req *http.Request) {
 		JurnalWeb:       "",
 		Jurnal:          0,
 		TotalScore:      0,
-		Komentar:        "Bonus Bimbingan dari QR Code Session: " + claimReq.SessionID,
-		Validasi:        5, // Rating 5 untuk QR
+		Komentar:        "Bonus Bimbingan dari QR Code Claim: " + claimReq.QRCode,
+		Validasi:        5, // Rating 5 untuk QR claim
 	}
 
 	// Insert bimbingan
@@ -333,16 +340,24 @@ func ClaimQRBimbingan(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Simpan record claim QR
-	qrClaim := EventQRClaimUsers{
+	// Update QR session dengan claim info
+	qrSession.ClaimedBy = append(qrSession.ClaimedBy, payload.Id)
+	qrSession.ClaimCount++
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "qrcodesessions", bson.M{"_id": qrSession.ID}, qrSession)
+	if err != nil {
+		// Log error but continue
+	}
+
+	// Save user claim record
+	userClaim := EventQRClaimUsers{
 		PhoneNumber: payload.Id,
-		SessionID:   claimReq.SessionID,
 		ClaimedAt:   time.Now(),
+		QRCode:      claimReq.QRCode,
 		BimbinganID: bimbinganID,
 	}
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "eventqrclaimusers", qrClaim)
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "eventqrclaimusers", userClaim)
 	if err != nil {
-		respn.Status = "Error : Gagal menyimpan record claim QR"
+		respn.Status = "Error : Gagal menyimpan record claim"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
@@ -353,21 +368,19 @@ func ClaimQRBimbingan(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
-// CheckQRClaimStatus untuk cek apakah user sudah pernah claim via QR
+// CheckQRClaimStatus untuk cek apakah user sudah pernah claim QR
 func CheckQRClaimStatus(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
-		result := map[string]interface{}{
-			"hasClaimed": false,
-			"message":    "Token tidak valid",
-		}
-		at.WriteJSON(respw, http.StatusOK, result)
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
 
-	// Cek apakah user sudah pernah claim via QR
-	existingClaim, _ := atdb.GetOneDoc[EventQRClaimUsers](config.Mongoconn, "eventqrclaimusers",
-		bson.M{"phonenumber": payload.Id})
+	// Cek apakah user sudah pernah claim
+	existingClaim, _ := atdb.GetOneDoc[EventQRClaimUsers](config.Mongoconn, "eventqrclaimusers", bson.M{"phonenumber": payload.Id})
 
 	result := map[string]interface{}{
 		"hasClaimed": existingClaim.PhoneNumber != "",
@@ -375,10 +388,28 @@ func CheckQRClaimStatus(respw http.ResponseWriter, req *http.Request) {
 
 	if existingClaim.PhoneNumber != "" {
 		result["claimedAt"] = existingClaim.ClaimedAt
-		result["sessionId"] = existingClaim.SessionID
-		result["message"] = "Anda sudah pernah claim bimbingan via QR Code"
-	} else {
-		result["message"] = "Anda belum pernah claim bimbingan via QR Code"
+		result["qrCode"] = existingClaim.QRCode
+	}
+
+	at.WriteJSON(respw, http.StatusOK, result)
+}
+
+// GetQRSystemStatus untuk cek status sistem QR
+func GetQRSystemStatus(respw http.ResponseWriter, req *http.Request) {
+	qrStatus, err := atdb.GetOneDoc[QRCodeStatus](config.Mongoconn, "qrcodestatus", bson.M{})
+	if err != nil {
+		result := map[string]interface{}{
+			"isActive": false,
+			"message":  "Sistem QR belum diinisialisasi",
+		}
+		at.WriteJSON(respw, http.StatusOK, result)
+		return
+	}
+
+	result := map[string]interface{}{
+		"isActive":  qrStatus.IsActive,
+		"updatedBy": qrStatus.UpdatedBy,
+		"updatedAt": qrStatus.UpdatedAt,
 	}
 
 	at.WriteJSON(respw, http.StatusOK, result)
