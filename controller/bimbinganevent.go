@@ -28,14 +28,6 @@ type EventCode struct {
 	BimbinganID primitive.ObjectID `bson:"bimbinganid,omitempty" json:"bimbinganid,omitempty"`
 }
 
-// UserEventClaim struct untuk tracking user yang sudah claim
-type UserEventClaim struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	PhoneNumber string             `bson:"phonenumber" json:"phonenumber"`
-	EventCode   string             `bson:"eventcode" json:"eventcode"`
-	ClaimedAt   time.Time          `bson:"claimedat" json:"claimedat"`
-}
-
 // GenerateEventCode untuk generate kode referral (khusus owner)
 func GenerateEventCode(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
@@ -118,15 +110,6 @@ func ClaimEventCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah user sudah pernah claim
-	existingClaim, _ := atdb.GetOneDoc[UserEventClaim](config.Mongoconn, "usereventclaims", bson.M{"phonenumber": payload.Id})
-	if existingClaim.PhoneNumber != "" {
-		respn.Status = "Error : Sudah pernah claim"
-		respn.Response = "Anda sudah pernah menggunakan kode referral event"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-
 	// Cek kode event
 	eventCode, err := atdb.GetOneDoc[EventCode](config.Mongoconn, "eventcodes", bson.M{"code": claimReq.Code})
 	if err != nil {
@@ -153,43 +136,72 @@ func ClaimEventCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get activity score data
-	score, _ := GetAllActivityScoreData(payload.Id)
+	// Get existing bimbingan count untuk user ini
+	allBimbingan, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", bson.M{"phonenumber": payload.Id})
+	if err != nil {
+		// Jika belum ada bimbingan sama sekali, mulai dari 1
+		allBimbingan = []model.ActivityScore{}
+	}
 
-	// Create bimbingan entry
+	// Tentukan bimbinganke selanjutnya
+	nextBimbinganKe := len(allBimbingan) + 1
+
+	// Set asesor tetap (Dirga F)
+	asesor := model.Userdomyikado{
+		ID:                   primitive.ObjectID{},
+		Name:                 "Dirga F",
+		PhoneNumber:          "6282268895372",
+		Email:                "fdirga63@gmail.com",
+		GithubUsername:       "Febriand1",
+		GitlabUsername:       "Febriand1",
+		Poin:                 495.45255417617057,
+		SponsorName:          "dapa",
+		SponsorPhoneNumber:   "6282117252716",
+		StravaProfilePicture: "https://lh3.googleusercontent.com/a/ACg8ocK27sU9YXcfmLm9Zw_MtUW0kT--NA",
+		NPM:                  "1214039",
+		IsDosen:              true,
+	}
+
+	// Isi ObjectID untuk asesor
+	asesorObjectID, _ := primitive.ObjectIDFromHex("6659322de7219a1a041fff04")
+	asesor.ID = asesorObjectID
+
+	// Create bimbingan entry dengan semua nilai 0
 	bimbingan := model.ActivityScore{
-		BimbinganKe:     99, // Special marker for event bimbingan
-		Approved:        true,
-		Username:        docuser.Name,
-		PhoneNumber:     docuser.PhoneNumber,
-		CreatedAt:       time.Now(),
-		Trackerdata:     score.Trackerdata,
-		Tracker:         score.Tracker,
-		StravaKM:        score.StravaKM,
-		Strava:          score.Strava,
-		IQresult:        score.IQresult,
-		IQ:              score.IQ,
-		MBC:             score.MBC,
-		MBCPoints:       score.MBCPoints,
-		RVN:             score.RVN,
-		RavencoinPoints: score.RavencoinPoints,
-		QRIS:            score.QRIS,
-		QRISPoints:      score.QRISPoints,
-		Pomokitsesi:     score.Pomokitsesi,
-		Pomokit:         score.Pomokit,
-		GTMetrixResult:  score.GTMetrixResult,
-		GTMetrix:        score.GTMetrix,
-		WebHookpush:     score.WebHookpush,
-		WebHook:         score.WebHook,
-		PresensiHari:    score.PresensiHari,
-		Presensi:        score.Presensi,
-		Sponsordata:     score.Sponsordata,
-		Sponsor:         score.Sponsor,
-		BukuKatalog:     score.BukuKatalog,
-		BukPed:          score.BukPed,
-		JurnalWeb:       score.JurnalWeb,
-		Jurnal:          score.Jurnal,
-		TotalScore:      score.TotalScore,
+		BimbinganKe: nextBimbinganKe,
+		Approved:    true,
+		Username:    docuser.Name,
+		PhoneNumber: docuser.PhoneNumber,
+		Asesor:      asesor,
+		CreatedAt:   time.Now(),
+		// Set semua activity scores ke 0
+		Trackerdata:     0,
+		Tracker:         0,
+		StravaKM:        0,
+		Strava:          0,
+		IQresult:        0,
+		IQ:              0,
+		MBC:             0,
+		MBCPoints:       0,
+		RVN:             0,
+		RavencoinPoints: 0,
+		QRIS:            0,
+		QRISPoints:      0,
+		Pomokitsesi:     0,
+		Pomokit:         0,
+		GTMetrixResult:  "",
+		GTMetrix:        0,
+		WebHookpush:     0,
+		WebHook:         0,
+		PresensiHari:    0,
+		Presensi:        0,
+		Sponsordata:     0,
+		Sponsor:         0,
+		BukuKatalog:     "",
+		BukPed:          0,
+		JurnalWeb:       "",
+		Jurnal:          0,
+		TotalScore:      0,
 		Komentar:        "Bonus Bimbingan dari Event Referral Code: " + claimReq.Code,
 		Validasi:        5, // Rating 5 untuk event
 	}
@@ -216,46 +228,16 @@ func ClaimEventCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Save user claim record
-	userClaim := UserEventClaim{
-		PhoneNumber: payload.Id,
-		EventCode:   claimReq.Code,
-		ClaimedAt:   time.Now(),
-	}
-	_, err = atdb.InsertOneDoc(config.Mongoconn, "usereventclaims", userClaim)
-	if err != nil {
-		respn.Status = "Error : Gagal menyimpan record claim"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
-
 	respn.Status = "Success"
 	respn.Response = "Kode berhasil diklaim! Bimbingan bonus telah ditambahkan."
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
-// CheckEventClaimStatus untuk cek apakah user sudah claim
+// CheckEventClaimStatus untuk cek status kode event - tidak lagi cek per user
 func CheckEventClaimStatus(respw http.ResponseWriter, req *http.Request) {
-	var respn model.Response
-	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
-	if err != nil {
-		respn.Status = "Error : Token Tidak Valid"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusForbidden, respn)
-		return
-	}
-
-	// Cek apakah user sudah pernah claim
-	existingClaim, _ := atdb.GetOneDoc[UserEventClaim](config.Mongoconn, "usereventclaims", bson.M{"phonenumber": payload.Id})
-
 	result := map[string]interface{}{
-		"hasClaimed": existingClaim.PhoneNumber != "",
-	}
-
-	if existingClaim.PhoneNumber != "" {
-		result["claimedAt"] = existingClaim.ClaimedAt
-		result["eventCode"] = existingClaim.EventCode
+		"hasClaimed": false,
+		"message":    "Silakan masukkan kode event yang valid",
 	}
 
 	at.WriteJSON(respw, http.StatusOK, result)
