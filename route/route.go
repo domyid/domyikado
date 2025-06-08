@@ -336,6 +336,24 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GenerateEventCode(w, r)
 	case method == "POST" && path == "/api/event/claimcode":
 		controller.ClaimEventCode(w, r)
+		// QR Bimbingan Routes
+	case method == "POST" && path == "/api/qr/generatesession":
+		controller.GenerateQRSession(w, r)
+	case method == "POST" && path == "/api/qr/stopsession":
+		controller.StopQRSession(w, r)
+	case method == "GET" && path == "/api/qr/activesession":
+		controller.GetActiveQRSession(w, r)
+	case method == "POST" && path == "/api/qr/claim":
+		controller.ClaimQRBimbingan(w, r)
+	case method == "GET" && path == "/api/qr/claimstatus":
+		controller.CheckQRClaimStatus(w, r)
+
+	// Static file untuk halaman QR
+	case method == "GET" && path == "/bimbinganqr.html":
+		http.ServeFile(w, r, "./static/bimbinganqr.html")
+	case method == "GET" && path == "/bimbinganqr.js":
+		w.Header().Set("Content-Type", "application/javascript")
+		http.ServeFile(w, r, "./static/bimbinganqr.js")
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
