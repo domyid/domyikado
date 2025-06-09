@@ -336,19 +336,19 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GenerateEventCode(w, r)
 	case method == "POST" && path == "/api/event/claimcode":
 		controller.ClaimEventCode(w, r)
-		// QR Code System Endpoints
-	case method == "POST" && path == "/api/qr/start":
-		controller.StartQRCodeSession(w, r)
-	case method == "POST" && path == "/api/qr/stop":
-		controller.StopQRCodeSession(w, r)
-	case method == "GET" && path == "/api/qr/generate":
-		controller.GenerateQRCode(w, r)
+	// QR Code Bimbingan System Routes
+	case method == "POST" && path == "/api/qr/session/start":
+		controller.StartQRSession(w, r)
+	case method == "GET" && path == "/api/qr/current":
+		controller.GetCurrentQRCode(w, r)
+	case method == "POST" && path == "/api/qr/session/stop":
+		controller.StopQRSession(w, r)
 	case method == "POST" && path == "/api/qr/claim":
 		controller.ClaimQRCode(w, r)
-	case method == "GET" && path == "/api/qr/userstatus":
-		controller.CheckQRClaimStatus(w, r)
-	case method == "GET" && path == "/api/qr/status":
-		controller.GetQRSystemStatus(w, r)
+	case method == "GET" && path == "/api/qr/session/status":
+		controller.GetQRSessionStatus(w, r)
+	case method == "GET" && path == "/api/qr/user/claimstatus":
+		controller.CheckUserQRClaimStatus(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
