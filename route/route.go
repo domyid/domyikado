@@ -336,6 +336,13 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GenerateEventCode(w, r)
 	case method == "POST" && path == "/api/event/claimcode":
 		controller.ClaimEventCode(w, r)
+		// New Time Event Code Routes
+	case method == "POST" && path == "/api/event/generatecodetime":
+		controller.GenerateEventCodeTime(w, r)
+	case method == "POST" && path == "/api/event/claimcodetime":
+		controller.ClaimEventCodeTime(w, r)
+	case method == "GET" && path == "/api/event/claimtimestatus":
+		controller.CheckEventTimeClaimStatus(w, r)
 	// QR Code Bimbingan System Routes
 	case method == "POST" && path == "/api/qr/session/start":
 		controller.StartQRSession(w, r)

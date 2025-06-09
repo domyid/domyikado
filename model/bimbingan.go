@@ -52,3 +52,53 @@ type BimbinganPengajuan struct {
 	Timestamp            time.Time          `bson:"timestamp" json:"timestamp"`
 	Status               string             `bson:"status" json:"status"` // "pending", "approved", "rejected"
 }
+
+// EventCode struct untuk menyimpan kode referral
+type EventCode struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Code        string             `bson:"code" json:"code"`
+	CreatedBy   string             `bson:"createdby" json:"createdby"`
+	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
+	IsUsed      bool               `bson:"isused" json:"isused"`
+	UsedBy      string             `bson:"usedby,omitempty" json:"usedby,omitempty"`
+	UsedAt      time.Time          `bson:"usedat,omitempty" json:"usedat,omitempty"`
+	BimbinganID primitive.ObjectID `bson:"bimbinganid,omitempty" json:"bimbinganid,omitempty"`
+}
+
+// EventCodeTime struct untuk kode dengan waktu kadaluarsa
+type EventCodeTime struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Code        string             `bson:"code" json:"code"`
+	CreatedBy   string             `bson:"createdby" json:"createdby"`
+	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
+	ExpiresAt   time.Time          `bson:"expiresat" json:"expiresat"`
+	DurationSec int                `bson:"durationsec" json:"durationsec"`
+	IsActive    bool               `bson:"isactive" json:"isactive"`
+}
+
+// EventUserCodeTime struct untuk tracking user yang sudah claim kode time
+type EventUserCodeTime struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	CodeID      primitive.ObjectID `bson:"codeid" json:"codeid"`
+	Code        string             `bson:"code" json:"code"`
+	UserPhone   string             `bson:"userphone" json:"userphone"`
+	ClaimedAt   time.Time          `bson:"claimedat" json:"claimedat"`
+	BimbinganID primitive.ObjectID `bson:"bimbinganid,omitempty" json:"bimbinganid,omitempty"`
+}
+
+// TimeCodeGenerateRequest struct untuk request generate time code
+type TimeCodeGenerateRequest struct {
+	DurationSeconds int `json:"duration_seconds" bson:"duration_seconds"`
+}
+
+// TimeCodeClaimRequest struct untuk request claim time code
+type TimeCodeClaimRequest struct {
+	Code string `json:"code" bson:"code"`
+}
+
+// TimeCodeResponse struct untuk response generate time code
+type TimeCodeResponse struct {
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expires_at"`
+	Duration  int    `json:"duration"`
+}
