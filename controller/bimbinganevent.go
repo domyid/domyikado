@@ -44,7 +44,7 @@ func GenerateEventCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Generate random code
+	// Generate random code event
 	bytes := make([]byte, 4)
 	if _, err := rand.Read(bytes); err != nil {
 		respn.Status = "Error : Gagal generate kode"
@@ -52,7 +52,7 @@ func GenerateEventCode(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
-	code := "EVENT" + hex.EncodeToString(bytes)
+	code := "GLR" + hex.EncodeToString(bytes)
 
 	// Simpan ke database
 	eventCode := model.EventCode{
@@ -120,7 +120,7 @@ func GenerateEventCodeTime(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Generate random code
+	// Generate random code TIME
 	bytes := make([]byte, 4)
 	if _, err := rand.Read(bytes); err != nil {
 		respn.Status = "Error : Gagal generate kode"
@@ -128,7 +128,7 @@ func GenerateEventCodeTime(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
-	code := "TIME" + hex.EncodeToString(bytes)
+	code := "GLR" + hex.EncodeToString(bytes)
 
 	// Hitung waktu kadaluarsa
 	now := time.Now()
@@ -222,20 +222,24 @@ func ClaimEventCode(respw http.ResponseWriter, req *http.Request) {
 	// Tentukan bimbinganke selanjutnya
 	nextBimbinganKe := len(allBimbingan) + 1
 
-	// Set asesor tetap (Dirga F)
 	asesor := model.Userdomyikado{
-		ID:                   primitive.ObjectID{},
-		Name:                 "Dirga F",
-		PhoneNumber:          "6282268895372",
-		Email:                "fdirga63@gmail.com",
-		GithubUsername:       "Febriand1",
-		GitlabUsername:       "Febriand1",
-		Poin:                 495.45255417617057,
-		SponsorName:          "dapa",
-		SponsorPhoneNumber:   "6282117252716",
-		StravaProfilePicture: "https://lh3.googleusercontent.com/a/ACg8ocK27sU9YXcfmLm9Zw_MtUW0kT--NA",
-		NPM:                  "1214039",
-		IsDosen:              true,
+		ID:          primitive.ObjectID{},
+		Name:        "GilarYa",
+		PhoneNumber: "6285312924192",
+		Email:       "gilarwahibul@gmail.com",
+		NPM:         "1214022",
+		IsDosen:     true,
+		// Name:                 "Dirga F",
+		// PhoneNumber:          "6282268895372",
+		// Email:                "fdirga63@gmail.com",
+		// GithubUsername:       "Febriand1",
+		// GitlabUsername:       "Febriand1",
+		// Poin:                 495.45255417617057,
+		// SponsorName:          "dapa",
+		// SponsorPhoneNumber:   "6282117252716",
+		// StravaProfilePicture: "https://lh3.googleusercontent.com/a/ACg8ocK27sU9YXcfmLm9Zw_MtUW0kT--NA",
+		// NPM:                  "1214039",
+		// IsDosen:              true,
 	}
 
 	// Isi ObjectID untuk asesor
@@ -390,20 +394,13 @@ func ClaimEventCodeTime(respw http.ResponseWriter, req *http.Request) {
 	// Tentukan bimbinganke selanjutnya
 	nextBimbinganKe := len(allBimbingan) + 1
 
-	// Set asesor tetap (Dirga F)
 	asesor := model.Userdomyikado{
-		ID:                   primitive.ObjectID{},
-		Name:                 "Dirga F",
-		PhoneNumber:          "6282268895372",
-		Email:                "fdirga63@gmail.com",
-		GithubUsername:       "Febriand1",
-		GitlabUsername:       "Febriand1",
-		Poin:                 495.45255417617057,
-		SponsorName:          "dapa",
-		SponsorPhoneNumber:   "6282117252716",
-		StravaProfilePicture: "https://lh3.googleusercontent.com/a/ACg8ocK27sU9YXcfmLm9Zw_MtUW0kT--NA",
-		NPM:                  "1214039",
-		IsDosen:              true,
+		ID:          primitive.ObjectID{},
+		Name:        "GilarYa",
+		PhoneNumber: "6285312924192",
+		Email:       "gilarwahibul@gmail.com",
+		NPM:         "1214022",
+		IsDosen:     true,
 	}
 
 	// Isi ObjectID untuk asesor
