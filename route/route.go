@@ -343,19 +343,6 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ClaimEventCodeTime(w, r)
 	case method == "GET" && path == "/api/event/claimtimestatus":
 		controller.CheckEventTimeClaimStatus(w, r)
-	// QR Code Bimbingan System Routes
-	case method == "POST" && path == "/api/qr/session/start":
-		controller.StartQRSession(w, r)
-	case method == "GET" && path == "/api/qr/current":
-		controller.GetCurrentQRCode(w, r)
-	case method == "POST" && path == "/api/qr/session/stop":
-		controller.StopQRSession(w, r)
-	case method == "POST" && path == "/api/qr/claim":
-		controller.ClaimQRCode(w, r)
-	case method == "GET" && path == "/api/qr/session/status":
-		controller.GetQRSessionStatus(w, r)
-	case method == "GET" && path == "/api/qr/user/claimstatus":
-		controller.CheckUserQRClaimStatus(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
