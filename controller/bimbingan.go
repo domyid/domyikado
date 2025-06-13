@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gocroot/config"
@@ -227,12 +228,18 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 			"$lt":  mondayNextWeek.UTC(),
 		},
 	}
-	_, err = atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
+
+	// Cek apakah ada bimbingan yang sudah disetujui minggu ini
+	existingBimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
 	if err == nil {
-		respn.Status = "Info : Data bimbingan sudah di approve"
-		respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang untuk minggu ini."
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
+		// Cek apakah komentar mengandung "Bonus Bimbingan dari Event Time Code"
+		if !strings.Contains(existingBimbingan.Komentar, "Bonus Bimbingan dari Event Time Code") {
+			respn.Status = "Info : Data bimbingan sudah di approve"
+			respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang untuk minggu ini."
+			at.WriteJSON(respw, http.StatusBadRequest, respn)
+			return
+		}
+		// Jika komentar mengandung "Bonus Bimbingan dari Event Time Code", lanjutkan proses
 	}
 
 	score, _ := GetLastWeekActivityScoreData(payload.Id)
