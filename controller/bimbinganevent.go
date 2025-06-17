@@ -855,3 +855,69 @@ func CheckEventTimeClaimStatus(respw http.ResponseWriter, req *http.Request) {
 	}
 	at.WriteJSON(respw, http.StatusOK, result)
 }
+
+func GetDataEventById(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	id := at.GetParam(req)
+
+	// Cek apakah ini event code biasa atau time code
+	eventCode, err := atdb.GetOneDoc[model.EventCode](config.Mongoconn, "eventcodes", bson.M{"code": id})
+	if err == nil {
+		// Event code biasa ditemukan
+		type EventResponse struct {
+			Code      string    `json:"code"`
+			CreatedBy string    `json:"createdby"`
+			CreatedAt time.Time `json:"createdat"`
+			IsUsed    bool      `json:"isused"`
+			UsedBy    string    `json:"usedby,omitempty"`
+			UsedAt    time.Time `json:"usedat,omitempty"`
+			Type      string    `json:"type"`
+		}
+
+		response := EventResponse{
+			Code:      eventCode.Code,
+			CreatedBy: eventCode.CreatedBy,
+			CreatedAt: eventCode.CreatedAt,
+			IsUsed:    eventCode.IsUsed,
+			UsedBy:    eventCode.UsedBy,
+			UsedAt:    eventCode.UsedAt,
+			Type:      "regular",
+		}
+
+		at.WriteJSON(respw, http.StatusOK, response)
+		return
+	}
+
+	// Cek event time code
+	eventCodeTime, err := atdb.GetOneDoc[model.EventCodeTime](config.Mongoconn, "eventcodetime", bson.M{"code": id})
+	if err == nil {
+		// Event time code ditemukan
+		type EventTimeResponse struct {
+			Code        string    `json:"code"`
+			CreatedBy   string    `json:"createdby"`
+			CreatedAt   time.Time `json:"createdat"`
+			ExpiresAt   time.Time `json:"expiresat"`
+			DurationSec int       `json:"durationsec"`
+			IsActive    bool      `json:"isactive"`
+			Type        string    `json:"type"`
+		}
+
+		response := EventTimeResponse{
+			Code:        eventCodeTime.Code,
+			CreatedBy:   eventCodeTime.CreatedBy,
+			CreatedAt:   eventCodeTime.CreatedAt,
+			ExpiresAt:   eventCodeTime.ExpiresAt,
+			DurationSec: eventCodeTime.DurationSec,
+			IsActive:    eventCodeTime.IsActive,
+			Type:        "time",
+		}
+
+		at.WriteJSON(respw, http.StatusOK, response)
+		return
+	}
+
+	// Tidak ditemukan
+	respn.Status = "Error : Data event tidak ditemukan"
+	respn.Response = "Kode event tidak valid"
+	at.WriteJSON(respw, http.StatusBadRequest, respn)
+}
