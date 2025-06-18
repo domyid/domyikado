@@ -91,18 +91,6 @@ type TimeCodeGenerateRequest struct {
 	DurationSeconds int `json:"duration_seconds" bson:"duration_seconds"`
 }
 
-// TimeCodeClaimRequest struct untuk request claim time code
-type TimeCodeClaimRequest struct {
-	Code string `json:"code" bson:"code"`
-}
-
-// TimeCodeResponse struct untuk response generate time code
-type TimeCodeResponse struct {
-	Code      string `json:"code"`
-	ExpiresAt string `json:"expires_at"`
-	Duration  int    `json:"duration"`
-}
-
 // Event struct untuk event yang dibuat owner
 type Event struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
@@ -129,7 +117,6 @@ type EventClaim struct {
 	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
 	ApprovedBy  string             `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
 	IsApproved  bool               `bson:"isapproved" json:"isapproved"`
-	BimbinganID primitive.ObjectID `bson:"bimbinganid,omitempty" json:"bimbinganid,omitempty"`
 }
 
 // EventCreateRequest struct untuk request create event
@@ -155,4 +142,30 @@ type EventSubmitRequest struct {
 type EventApprovalRequest struct {
 	ClaimID    string `json:"claim_id" bson:"claim_id"`
 	IsApproved bool   `json:"is_approved" bson:"is_approved"`
+}
+
+// TimeCodeClaimRequest struct untuk request claim time code
+type TimeCodeClaimRequest struct {
+	Code string `json:"code" bson:"code"`
+}
+
+// TimeCodeResponse struct untuk response generate time code
+type TimeCodeResponse struct {
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expires_at"`
+	Duration  int    `json:"duration"`
+}
+
+// EventUserPoint struct untuk tracking point yang didapat user dari event
+type EventUserPoint struct {
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	UserPhone  string             `bson:"userphone" json:"userphone"`
+	EventID    primitive.ObjectID `bson:"eventid" json:"eventid"`
+	EventName  string             `bson:"eventname" json:"eventname"`
+	Points     int                `bson:"points" json:"points"`
+	TaskLink   string             `bson:"tasklink" json:"tasklink"`
+	ClaimID    primitive.ObjectID `bson:"claimid" json:"claimid"`
+	ApprovedBy string             `bson:"approvedby" json:"approvedby"`
+	ApprovedAt time.Time          `bson:"approvedat" json:"approvedat"`
+	CreatedAt  time.Time          `bson:"createdat" json:"createdat"`
 }

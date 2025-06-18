@@ -473,10 +473,10 @@ func ApproveEventTask(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	if approvalReq.IsApproved {
-		// Approve: Buat bimbingan entry dan berikan points
-		err = createBimbinganFromEventApproval(claim, event, payload.Id)
+		// Approve: Buat entry di eventuserpoint dan berikan points
+		err = createEventUserPoint(claim, event, payload.Id)
 		if err != nil {
-			respn.Status = "Error : Gagal membuat bimbingan"
+			respn.Status = "Error : Gagal menyimpan point user"
 			respn.Response = err.Error()
 			at.WriteJSON(respw, http.StatusInternalServerError, respn)
 			return
@@ -602,80 +602,119 @@ func GetClaimDetails(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
-// Helper function untuk membuat bimbingan dari event approval
-func createBimbinganFromEventApproval(claim model.EventClaim, event model.Event, approverPhone string) error {
-	// Get user info
-	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": claim.UserPhone})
+// Helper function untuk menyimpan point user dari event approval
+func createEventUserPoint(claim model.EventClaim, event model.Event, approverPhone string) error {
+	// Create event user point entry
+	eventUserPoint := model.EventUserPoint{
+		UserPhone:  claim.UserPhone,
+		EventID:    event.ID,
+		EventName:  event.Name,
+		Points:     event.Points,
+		TaskLink:   claim.TaskLink,
+		ClaimID:    claim.ID,
+		ApprovedBy: approverPhone,
+		ApprovedAt: time.Now(),
+		CreatedAt:  time.Now(),
+	}
+
+	// Insert ke collection eventuserpoint
+	pointID, err := atdb.InsertOneDoc(config.Mongoconn, "eventuserpoint", eventUserPoint)
 	if err != nil {
 		return err
 	}
 
-	// Get approver info (asesor)
-	asesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": approverPhone})
-	if err != nil {
-		return err
-	}
-
-	// Get next bimbingan number
-	lastBimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": claim.UserPhone})
-	nextBimbinganKe := 1
-	if err == nil {
-		nextBimbinganKe = lastBimbingan.BimbinganKe + 1
-	}
-
-	// Create bimbingan entry dengan points dari event
-	bimbingan := model.ActivityScore{
-		BimbinganKe: nextBimbinganKe,
-		Approved:    true,
-		Username:    user.Name,
-		PhoneNumber: user.PhoneNumber,
-		Asesor:      asesor,
-		CreatedAt:   time.Now(),
-		// Set semua activity scores ke 0 kecuali yang sesuai dengan event points
-		Trackerdata:     0,
-		Tracker:         0,
-		StravaKM:        0,
-		Strava:          0,
-		IQresult:        0,
-		IQ:              0,
-		MBC:             0,
-		MBCPoints:       0,
-		RVN:             0,
-		RavencoinPoints: 0,
-		QRIS:            0,
-		QRISPoints:      0,
-		Pomokitsesi:     0,
-		Pomokit:         0,
-		GTMetrixResult:  "",
-		GTMetrix:        0,
-		WebHookpush:     0,
-		WebHook:         0,
-		PresensiHari:    0,
-		Presensi:        0,
-		Sponsordata:     0,
-		Sponsor:         event.Points, // Assign event points to Sponsor field
-		BukuKatalog:     "",
-		BukPed:          0,
-		JurnalWeb:       claim.TaskLink,
-		Jurnal:          0,
-		TotalScore:      event.Points,
-		Komentar:        "Event Task Completed: " + event.Name + " - Link: " + claim.TaskLink,
-		Validasi:        5, // Rating 5 untuk event
-	}
-
-	// Insert bimbingan
-	bimbinganID, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
-	if err != nil {
-		return err
-	}
-
-	// Update claim dengan bimbingan ID
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, primitive.M{"bimbinganid": bimbinganID})
-	if err != nil {
-		return err
-	}
-
+	log.Printf("Event user point created: %s, User: %s, Points: %d", pointID.Hex(), claim.UserPhone, event.Points)
 	return nil
+}
+
+// GetUserEventPoints - Mendapatkan total point user dari event
+func GetUserEventPoints(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get all user event points
+	userPoints, err := atdb.GetAllDoc[[]model.EventUserPoint](config.Mongoconn, "eventuserpoint", primitive.M{
+		"userphone": payload.Id,
+	})
+	if err != nil {
+		userPoints = []model.EventUserPoint{} // If error, return empty array
+	}
+
+	// Calculate total points
+	totalPoints := 0
+	for _, point := range userPoints {
+		totalPoints += point.Points
+	}
+
+	// Prepare response
+	responseData := map[string]interface{}{
+		"user_phone":    payload.Id,
+		"total_points":  totalPoints,
+		"event_count":   len(userPoints),
+		"event_history": userPoints,
+	}
+
+	respn.Status = "Success"
+	respn.Data = responseData
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// GetAllUserEventPoints - Admin endpoint untuk melihat semua user points
+func GetAllUserEventPoints(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// TODO: Add admin role check here if needed
+	_ = payload // For now, any authenticated user can access
+
+	// Get all event points
+	allPoints, err := atdb.GetAllDoc[[]model.EventUserPoint](config.Mongoconn, "eventuserpoint", primitive.M{})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data point"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Group by user phone
+	userPointsMap := make(map[string][]model.EventUserPoint)
+	userTotalMap := make(map[string]int)
+
+	for _, point := range allPoints {
+		userPointsMap[point.UserPhone] = append(userPointsMap[point.UserPhone], point)
+		userTotalMap[point.UserPhone] += point.Points
+	}
+
+	// Prepare response
+	var userSummaries []map[string]interface{}
+	for userPhone, points := range userPointsMap {
+		summary := map[string]interface{}{
+			"user_phone":    userPhone,
+			"total_points":  userTotalMap[userPhone],
+			"event_count":   len(points),
+			"event_history": points,
+		}
+		userSummaries = append(userSummaries, summary)
+	}
+
+	respn.Status = "Success"
+	respn.Data = map[string]interface{}{
+		"total_users": len(userSummaries),
+		"users":       userSummaries,
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
 // Helper function untuk send WhatsApp notification
