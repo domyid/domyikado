@@ -362,6 +362,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetAllUserEventPoints(w, r)
 	case method == "GET" && path == "/api/event/claims":
 		controller.GetEventClaimsByPhoneNumber(w, r)
+	case method == "GET" && strings.HasPrefix(path, "/api/event/claim/"):
+		controller.GetEventClaimDetails(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)

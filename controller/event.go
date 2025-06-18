@@ -713,6 +713,87 @@ func GetEventClaimsByPhoneNumber(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
+// GetEventClaimDetails - Mendapatkan detail claim berdasarkan claim ID untuk approval individual
+func GetEventClaimDetails(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get claim ID from URL path
+	claimIDStr := req.URL.Path[len("/api/event/claim/"):]
+	if claimIDStr == "" {
+		respn.Status = "Error : Claim ID tidak ditemukan"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Convert to ObjectID
+	claimID, err := primitive.ObjectIDFromHex(claimIDStr)
+	if err != nil {
+		respn.Status = "Error : Claim ID tidak valid"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Log access
+	log.Printf("GetEventClaimDetails accessed by: %s, claim ID: %s", payload.Id, claimIDStr)
+
+	// Get claim details
+	claim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"_id":         claimID,
+		"iscompleted": true,
+		"isapproved":  false,
+	})
+	if err != nil {
+		respn.Status = "Error : Claim tidak ditemukan atau sudah diproses"
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Get event info
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{"_id": claim.EventID})
+	if err != nil {
+		respn.Status = "Error : Event tidak ditemukan"
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Get user info
+	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": claim.UserPhone})
+	if err != nil {
+		respn.Status = "Error : User tidak ditemukan"
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	claimDetail := map[string]interface{}{
+		"claim_id":          claim.ID.Hex(),
+		"event_id":          event.ID.Hex(),
+		"event_name":        event.Name,
+		"event_description": event.Description,
+		"event_points":      event.Points,
+		"user_name":         user.Name,
+		"user_phone":        user.PhoneNumber,
+		"user_email":        user.Email,
+		"task_link":         claim.TaskLink,
+		"claimed_at":        claim.ClaimedAt,
+		"submitted_at":      claim.SubmittedAt,
+		"timer_sec":         claim.TimerSec,
+		"expires_at":        claim.ExpiresAt,
+		"is_completed":      claim.IsCompleted,
+		"is_approved":       claim.IsApproved,
+	}
+
+	respn.Status = "Success"
+	respn.Data = claimDetail
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
 // GetUserEventPoints - Mendapatkan total point user dari event
 func GetUserEventPoints(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
