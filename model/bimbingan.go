@@ -112,6 +112,7 @@ type EventClaim struct {
 	TimerSec    int                `bson:"timersec" json:"timersec"`
 	IsActive    bool               `bson:"isactive" json:"isactive"`
 	IsCompleted bool               `bson:"iscompleted" json:"iscompleted"`
+	IsSubmit    bool               `bson:"issubmit" json:"issubmit"`
 	TaskLink    string             `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
 	SubmittedAt time.Time          `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
 }

@@ -123,10 +123,13 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 		userClaims = []model.EventClaim{} // If error, assume no claims
 	}
 
-	// Get all active claims to check availability
+	// Get all active claims AND submitted claims to check availability
+	// Event is unavailable if: isactive=true OR issubmit=true (waiting approval)
 	allActiveClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"isactive":  true,
-		"expiresat": primitive.M{"$gt": time.Now()},
+		"$or": []primitive.M{
+			{"isactive": true, "expiresat": primitive.M{"$gt": time.Now()}},
+			{"issubmit": true},
+		},
 	})
 	if err != nil {
 		allActiveClaims = []model.EventClaim{} // If error, assume no claims
@@ -164,6 +167,7 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 				"claimed_at":   userClaim.ClaimedAt,
 				"expires_at":   userClaim.ExpiresAt,
 				"is_completed": userClaim.IsCompleted,
+				"is_submit":    userClaim.IsSubmit,
 				"task_link":    userClaim.TaskLink,
 				"submitted_at": userClaim.SubmittedAt,
 			}
@@ -236,19 +240,29 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah event sudah di-claim oleh user lain dan masih aktif
+	// Cek apakah event sudah di-claim atau di-submit oleh user lain
 	existingClaim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"eventid":   eventObjID,
-		"isactive":  true,
-		"expiresat": primitive.M{"$gt": time.Now()},
+		"eventid": eventObjID,
+		"$or": []primitive.M{
+			{"isactive": true, "expiresat": primitive.M{"$gt": time.Now()}},
+			{"issubmit": true}, // Event locked karena sudah di-submit, waiting approval
+		},
 	})
 	if err == nil {
 		if existingClaim.UserPhone != payload.Id {
-			respn.Status = "Error : Event sudah di-claim oleh user lain"
+			if existingClaim.IsSubmit {
+				respn.Status = "Error : Event sedang menunggu approval, tidak bisa di-claim"
+			} else {
+				respn.Status = "Error : Event sudah di-claim oleh user lain"
+			}
 			at.WriteJSON(respw, http.StatusConflict, respn)
 			return
 		} else {
-			respn.Status = "Error : Anda sudah claim event ini"
+			if existingClaim.IsSubmit {
+				respn.Status = "Error : Event Anda sedang menunggu approval"
+			} else {
+				respn.Status = "Error : Anda sudah claim event ini"
+			}
 			at.WriteJSON(respw, http.StatusConflict, respn)
 			return
 		}
@@ -266,6 +280,7 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		TimerSec:    claimReq.TimerSec,
 		IsActive:    true,
 		IsCompleted: false,
+		IsSubmit:    false,
 	}
 
 	// Simpan claim ke database
@@ -367,6 +382,7 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		"tasklink":    submitReq.TaskLink,
 		"submittedat": time.Now(),
 		"iscompleted": true,
+		"issubmit":    true,  // Mark as submitted
 		"isactive":    false, // Deactivate claim
 	}
 
@@ -891,6 +907,15 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Reset issubmit di EventClaim setelah approval/rejection
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": eventApproval.ClaimID}, primitive.M{
+		"issubmit": false,
+		"isactive": false,
+	})
+	if err != nil {
+		log.Printf("Warning: Failed to reset EventClaim issubmit: %v", err)
+	}
+
 	// Jika approved, buat EventUserPoint
 	if eventApproval.Approved {
 		eventUserPoint := model.EventUserPoint{
@@ -914,6 +939,12 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventApproval.EventID}, primitive.M{"isactive": false})
 		if err != nil {
 			log.Printf("Warning: Failed to deactivate event: %v", err)
+		}
+	} else {
+		// Jika rejected, reactivate event untuk user lain
+		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventApproval.EventID}, primitive.M{"isactive": true})
+		if err != nil {
+			log.Printf("Warning: Failed to reactivate event after rejection: %v", err)
 		}
 	}
 
