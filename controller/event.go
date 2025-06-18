@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -108,10 +110,14 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Cleanup expired claims first
+	cleanupExpiredClaims()
+
 	// Get user's active claims to check which events are claimed
 	userClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
 		"userphone": payload.Id,
 		"isactive":  true,
+		"expiresat": primitive.M{"$gt": time.Now()}, // Only non-expired claims
 	})
 	if err != nil {
 		userClaims = []model.EventClaim{} // If error, assume no claims
@@ -707,4 +713,30 @@ func sendWhatsAppMessageWithAPI(phoneNumber, message string) error {
 	}
 
 	return nil
+}
+
+// cleanupExpiredClaims - Cleanup expired claims yang belum di-submit
+func cleanupExpiredClaims() {
+	// Deactivate expired claims yang belum di-submit
+	filter := primitive.M{
+		"isactive":    true,
+		"iscompleted": false,
+		"expiresat":   primitive.M{"$lt": time.Now()},
+	}
+
+	update := primitive.M{
+		"$set": primitive.M{
+			"isactive": false,
+		},
+	}
+
+	result, err := config.Mongoconn.Collection("eventclaims").UpdateMany(context.TODO(), filter, update)
+	if err != nil {
+		log.Printf("Error cleaning up expired claims: %v", err)
+		return
+	}
+
+	if result.ModifiedCount > 0 {
+		log.Printf("Cleaned up %d expired claims", result.ModifiedCount)
+	}
 }
