@@ -500,6 +500,15 @@ func ApproveEventTask(respw http.ResponseWriter, req *http.Request) {
 		"isactive":   false, // Deactivate claim regardless of approval status
 	}
 
+	// If rejected, make event available again
+	if !approvalReq.IsApproved {
+		// Reactivate event for others to claim
+		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{"isactive": true})
+		if err != nil {
+			log.Printf("Warning: Failed to reactivate event after rejection: %v", err)
+		}
+	}
+
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claimObjID}, updateData)
 	if err != nil {
 		respn.Status = "Error : Gagal update claim"
@@ -625,6 +634,83 @@ func createEventUserPoint(claim model.EventClaim, event model.Event, approverPho
 
 	log.Printf("Event user point created: %s, User: %s, Points: %d", pointID.Hex(), claim.UserPhone, event.Points)
 	return nil
+}
+
+// GetEventClaimsByPhoneNumber - Mendapatkan event claims berdasarkan phone number untuk approval
+func GetEventClaimsByPhoneNumber(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get phone number from query parameter
+	phoneNumber := req.URL.Query().Get("phonenumber")
+	if phoneNumber == "" {
+		respn.Status = "Error : Phone number tidak ditemukan"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Log who is accessing this endpoint
+	log.Printf("GetEventClaimsByPhoneNumber accessed by: %s, searching for: %s", payload.Id, phoneNumber)
+
+	// Get user's submitted event claims (completed but not approved yet)
+	claims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"userphone":   phoneNumber,
+		"iscompleted": true,
+		"isapproved":  false,
+		"isactive":    false, // Claims that are submitted but not approved
+	})
+	if err != nil {
+		claims = []model.EventClaim{} // If error, return empty array
+	}
+
+	// Get event details for each claim
+	var claimDetails []map[string]interface{}
+	for _, claim := range claims {
+		// Get event info
+		event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{"_id": claim.EventID})
+		if err != nil {
+			continue // Skip if event not found
+		}
+
+		// Get user info
+		user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": claim.UserPhone})
+		if err != nil {
+			continue // Skip if user not found
+		}
+
+		claimDetail := map[string]interface{}{
+			"claim_id":          claim.ID.Hex(),
+			"event_id":          event.ID.Hex(),
+			"event_name":        event.Name,
+			"event_description": event.Description,
+			"event_points":      event.Points,
+			"user_name":         user.Name,
+			"user_phone":        user.PhoneNumber,
+			"user_email":        user.Email,
+			"task_link":         claim.TaskLink,
+			"claimed_at":        claim.ClaimedAt,
+			"submitted_at":      claim.SubmittedAt,
+			"timer_sec":         claim.TimerSec,
+			"expires_at":        claim.ExpiresAt,
+			"is_completed":      claim.IsCompleted,
+			"is_approved":       claim.IsApproved,
+		}
+		claimDetails = append(claimDetails, claimDetail)
+	}
+
+	respn.Status = "Success"
+	respn.Data = map[string]interface{}{
+		"phone_number": phoneNumber,
+		"claims_count": len(claimDetails),
+		"claims":       claimDetails,
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
 // GetUserEventPoints - Mendapatkan total point user dari event

@@ -360,6 +360,8 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetUserEventPoints(w, r)
 	case method == "GET" && path == "/api/event/alluserpoints":
 		controller.GetAllUserEventPoints(w, r)
+	case method == "GET" && path == "/api/event/claims":
+		controller.GetEventClaimsByPhoneNumber(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
