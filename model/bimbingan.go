@@ -91,7 +91,7 @@ type TimeCodeGenerateRequest struct {
 	DurationSeconds int `json:"duration_seconds" bson:"duration_seconds"`
 }
 
-// Event struct untuk event yang dibuat owner
+// Event struct untuk event management - All in one collection
 type Event struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	Name        string             `bson:"name" json:"name"`
@@ -100,6 +100,24 @@ type Event struct {
 	CreatedBy   string             `bson:"createdby" json:"createdby"`
 	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
 	IsActive    bool               `bson:"isactive" json:"isactive"`
+
+	// Claim fields
+	ClaimedBy string    `bson:"claimedby,omitempty" json:"claimedby,omitempty"`
+	ClaimedAt time.Time `bson:"claimedat,omitempty" json:"claimedat,omitempty"`
+	ExpiresAt time.Time `bson:"expiresat,omitempty" json:"expiresat,omitempty"`
+	TimerSec  int       `bson:"timersec,omitempty" json:"timersec,omitempty"`
+
+	// Submission fields
+	TaskLink    string    `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
+	SubmittedAt time.Time `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
+	IsSubmitted bool      `bson:"issubmitted" json:"issubmitted"`
+
+	// Approval fields
+	IsApproved bool      `bson:"isapproved" json:"isapproved"`
+	ApprovedAt time.Time `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
+	ApprovedBy string    `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
+	Komentar   string    `bson:"komentar,omitempty" json:"komentar,omitempty"`
+	Validasi   int       `bson:"validasi,omitempty" json:"validasi,omitempty"`
 }
 
 // EventClaim struct untuk tracking user yang claim event
@@ -132,14 +150,16 @@ type EventClaimRequest struct {
 
 // EventSubmitRequest struct untuk submit task link
 type EventSubmitRequest struct {
-	ClaimID  string `json:"claim_id" bson:"claim_id"`
+	EventID  string `json:"event_id" bson:"event_id"`
 	TaskLink string `json:"task_link" bson:"task_link"`
 }
 
-// EventApprovalRequest struct untuk approve/reject claim
+// EventApprovalRequest struct untuk approve/reject event
 type EventApprovalRequest struct {
-	ClaimID    string `json:"claim_id" bson:"claim_id"`
+	EventID    string `json:"event_id" bson:"event_id"`
 	IsApproved bool   `json:"is_approved" bson:"is_approved"`
+	Komentar   string `json:"komentar,omitempty" bson:"komentar,omitempty"`
+	Validasi   int    `json:"validasi,omitempty" bson:"validasi,omitempty"`
 }
 
 // TimeCodeClaimRequest struct untuk request claim time code

@@ -70,6 +70,12 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 		CreatedBy:   payload.Id,
 		CreatedAt:   time.Now(),
 		IsActive:    true,
+		// Initialize claim/submission/approval fields
+		ClaimedBy:   "",
+		IsSubmitted: false,
+		IsApproved:  false,
+		TimerSec:    0,
+		Validasi:    0,
 	}
 
 	// Simpan ke database
@@ -101,8 +107,14 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get active events
-	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{"isactive": true})
+	// Cleanup expired claims first
+	cleanupExpiredEvents()
+
+	// Get active events (not approved yet)
+	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{
+		"isactive":   true,
+		"isapproved": false, // Only show events that haven't been approved
+	})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data event"
 		respn.Response = err.Error()
@@ -110,46 +122,30 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cleanup expired claims first
-	cleanupExpiredClaims()
-
-	// Get user's active claims to check which events are claimed
-	userClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"userphone": payload.Id,
-		"isactive":  true,
-		"expiresat": primitive.M{"$gt": time.Now()}, // Only non-expired claims
-	})
-	if err != nil {
-		userClaims = []model.EventClaim{} // If error, assume no claims
-	}
-
-	// Get all active claims AND submitted claims to check availability
-	// Event is unavailable if: isactive=true OR issubmit=true (waiting approval)
-	allActiveClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"$or": []primitive.M{
-			{"isactive": true, "expiresat": primitive.M{"$gt": time.Now()}},
-			{"issubmit": true},
-		},
-	})
-	if err != nil {
-		allActiveClaims = []model.EventClaim{} // If error, assume no claims
-	}
-
-	// Create map for quick lookup
-	claimedEvents := make(map[string]bool)
-	userClaimedEvents := make(map[string]model.EventClaim)
-
-	for _, claim := range allActiveClaims {
-		claimedEvents[claim.EventID.Hex()] = true
-	}
-
-	for _, claim := range userClaims {
-		userClaimedEvents[claim.EventID.Hex()] = claim
-	}
-
 	// Prepare response with availability info
 	var eventList []map[string]interface{}
 	for _, event := range events {
+		// Determine availability
+		isAvailable := true
+		var userClaim map[string]interface{}
+
+		// Check if event is claimed
+		if event.ClaimedBy != "" {
+			isAvailable = false
+
+			// If claimed by current user, add claim info
+			if event.ClaimedBy == payload.Id {
+				userClaim = map[string]interface{}{
+					"claimed_at":   event.ClaimedAt,
+					"expires_at":   event.ExpiresAt,
+					"timer_sec":    event.TimerSec,
+					"is_submitted": event.IsSubmitted,
+					"task_link":    event.TaskLink,
+					"submitted_at": event.SubmittedAt,
+				}
+			}
+		}
+
 		eventInfo := map[string]interface{}{
 			"_id":          event.ID.Hex(),
 			"name":         event.Name,
@@ -157,20 +153,12 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 			"points":       event.Points,
 			"created_by":   event.CreatedBy,
 			"created_at":   event.CreatedAt,
-			"is_available": !claimedEvents[event.ID.Hex()],
+			"is_available": isAvailable,
 		}
 
 		// Add user claim info if exists
-		if userClaim, exists := userClaimedEvents[event.ID.Hex()]; exists {
-			eventInfo["user_claim"] = map[string]interface{}{
-				"claim_id":     userClaim.ID.Hex(),
-				"claimed_at":   userClaim.ClaimedAt,
-				"expires_at":   userClaim.ExpiresAt,
-				"is_completed": userClaim.IsCompleted,
-				"is_submit":    userClaim.IsSubmit,
-				"task_link":    userClaim.TaskLink,
-				"submitted_at": userClaim.SubmittedAt,
-			}
+		if userClaim != nil {
+			eventInfo["user_claim"] = userClaim
 		}
 
 		eventList = append(eventList, eventInfo)
@@ -224,14 +212,16 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah event exists dan aktif
+	// Cek apakah event exists dan available
 	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
-		"_id":      eventObjID,
-		"isactive": true,
+		"_id":        eventObjID,
+		"isactive":   true,
+		"isapproved": false,
+		"claimedby":  "", // Event belum di-claim
 	})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			respn.Status = "Error : Event tidak ditemukan atau tidak aktif"
+			respn.Status = "Error : Event tidak ditemukan, tidak aktif, atau sudah di-claim"
 		} else {
 			respn.Status = "Error : Gagal mengambil data event"
 			respn.Response = err.Error()
@@ -240,53 +230,22 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah event sudah di-claim atau di-submit oleh user lain
-	existingClaim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"eventid": eventObjID,
-		"$or": []primitive.M{
-			{"isactive": true, "expiresat": primitive.M{"$gt": time.Now()}},
-			{"issubmit": true}, // Event locked karena sudah di-submit, waiting approval
-		},
-	})
-	if err == nil {
-		if existingClaim.UserPhone != payload.Id {
-			if existingClaim.IsSubmit {
-				respn.Status = "Error : Event sedang menunggu approval, tidak bisa di-claim"
-			} else {
-				respn.Status = "Error : Event sudah di-claim oleh user lain"
-			}
-			at.WriteJSON(respw, http.StatusConflict, respn)
-			return
-		} else {
-			if existingClaim.IsSubmit {
-				respn.Status = "Error : Event Anda sedang menunggu approval"
-			} else {
-				respn.Status = "Error : Anda sudah claim event ini"
-			}
-			at.WriteJSON(respw, http.StatusConflict, respn)
-			return
-		}
-	}
-
-	// Buat claim baru
+	// Update event dengan claim info
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(claimReq.TimerSec) * time.Second)
 
-	eventClaim := model.EventClaim{
-		EventID:     eventObjID,
-		UserPhone:   payload.Id,
-		ClaimedAt:   now,
-		ExpiresAt:   expiresAt,
-		TimerSec:    claimReq.TimerSec,
-		IsActive:    true,
-		IsCompleted: false,
-		IsSubmit:    false,
+	updateData := primitive.M{
+		"claimedby":   payload.Id,
+		"claimedat":   now,
+		"expiresat":   expiresAt,
+		"timersec":    claimReq.TimerSec,
+		"issubmitted": false,
+		"tasklink":    "",
 	}
 
-	// Simpan claim ke database
-	claimID, err := atdb.InsertOneDoc(config.Mongoconn, "eventclaims", eventClaim)
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
 	if err != nil {
-		respn.Status = "Error : Gagal menyimpan claim"
+		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
@@ -294,7 +253,7 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 
 	respn.Status = "Success"
 	respn.Data = map[string]interface{}{
-		"claim_id":      claimID.Hex(),
+		"event_id":      event.ID.Hex(),
 		"message":       "Event berhasil di-claim",
 		"event_name":    event.Name,
 		"expires_at":    expiresAt,
@@ -325,8 +284,8 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Validasi input
-	if submitReq.ClaimID == "" {
-		respn.Status = "Error : Claim ID tidak boleh kosong"
+	if submitReq.EventID == "" {
+		respn.Status = "Error : Event ID tidak boleh kosong"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
@@ -337,26 +296,28 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Convert claim ID to ObjectID
-	claimObjID, err := primitive.ObjectIDFromHex(submitReq.ClaimID)
+	// Convert event ID to ObjectID
+	eventObjID, err := primitive.ObjectIDFromHex(submitReq.EventID)
 	if err != nil {
-		respn.Status = "Error : Claim ID tidak valid"
+		respn.Status = "Error : Event ID tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Cek apakah claim exists dan milik user
-	claim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"_id":       claimObjID,
-		"userphone": payload.Id,
-		"isactive":  true,
+	// Cek apakah event exists dan di-claim oleh user
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+		"_id":         eventObjID,
+		"claimedby":   payload.Id,
+		"isactive":    true,
+		"isapproved":  false,
+		"issubmitted": false,
 	})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			respn.Status = "Error : Claim tidak ditemukan atau bukan milik Anda"
+			respn.Status = "Error : Event tidak ditemukan, bukan milik Anda, atau sudah di-submit"
 		} else {
-			respn.Status = "Error : Gagal mengambil data claim"
+			respn.Status = "Error : Gagal mengambil data event"
 			respn.Response = err.Error()
 		}
 		at.WriteJSON(respw, http.StatusNotFound, respn)
@@ -364,40 +325,22 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah claim masih aktif (belum expired)
-	if time.Now().After(claim.ExpiresAt) {
+	if time.Now().After(event.ExpiresAt) {
 		respn.Status = "Error : Claim sudah expired"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Cek apakah sudah di-submit sebelumnya
-	if claim.IsCompleted {
-		respn.Status = "Error : Tugas sudah di-submit sebelumnya"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-
-	// Update claim dengan task link
+	// Update event dengan task submission
 	updateData := primitive.M{
 		"tasklink":    submitReq.TaskLink,
 		"submittedat": time.Now(),
-		"iscompleted": true,
-		"issubmit":    true,  // Mark as submitted
-		"isactive":    false, // Deactivate claim
+		"issubmitted": true, // Mark as submitted
 	}
 
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claimObjID}, updateData)
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
 	if err != nil {
-		respn.Status = "Error : Gagal update claim"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
-
-	// Get event info
-	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{"_id": claim.EventID})
-	if err != nil {
-		respn.Status = "Error : Gagal mengambil data event"
+		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
@@ -412,47 +355,8 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get asesor (event owner) info
-	asesor, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": event.CreatedBy})
-	if err != nil {
-		respn.Status = "Error : Asesor tidak ditemukan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusNotFound, respn)
-		return
-	}
-
-	// Create EventApproval entry (seperti bimbingan)
-	eventApproval := model.EventApproval{
-		EventID:     event.ID,
-		EventName:   event.Name,
-		EventPoints: event.Points,
-		UserPhone:   user.PhoneNumber,
-		UserName:    user.Name,
-		UserEmail:   user.Email,
-		TaskLink:    submitReq.TaskLink,
-		ClaimID:     claim.ID,
-		Approved:    false, // Default false, seperti bimbingan
-		Validasi:    0,
-		Komentar:    "",
-		Asesor: model.Userdomyikado{
-			Name:        asesor.Name,
-			PhoneNumber: asesor.PhoneNumber,
-			Email:       asesor.Email,
-		},
-		CreatedAt: time.Now(),
-	}
-
-	// Insert ke event-approval collection
-	approvalID, err := atdb.InsertOneDoc(config.Mongoconn, "event-approval", eventApproval)
-	if err != nil {
-		respn.Status = "Error : Gagal insert approval"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
-
-	// Send WhatsApp notification to event owner (seperti bimbingan)
-	message := fmt.Sprintf("Permintaan approve event nanti jika di approve mahasiswa ini dapet point\nMahasiswa : %s\nhttps://www.do.my.id/event/#%s", user.Name, approvalID.Hex())
+	// Send WhatsApp notification to event owner
+	message := fmt.Sprintf("Permintaan approve event nanti jika di approve mahasiswa ini dapet point\nMahasiswa : %s\nhttps://www.do.my.id/event/#%s", user.Name, event.ID.Hex())
 	dt := &whatsauth.TextMessage{
 		To:       event.CreatedBy,
 		IsGroup:  false,
@@ -466,10 +370,10 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 
 	respn.Status = "Success"
 	respn.Data = map[string]interface{}{
-		"message":     "Tugas berhasil di-submit, menunggu approval dari owner",
-		"approval_id": approvalID.Hex(),
-		"event_name":  event.Name,
-		"task_link":   submitReq.TaskLink,
+		"message":    "Tugas berhasil di-submit, menunggu approval dari owner",
+		"event_id":   event.ID.Hex(),
+		"event_name": event.Name,
+		"task_link":  submitReq.TaskLink,
 	}
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
@@ -495,37 +399,29 @@ func ApproveEventTask(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Convert claim ID to ObjectID
-	claimObjID, err := primitive.ObjectIDFromHex(approvalReq.ClaimID)
+	// Convert event ID to ObjectID
+	eventObjID, err := primitive.ObjectIDFromHex(approvalReq.EventID)
 	if err != nil {
-		respn.Status = "Error : Claim ID tidak valid"
+		respn.Status = "Error : Event ID tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Get claim info
-	claim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
-		"_id":         claimObjID,
-		"iscompleted": true,
+	// Get event info dan cek ownership
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+		"_id":         eventObjID,
+		"issubmitted": true,
+		"isapproved":  false,
 	})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			respn.Status = "Error : Claim tidak ditemukan atau belum di-submit"
+			respn.Status = "Error : Event tidak ditemukan atau belum di-submit"
 		} else {
-			respn.Status = "Error : Gagal mengambil data claim"
+			respn.Status = "Error : Gagal mengambil data event"
 			respn.Response = err.Error()
 		}
 		at.WriteJSON(respw, http.StatusNotFound, respn)
-		return
-	}
-
-	// Get event info dan cek ownership
-	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{"_id": claim.EventID})
-	if err != nil {
-		respn.Status = "Error : Gagal mengambil data event"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
 
@@ -536,9 +432,18 @@ func ApproveEventTask(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Update event dengan approval status
+	updateData := primitive.M{
+		"isapproved": approvalReq.IsApproved,
+		"approvedat": time.Now(),
+		"approvedby": payload.Id,
+		"komentar":   approvalReq.Komentar,
+		"validasi":   approvalReq.Validasi,
+	}
+
 	if approvalReq.IsApproved {
 		// Approve: Buat entry di eventuserpoint dan berikan points
-		err = createEventUserPoint(claim, event, payload.Id)
+		err = createEventUserPointFromEvent(event, payload.Id)
 		if err != nil {
 			respn.Status = "Error : Gagal menyimpan point user"
 			respn.Response = err.Error()
@@ -547,32 +452,21 @@ func ApproveEventTask(respw http.ResponseWriter, req *http.Request) {
 		}
 
 		// Deactivate event setelah di-approve
-		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{"isactive": false})
-		if err != nil {
-			respn.Status = "Error : Gagal deactivate event"
-			respn.Response = err.Error()
-			at.WriteJSON(respw, http.StatusInternalServerError, respn)
-			return
-		}
+		updateData["isactive"] = false
+	} else {
+		// If rejected, reset event untuk available lagi
+		updateData["claimedby"] = ""
+		updateData["claimedat"] = time.Time{}
+		updateData["expiresat"] = time.Time{}
+		updateData["timersec"] = 0
+		updateData["tasklink"] = ""
+		updateData["submittedat"] = time.Time{}
+		updateData["issubmitted"] = false
 	}
 
-	// Update claim status - Note: Approval now handled by EventApproval collection
-	updateData := primitive.M{
-		"isactive": false, // Deactivate claim regardless of approval status
-	}
-
-	// If rejected, make event available again
-	if !approvalReq.IsApproved {
-		// Reactivate event for others to claim
-		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{"isactive": true})
-		if err != nil {
-			log.Printf("Warning: Failed to reactivate event after rejection: %v", err)
-		}
-	}
-
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claimObjID}, updateData)
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
 	if err != nil {
-		respn.Status = "Error : Gagal update claim"
+		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
@@ -672,15 +566,14 @@ func GetClaimDetails(respw http.ResponseWriter, req *http.Request) {
 }
 
 // Helper function untuk menyimpan point user dari event approval
-func createEventUserPoint(claim model.EventClaim, event model.Event, approverPhone string) error {
+func createEventUserPointFromEvent(event model.Event, approverPhone string) error {
 	// Create event user point entry
 	eventUserPoint := model.EventUserPoint{
-		UserPhone:  claim.UserPhone,
+		UserPhone:  event.ClaimedBy,
 		EventID:    event.ID,
 		EventName:  event.Name,
 		Points:     event.Points,
-		TaskLink:   claim.TaskLink,
-		ClaimID:    claim.ID,
+		TaskLink:   event.TaskLink,
 		ApprovedBy: approverPhone,
 		ApprovedAt: time.Now(),
 		CreatedAt:  time.Now(),
@@ -692,7 +585,7 @@ func createEventUserPoint(claim model.EventClaim, event model.Event, approverPho
 		return err
 	}
 
-	log.Printf("Event user point created: %s, User: %s, Points: %d", pointID.Hex(), claim.UserPhone, event.Points)
+	log.Printf("Event user point created: %s, User: %s, Points: %d", pointID.Hex(), event.ClaimedBy, event.Points)
 	return nil
 }
 
@@ -838,7 +731,7 @@ func GetEventClaimDetails(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
-// GetEventApprovalById - Mendapatkan data approval berdasarkan ID (seperti bimbingan)
+// GetEventApprovalById - Mendapatkan data event untuk approval berdasarkan ID
 func GetEventApprovalById(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	id := at.GetParam(req)
@@ -850,18 +743,47 @@ func GetEventApprovalById(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	eventApproval, err := atdb.GetOneDoc[model.EventApproval](config.Mongoconn, "event-approval", primitive.M{"_id": objectId})
+	// Get event yang sudah di-submit untuk approval
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+		"_id":         objectId,
+		"issubmitted": true,
+		"isapproved":  false,
+	})
 	if err != nil {
-		respn.Status = "Error : Data event approval tidak ditemukan"
+		respn.Status = "Error : Event tidak ditemukan atau belum di-submit"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	at.WriteJSON(respw, http.StatusOK, eventApproval)
+	// Get user info
+	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": event.ClaimedBy})
+	if err != nil {
+		respn.Status = "Error : User tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Prepare response data
+	approvalData := map[string]interface{}{
+		"_id":         event.ID.Hex(),
+		"eventname":   event.Name,
+		"eventpoints": event.Points,
+		"username":    user.Name,
+		"userphone":   user.PhoneNumber,
+		"useremail":   user.Email,
+		"tasklink":    event.TaskLink,
+		"createdat":   event.SubmittedAt,
+		"approved":    event.IsApproved,
+		"komentar":    event.Komentar,
+		"validasi":    event.Validasi,
+	}
+
+	at.WriteJSON(respw, http.StatusOK, approvalData)
 }
 
-// ReplaceEventApproval - Approve/reject event task (seperti bimbingan)
+// ReplaceEventApproval - Approve/reject event task (menggunakan event collection)
 func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	id := at.GetParam(req)
@@ -873,7 +795,7 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var approval model.EventApproval
+	var approval model.EventApprovalRequest
 	err = json.NewDecoder(req.Body).Decode(&approval)
 	if err != nil {
 		respn.Status = "Error : Body tidak valid"
@@ -882,84 +804,65 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	filter := primitive.M{"_id": objectId}
-	eventApproval, err := atdb.GetOneDoc[model.EventApproval](config.Mongoconn, "event-approval", filter)
+	// Get event yang akan di-approve
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+		"_id":         objectId,
+		"issubmitted": true,
+		"isapproved":  false,
+	})
 	if err != nil {
-		respn.Status = "Error : Data event approval tidak ditemukan"
+		respn.Status = "Error : Event tidak ditemukan atau sudah diproses"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Update approval data
-	eventApproval.Validasi = approval.Validasi
-	eventApproval.Komentar = approval.Komentar
-	eventApproval.Approved = approval.Approved
-	if approval.Approved {
-		eventApproval.ApprovedAt = time.Now()
+	// Update event dengan approval data
+	updateData := primitive.M{
+		"isapproved": approval.IsApproved,
+		"approvedat": time.Now(),
+		"komentar":   approval.Komentar,
+		"validasi":   approval.Validasi,
 	}
 
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "event-approval", filter, eventApproval)
+	if approval.IsApproved {
+		// Jika approved, buat EventUserPoint dan deactivate event
+		err = createEventUserPointFromEvent(event, "system") // Use system as approver for now
+		if err != nil {
+			log.Printf("Warning: Failed to create EventUserPoint: %v", err)
+		}
+		updateData["isactive"] = false
+	} else {
+		// Jika rejected, reset event untuk available lagi
+		updateData["claimedby"] = ""
+		updateData["claimedat"] = time.Time{}
+		updateData["expiresat"] = time.Time{}
+		updateData["timersec"] = 0
+		updateData["tasklink"] = ""
+		updateData["submittedat"] = time.Time{}
+		updateData["issubmitted"] = false
+	}
+
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": objectId}, updateData)
 	if err != nil {
-		respn.Status = "Error : Gagal update approval"
+		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusConflict, respn)
 		return
 	}
 
-	// Reset issubmit di EventClaim setelah approval/rejection
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": eventApproval.ClaimID}, primitive.M{
-		"issubmit": false,
-		"isactive": false,
-	})
-	if err != nil {
-		log.Printf("Warning: Failed to reset EventClaim issubmit: %v", err)
-	}
-
-	// Jika approved, buat EventUserPoint
-	if eventApproval.Approved {
-		eventUserPoint := model.EventUserPoint{
-			UserPhone:  eventApproval.UserPhone,
-			EventID:    eventApproval.EventID,
-			EventName:  eventApproval.EventName,
-			Points:     eventApproval.EventPoints,
-			TaskLink:   eventApproval.TaskLink,
-			ClaimID:    eventApproval.ClaimID,
-			ApprovedBy: eventApproval.Asesor.PhoneNumber,
-			ApprovedAt: time.Now(),
-			CreatedAt:  time.Now(),
-		}
-
-		_, err = atdb.InsertOneDoc(config.Mongoconn, "eventuserpoint", eventUserPoint)
-		if err != nil {
-			log.Printf("Warning: Failed to create EventUserPoint: %v", err)
-		}
-
-		// Deactivate event
-		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventApproval.EventID}, primitive.M{"isactive": false})
-		if err != nil {
-			log.Printf("Warning: Failed to deactivate event: %v", err)
-		}
-	} else {
-		// Jika rejected, reactivate event untuk user lain
-		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventApproval.EventID}, primitive.M{"isactive": true})
-		if err != nil {
-			log.Printf("Warning: Failed to reactivate event after rejection: %v", err)
-		}
-	}
-
 	// Send WhatsApp notification to student
 	var message string
-	if eventApproval.Approved {
-		message = fmt.Sprintf("Event Task Kamu *TELAH DI APPROVE* oleh %s\nEvent : %s\nPoints : %d\nKomentar : %s\nSelamat! Points sudah ditambahkan ke akun Anda.",
-			eventApproval.Asesor.Name, eventApproval.EventName, eventApproval.EventPoints, eventApproval.Komentar)
+	if approval.IsApproved {
+		message = fmt.Sprintf("Event Task Kamu *TELAH DI APPROVE*\nEvent : %s\nPoints : %d\nKomentar : %s\nSelamat! Points sudah ditambahkan ke akun Anda.",
+			event.Name, event.Points, approval.Komentar)
 	} else {
-		message = fmt.Sprintf("Event Task Kamu *BELUM DI APPROVE* oleh %s\nEvent : %s\nKomentar : %s\nSilahkan perbaiki dan submit ulang.",
-			eventApproval.Asesor.Name, eventApproval.EventName, eventApproval.Komentar)
+		message = fmt.Sprintf("Event Task Kamu *BELUM DI APPROVE*\nEvent : %s\nKomentar : %s\nSilahkan perbaiki dan submit ulang.",
+			event.Name, approval.Komentar)
 	}
 
 	dt := &whatsauth.TextMessage{
-		To:       eventApproval.UserPhone,
+		To:       event.ClaimedBy,
 		IsGroup:  false,
 		Messages: message,
 	}
@@ -969,7 +872,18 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		log.Printf("Warning: Failed to send WhatsApp notification: %v", err)
 	}
 
-	at.WriteJSON(respw, http.StatusOK, eventApproval)
+	// Prepare response
+	responseData := map[string]interface{}{
+		"_id":         event.ID.Hex(),
+		"eventname":   event.Name,
+		"eventpoints": event.Points,
+		"approved":    approval.IsApproved,
+		"komentar":    approval.Komentar,
+		"validasi":    approval.Validasi,
+		"approvedat":  time.Now(),
+	}
+
+	at.WriteJSON(respw, http.StatusOK, responseData)
 }
 
 // GetUserEventPoints - Mendapatkan total point user dari event
@@ -1099,28 +1013,32 @@ func sendWhatsAppMessageWithAPI(phoneNumber, message string) error {
 	return nil
 }
 
-// cleanupExpiredClaims - Cleanup expired claims yang belum di-submit
-func cleanupExpiredClaims() {
-	// Deactivate expired claims yang belum di-submit
+// cleanupExpiredEvents - Cleanup expired events yang belum di-submit
+func cleanupExpiredEvents() {
+	// Reset expired events yang belum di-submit
 	filter := primitive.M{
-		"isactive":    true,
-		"iscompleted": false,
+		"claimedby":   primitive.M{"$ne": ""},
+		"issubmitted": false,
+		"isapproved":  false,
 		"expiresat":   primitive.M{"$lt": time.Now()},
 	}
 
 	update := primitive.M{
 		"$set": primitive.M{
-			"isactive": false,
+			"claimedby": "",
+			"claimedat": time.Time{},
+			"expiresat": time.Time{},
+			"timersec":  0,
 		},
 	}
 
-	result, err := config.Mongoconn.Collection("eventclaims").UpdateMany(context.TODO(), filter, update)
+	result, err := config.Mongoconn.Collection("events").UpdateMany(context.TODO(), filter, update)
 	if err != nil {
-		log.Printf("Error cleaning up expired claims: %v", err)
+		log.Printf("Error cleaning up expired events: %v", err)
 		return
 	}
 
 	if result.ModifiedCount > 0 {
-		log.Printf("Cleaned up %d expired claims", result.ModifiedCount)
+		log.Printf("Cleaned up %d expired events", result.ModifiedCount)
 	}
 }
