@@ -102,10 +102,11 @@ type Event struct {
 	IsActive    bool               `bson:"isactive" json:"isactive"`
 
 	// Claim fields
-	ClaimedBy string    `bson:"claimedby,omitempty" json:"claimedby,omitempty"`
-	ClaimedAt time.Time `bson:"claimedat,omitempty" json:"claimedat,omitempty"`
-	ExpiresAt time.Time `bson:"expiresat,omitempty" json:"expiresat,omitempty"`
-	TimerSec  int       `bson:"timersec,omitempty" json:"timersec,omitempty"`
+	ClaimedBy   string                 `bson:"claimedby,omitempty" json:"claimedby,omitempty"`
+	ClaimedAt   time.Time              `bson:"claimedat,omitempty" json:"claimedat,omitempty"`
+	ExpiresAt   time.Time              `bson:"expiresat,omitempty" json:"expiresat,omitempty"`
+	TimerSec    int                    `bson:"timersec,omitempty" json:"timersec,omitempty"`
+	ClaimedUser map[string]interface{} `bson:"claimeduser,omitempty" json:"claimeduser,omitempty"`
 
 	// Submission fields
 	TaskLink    string    `bson:"tasklink,omitempty" json:"tasklink,omitempty"`

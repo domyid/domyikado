@@ -142,6 +142,7 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 					"is_submitted": event.IsSubmitted,
 					"task_link":    event.TaskLink,
 					"submitted_at": event.SubmittedAt,
+					"claimed_user": event.ClaimedUser,
 				}
 			}
 		}
@@ -230,6 +231,15 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Get user info untuk menyimpan data lengkap
+	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Data user tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
 	// Update event dengan claim info
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(claimReq.TimerSec) * time.Second)
@@ -241,6 +251,12 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		"timersec":    claimReq.TimerSec,
 		"issubmitted": false,
 		"tasklink":    "",
+		// Tambah data user untuk referensi
+		"claimeduser": map[string]interface{}{
+			"name":        user.Name,
+			"phonenumber": user.PhoneNumber,
+			"email":       user.Email,
+		},
 	}
 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
@@ -841,6 +857,7 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		updateData["tasklink"] = ""
 		updateData["submittedat"] = time.Time{}
 		updateData["issubmitted"] = false
+		updateData["claimeduser"] = nil
 	}
 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": objectId}, updateData)
