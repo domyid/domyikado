@@ -114,9 +114,6 @@ type EventClaim struct {
 	IsCompleted bool               `bson:"iscompleted" json:"iscompleted"`
 	TaskLink    string             `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
 	SubmittedAt time.Time          `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
-	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
-	ApprovedBy  string             `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
-	IsApproved  bool               `bson:"isapproved" json:"isapproved"`
 }
 
 // EventCreateRequest struct untuk request create event
@@ -168,4 +165,23 @@ type EventUserPoint struct {
 	ApprovedBy string             `bson:"approvedby" json:"approvedby"`
 	ApprovedAt time.Time          `bson:"approvedat" json:"approvedat"`
 	CreatedAt  time.Time          `bson:"createdat" json:"createdat"`
+}
+
+// EventApproval struct untuk approval event task (seperti bimbingan)
+type EventApproval struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	EventID     primitive.ObjectID `bson:"eventid" json:"eventid"`
+	EventName   string             `bson:"eventname" json:"eventname"`
+	EventPoints int                `bson:"eventpoints" json:"eventpoints"`
+	UserPhone   string             `bson:"userphone" json:"userphone"`
+	UserName    string             `bson:"username" json:"username"`
+	UserEmail   string             `bson:"useremail" json:"useremail"`
+	TaskLink    string             `bson:"tasklink" json:"tasklink"`
+	ClaimID     primitive.ObjectID `bson:"claimid" json:"claimid"`
+	Approved    bool               `bson:"approved" json:"approved"`
+	Validasi    int                `bson:"validasi" json:"validasi"`
+	Komentar    string             `bson:"komentar" json:"komentar"`
+	Asesor      Userdomyikado      `bson:"asesor" json:"asesor"`
+	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
+	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
 }

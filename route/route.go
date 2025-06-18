@@ -343,7 +343,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ClaimEventCodeTime(w, r)
 	case method == "GET" && path == "/api/event/claimtimestatus":
 		controller.CheckEventTimeClaimStatus(w, r)
-	// New Event Management Routes
+		// New Event Management Routes
 	case method == "POST" && path == "/api/event/create":
 		controller.CreateEvent(w, r)
 	case method == "GET" && path == "/api/event/list":
@@ -364,6 +364,10 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetEventClaimsByPhoneNumber(w, r)
 	case method == "GET" && strings.HasPrefix(path, "/api/event/claim/"):
 		controller.GetEventClaimDetails(w, r)
+	case method == "GET" && strings.HasPrefix(path, "/api/event/approval/"):
+		controller.GetEventApprovalById(w, r)
+	case method == "PUT" && strings.HasPrefix(path, "/api/event/approval/"):
+		controller.ReplaceEventApproval(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
