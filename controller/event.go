@@ -28,7 +28,7 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah user adalah owner
-	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	allowedNumbers := []string{"6285312924192", "6282117252716", "6285179935117"}
 	isOwner := false
 	for _, num := range allowedNumbers {
 		if payload.Id == num {
