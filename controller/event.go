@@ -334,8 +334,6 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 			SubmittedAt: claim.SubmittedAt,
 			ApprovedAt:  claim.ApprovedAt,
 			ApprovedBy:  claim.ApprovedBy,
-			IsApproved:  claim.IsApproved, // Preserve existing value
-			Points:      claim.Points,     // Preserve existing points
 		})
 
 		respn.Status = "Error : Deadline sudah terlewat"
@@ -364,8 +362,6 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		SubmittedAt: time.Now(),
 		ApprovedAt:  claim.ApprovedAt,
 		ApprovedBy:  claim.ApprovedBy,
-		IsApproved:  claim.IsApproved, // Preserve existing value
-		Points:      claim.Points,     // Preserve existing points
 	}
 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claimObjectID}, updatedClaim)
@@ -712,8 +708,6 @@ func CheckExpiredClaims(respw http.ResponseWriter, req *http.Request) {
 			SubmittedAt: claim.SubmittedAt,
 			ApprovedAt:  claim.ApprovedAt,
 			ApprovedBy:  claim.ApprovedBy,
-			IsApproved:  claim.IsApproved, // Preserve existing value
-			Points:      claim.Points,     // Preserve existing points
 		}
 
 		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, updatedClaim)
