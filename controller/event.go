@@ -70,6 +70,7 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 		CreatedBy:   payload.Id,
 		CreatedAt:   time.Now(),
 		IsActive:    true,
+		IsSelesai:   false,
 	}
 
 	// Simpan ke database
@@ -101,8 +102,14 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get all active events
-	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{"isactive": true})
+	// Get all active events yang belum selesai
+	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{
+		"isactive": true,
+		"$or": []primitive.M{
+			{"isselesai": false},
+			{"isselesai": primitive.M{"$exists": false}},
+		},
+	})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data event"
 		respn.Response = err.Error()
@@ -621,6 +628,19 @@ func ApproveEventClaim(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Update event status menjadi selesai
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{
+		"$set": primitive.M{
+			"isselesai": true,
+		},
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal update status event"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
 	respn.Status = "Success"
 	respn.Response = fmt.Sprintf("Event claim berhasil di-approve. User %s mendapat %d points", user.Name, event.Points)
 	respn.Data = map[string]interface{}{
@@ -920,6 +940,19 @@ func PostEventApproval(respw http.ResponseWriter, req *http.Request) {
 	_, err = atdb.InsertOneDoc(config.Mongoconn, "eventuserpoint", eventUserPoint)
 	if err != nil {
 		respn.Status = "Error : Gagal menyimpan poin user"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Update event status menjadi selesai
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{
+		"$set": primitive.M{
+			"isselesai": true,
+		},
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal update status event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return

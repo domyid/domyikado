@@ -105,6 +105,7 @@ type Event struct {
 	CreatedBy   string             `bson:"createdby" json:"createdby"`
 	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
 	IsActive    bool               `bson:"isactive" json:"isactive"`
+	IsSelesai   bool               `bson:"isselesai" json:"isselesai"`
 }
 
 // EventClaim struct untuk tracking user yang claim event
