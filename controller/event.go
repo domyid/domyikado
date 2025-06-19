@@ -253,7 +253,6 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		Deadline:   deadline,
 		Status:     "claimed",
 		IsApproved: false,
-		Points:     event.Points,
 	}
 
 	// Simpan claim ke database
@@ -522,7 +521,6 @@ func ApproveEventClaim(respw http.ResponseWriter, req *http.Request) {
 		ApprovedAt:  time.Now(),
 		ApprovedBy:  payload.Id,
 		IsApproved:  true,
-		Points:      event.Points,
 	}
 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claimObjectID}, updatedClaim)

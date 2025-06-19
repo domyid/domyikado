@@ -120,7 +120,6 @@ type EventClaim struct {
 	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
 	ApprovedBy  string             `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
 	IsApproved  bool               `bson:"isapproved" json:"isapproved"`
-	Points      int                `bson:"points" json:"points"`
 }
 
 // EventCreateRequest struct untuk request create event
