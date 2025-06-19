@@ -343,6 +343,24 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.ClaimEventCodeTime(w, r)
 	case method == "GET" && path == "/api/event/claimtimestatus":
 		controller.CheckEventTimeClaimStatus(w, r)
+		// New Event Management Endpoints
+	case method == "POST" && path == "/api/event/create":
+		controller.CreateEvent(w, r)
+	case method == "GET" && path == "/api/event/all":
+		controller.GetAllEvents(w, r)
+	case method == "POST" && path == "/api/event/claim":
+		controller.ClaimEvent(w, r)
+	case method == "POST" && path == "/api/event/submit":
+		controller.SubmitEventTask(w, r)
+	case method == "POST" && path == "/api/event/approve":
+		controller.ApproveEventClaim(w, r)
+	case method == "GET" && path == "/api/event/myclaims":
+		controller.GetUserEventClaims(w, r)
+	case method == "GET" && path == "/api/event/checkexpired":
+		controller.CheckExpiredClaims(w, r)
+	// Event approval page
+	case method == "GET" && at.URLParam(path, "/event/:claimid"):
+		controller.GetEventApprovalPage(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)

@@ -96,6 +96,54 @@ type TimeCodeClaimRequest struct {
 	Code string `json:"code" bson:"code"`
 }
 
+// Event struct untuk menyimpan event yang dibuat owner
+type Event struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Name        string             `bson:"name" json:"name"`
+	Description string             `bson:"description" json:"description"`
+	Points      int                `bson:"points" json:"points"`
+	CreatedBy   string             `bson:"createdby" json:"createdby"`
+	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
+	IsActive    bool               `bson:"isactive" json:"isactive"`
+}
+
+// EventClaim struct untuk tracking user yang claim event
+type EventClaim struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	EventID     primitive.ObjectID `bson:"eventid" json:"eventid"`
+	UserPhone   string             `bson:"userphone" json:"userphone"`
+	ClaimedAt   time.Time          `bson:"claimedat" json:"claimedat"`
+	Deadline    time.Time          `bson:"deadline" json:"deadline"`
+	Status      string             `bson:"status" json:"status"` // "claimed", "submitted", "approved", "expired"
+	TaskLink    string             `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
+	SubmittedAt time.Time          `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
+	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
+	ApprovedBy  string             `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
+}
+
+// EventCreateRequest struct untuk request create event
+type EventCreateRequest struct {
+	Name        string `json:"name" bson:"name"`
+	Description string `json:"description" bson:"description"`
+	Points      int    `json:"points" bson:"points"`
+}
+
+// EventClaimRequest struct untuk request claim event
+type EventClaimRequest struct {
+	EventID string `json:"event_id" bson:"event_id"`
+}
+
+// EventSubmitRequest struct untuk submit task link
+type EventSubmitRequest struct {
+	ClaimID  string `json:"claim_id" bson:"claim_id"`
+	TaskLink string `json:"task_link" bson:"task_link"`
+}
+
+// EventApproveRequest struct untuk approve event claim
+type EventApproveRequest struct {
+	ClaimID string `json:"claim_id" bson:"claim_id"`
+}
+
 // TimeCodeResponse struct untuk response generate time code
 type TimeCodeResponse struct {
 	Code      string `json:"code"`
