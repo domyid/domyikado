@@ -130,7 +130,8 @@ type EventCreateRequest struct {
 
 // EventClaimRequest struct untuk request claim event
 type EventClaimRequest struct {
-	EventID string `json:"event_id" bson:"event_id"`
+	EventID         string `json:"event_id" bson:"event_id"`
+	DeadlineSeconds int    `json:"deadline_seconds" bson:"deadline_seconds"`
 }
 
 // EventSubmitRequest struct untuk submit task link

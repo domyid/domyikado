@@ -108,7 +108,7 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get user's claims to check which events are already claimed (exclude approved ones)
+	// Get user's claims to check which events are already claimed by this user
 	userClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
 		"userphone": payload.Id,
 		"status":    primitive.M{"$in": []string{"claimed", "submitted"}},
@@ -117,22 +117,37 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 		userClaims = []model.EventClaim{} // If error, assume no claims
 	}
 
-	// Create map of claimed event IDs
-	claimedEventIDs := make(map[string]bool)
+	// Get all active claims from any user to check if event is claimed by others
+	allActiveClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"status": primitive.M{"$in": []string{"claimed", "submitted"}},
+	})
+	if err != nil {
+		allActiveClaims = []model.EventClaim{} // If error, assume no claims
+	}
+
+	// Create map of claimed event IDs by this user
+	userClaimedEventIDs := make(map[string]bool)
 	for _, claim := range userClaims {
-		claimedEventIDs[claim.EventID.Hex()] = true
+		userClaimedEventIDs[claim.EventID.Hex()] = true
+	}
+
+	// Create map of claimed event IDs by any user
+	allClaimedEventIDs := make(map[string]bool)
+	for _, claim := range allActiveClaims {
+		allClaimedEventIDs[claim.EventID.Hex()] = true
 	}
 
 	// Add claim status to events
 	var eventsWithStatus []map[string]interface{}
 	for _, event := range events {
 		eventData := map[string]interface{}{
-			"_id":         event.ID,
-			"name":        event.Name,
-			"description": event.Description,
-			"points":      event.Points,
-			"created_at":  event.CreatedAt,
-			"is_claimed":  claimedEventIDs[event.ID.Hex()],
+			"_id":                event.ID,
+			"name":               event.Name,
+			"description":        event.Description,
+			"points":             event.Points,
+			"created_at":         event.CreatedAt,
+			"is_claimed_by_user": userClaimedEventIDs[event.ID.Hex()],
+			"is_claimed_by_any":  allClaimedEventIDs[event.ID.Hex()],
 		}
 		eventsWithStatus = append(eventsWithStatus, eventData)
 	}
@@ -185,23 +200,49 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Cek apakah user sudah claim event ini
-	existingClaim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+	// Cek apakah ada user lain yang sudah claim event ini dan masih aktif
+	existingActiveClaim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"eventid": eventObjectID,
+		"status":  primitive.M{"$in": []string{"claimed", "submitted"}},
+	})
+	if err == nil {
+		respn.Status = "Error : Event sudah di-claim oleh user lain"
+		respn.Response = "Event ini sudah di-claim oleh user lain dan sedang dalam proses"
+		respn.Data = map[string]interface{}{
+			"claimed_by": existingActiveClaim.UserPhone,
+			"claimed_at": existingActiveClaim.ClaimedAt,
+			"deadline":   existingActiveClaim.Deadline,
+		}
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Cek apakah user ini sudah pernah claim event ini
+	userExistingClaim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
 		"eventid":   eventObjectID,
 		"userphone": payload.Id,
 		"status":    primitive.M{"$in": []string{"claimed", "submitted", "approved"}},
 	})
 	if err == nil {
-		respn.Status = "Error : Event sudah di-claim"
+		respn.Status = "Error : Anda sudah claim event ini"
 		respn.Response = "Anda sudah claim event ini sebelumnya"
-		respn.Data = existingClaim
+		respn.Data = userExistingClaim
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
-	// Buat claim baru dengan deadline 1 detik = 1 detik
+	// Validasi deadline seconds
+	deadlineSeconds := claimReq.DeadlineSeconds
+	if deadlineSeconds <= 0 || deadlineSeconds > 3600 {
+		respn.Status = "Error : Deadline tidak valid"
+		respn.Response = "Deadline harus antara 1-3600 detik"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Buat claim baru dengan deadline sesuai input user
 	now := time.Now()
-	deadline := now.Add(1 * time.Second)
+	deadline := now.Add(time.Duration(deadlineSeconds) * time.Second)
 
 	eventClaim := model.EventClaim{
 		EventID:   eventObjectID,
@@ -223,10 +264,11 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	respn.Status = "Success"
 	respn.Response = "Event berhasil di-claim"
 	respn.Data = map[string]interface{}{
-		"claim_id": claimID,
-		"event":    event,
-		"deadline": deadline,
-		"message":  fmt.Sprintf("Anda memiliki waktu hingga %s untuk menyelesaikan tugas", deadline.Format("2006-01-02 15:04:05")),
+		"claim_id":         claimID,
+		"event":            event,
+		"deadline":         deadline,
+		"deadline_seconds": deadlineSeconds,
+		"message":          fmt.Sprintf("Anda memiliki waktu %d detik (hingga %s) untuk menyelesaikan tugas", deadlineSeconds, deadline.Format("2006-01-02 15:04:05")),
 	}
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
