@@ -28,7 +28,7 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah user adalah owner
-	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	allowedNumbers := []string{"6285312924192", "6282117252716", "6285179935117", "6285759790334"}
 	isOwner := false
 	for _, num := range allowedNumbers {
 		if payload.Id == num {
@@ -111,9 +111,10 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get user's claims to check which events are already claimed by this user
+	// Include all statuses including approved to completely hide claimed events
 	userClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
 		"userphone": payload.Id,
-		"status":    primitive.M{"$in": []string{"claimed", "submitted"}},
+		"status":    primitive.M{"$in": []string{"claimed", "submitted", "approved"}},
 	})
 	if err != nil {
 		userClaims = []model.EventClaim{} // If error, assume no claims
@@ -127,28 +128,33 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 		allActiveClaims = []model.EventClaim{} // If error, assume no claims
 	}
 
-	// Create map of claimed event IDs by this user
+	// Create map of claimed event IDs by this user (untuk exclude dari list)
 	userClaimedEventIDs := make(map[string]bool)
 	for _, claim := range userClaims {
 		userClaimedEventIDs[claim.EventID.Hex()] = true
 	}
 
-	// Create map of claimed event IDs by any user
+	// Create map of claimed event IDs by any user (untuk show status)
 	allClaimedEventIDs := make(map[string]bool)
 	for _, claim := range allActiveClaims {
 		allClaimedEventIDs[claim.EventID.Hex()] = true
 	}
 
-	// Add claim status to events
+	// Filter events - exclude events yang sudah di-claim user ini
 	var eventsWithStatus []map[string]interface{}
 	for _, event := range events {
+		// Skip event jika user sudah pernah claim
+		if userClaimedEventIDs[event.ID.Hex()] {
+			continue // Jangan tampilkan event yang sudah di-claim user
+		}
+
 		eventData := map[string]interface{}{
 			"_id":                event.ID,
 			"name":               event.Name,
 			"description":        event.Description,
 			"points":             event.Points,
 			"created_at":         event.CreatedAt,
-			"is_claimed_by_user": userClaimedEventIDs[event.ID.Hex()],
+			"is_claimed_by_user": false, // Selalu false karena sudah di-filter
 			"is_claimed_by_any":  allClaimedEventIDs[event.ID.Hex()],
 		}
 		eventsWithStatus = append(eventsWithStatus, eventData)
@@ -403,7 +409,7 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		event.Name, docuser.Name, docuser.NPM, docuser.PhoneNumber, submitReq.TaskLink, approvalLink)
 
 	// Send to owner numbers
-	ownerNumbers := []string{"6285312924192", "6282117252716"}
+	ownerNumbers := []string{"6285312924192", "6282117252716", "6285179935117", "6285759790334"}
 	for _, ownerNum := range ownerNumbers {
 		// Send WhatsApp message to owner
 		dt := &whatsauth.TextMessage{
@@ -443,7 +449,7 @@ func ApproveEventClaim(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah user adalah owner
-	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	allowedNumbers := []string{"6285312924192", "6282117252716", "6285179935117", "6285759790334"}
 	isOwner := false
 	for _, num := range allowedNumbers {
 		if payload.Id == num {
