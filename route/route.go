@@ -365,6 +365,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetEventApprovalData(w, r)
 	case method == "POST" && at.URLParam(path, "/data/event/approval/:claimid"):
 		controller.PostEventApproval(w, r)
+		// Fix event claim points
+	case method == "GET" && path == "/api/event/fix-points":
+		controller.FixEventClaimPoints(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)

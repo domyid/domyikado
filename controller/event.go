@@ -28,7 +28,7 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah user adalah owner
-	allowedNumbers := []string{"6285312924192", "6282117252716", "6285179935117"}
+	allowedNumbers := []string{"6285312924192", "6282117252716"}
 	isOwner := false
 	for _, num := range allowedNumbers {
 		if payload.Id == num {
@@ -334,6 +334,8 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 			SubmittedAt: claim.SubmittedAt,
 			ApprovedAt:  claim.ApprovedAt,
 			ApprovedBy:  claim.ApprovedBy,
+			IsApproved:  claim.IsApproved, // Preserve existing value
+			Points:      claim.Points,     // Preserve existing points
 		})
 
 		respn.Status = "Error : Deadline sudah terlewat"
@@ -362,6 +364,8 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		SubmittedAt: time.Now(),
 		ApprovedAt:  claim.ApprovedAt,
 		ApprovedBy:  claim.ApprovedBy,
+		IsApproved:  claim.IsApproved, // Preserve existing value
+		Points:      claim.Points,     // Preserve existing points
 	}
 
 	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claimObjectID}, updatedClaim)
@@ -708,6 +712,8 @@ func CheckExpiredClaims(respw http.ResponseWriter, req *http.Request) {
 			SubmittedAt: claim.SubmittedAt,
 			ApprovedAt:  claim.ApprovedAt,
 			ApprovedBy:  claim.ApprovedBy,
+			IsApproved:  claim.IsApproved, // Preserve existing value
+			Points:      claim.Points,     // Preserve existing points
 		}
 
 		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, updatedClaim)
@@ -799,6 +805,55 @@ func GetEventApprovalData(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	at.WriteJSON(respw, http.StatusOK, responseData)
+}
+
+// FixEventClaimPoints untuk memperbaiki points di eventclaims yang 0
+func FixEventClaimPoints(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+
+	// Get all claims dengan points 0 atau tidak ada
+	claims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"$or": []primitive.M{
+			{"points": 0},
+			{"points": primitive.M{"$exists": false}},
+		},
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data claims"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	updatedCount := 0
+	for _, claim := range claims {
+		// Get event data untuk ambil points yang benar
+		event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+			"_id": claim.EventID,
+		})
+		if err != nil {
+			continue // Skip jika event tidak ditemukan
+		}
+
+		// Update claim dengan points yang benar
+		claim.Points = event.Points
+		if claim.IsApproved == false && claim.Status != "approved" {
+			claim.IsApproved = false // Ensure default value
+		}
+
+		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, claim)
+		if err == nil {
+			updatedCount++
+		}
+	}
+
+	respn.Status = "Success"
+	respn.Response = fmt.Sprintf("Fixed %d claims with correct points", updatedCount)
+	respn.Data = map[string]interface{}{
+		"total_claims":   len(claims),
+		"updated_claims": updatedCount,
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
 // PostEventApproval untuk approve claim event (mengikuti pola bimbingan POST)
