@@ -192,23 +192,29 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 // ClaimEvent - User claim event dengan timer
 func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
+	log.Printf("ClaimEvent called by method: %s", req.Method)
+
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
+		log.Printf("ClaimEvent: Token validation failed: %v", err)
 		respn.Status = "Error : Token Tidak Valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
+	log.Printf("ClaimEvent: User authenticated: %s", payload.Id)
 
 	// Parse request body
 	var claimReq model.EventClaimRequest
 	err = json.NewDecoder(req.Body).Decode(&claimReq)
 	if err != nil {
+		log.Printf("ClaimEvent: Failed to parse request body: %v", err)
 		respn.Status = "Error : Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
+	log.Printf("ClaimEvent: Request data: %+v", claimReq)
 
 	// Validasi input
 	if claimReq.EventID == "" {
@@ -233,20 +239,38 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Cek apakah event exists dan available
-	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+	filter := primitive.M{
 		"_id":        eventObjID,
 		"isactive":   true,
 		"isapproved": false,
-		"claimedby":  "", // Event belum di-claim
-	})
+	}
+	log.Printf("ClaimEvent: Querying event with filter: %+v", filter)
+
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", filter)
 	if err != nil {
+		log.Printf("ClaimEvent: Failed to find event: %v", err)
 		if err == mongo.ErrNoDocuments {
-			respn.Status = "Error : Event tidak ditemukan, tidak aktif, atau sudah di-claim"
+			respn.Status = "Error : Event tidak ditemukan atau tidak aktif"
 		} else {
 			respn.Status = "Error : Gagal mengambil data event"
 			respn.Response = err.Error()
 		}
 		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+	log.Printf("ClaimEvent: Found event: %s, ClaimedBy: %s, ExpiresAt: %v", event.Name, event.ClaimedBy, event.ExpiresAt)
+
+	// Cek apakah event sudah di-claim dan belum expired
+	if event.ClaimedBy != "" && time.Now().Before(event.ExpiresAt) {
+		respn.Status = "Error : Event sudah di-claim oleh user lain dan masih aktif"
+		at.WriteJSON(respw, http.StatusConflict, respn)
+		return
+	}
+
+	// Cek apakah user sudah claim event ini sebelumnya
+	if event.ClaimedBy == payload.Id && time.Now().Before(event.ExpiresAt) {
+		respn.Status = "Error : Anda sudah claim event ini dan masih aktif"
+		at.WriteJSON(respw, http.StatusConflict, respn)
 		return
 	}
 
@@ -280,13 +304,16 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		},
 	}
 
+	log.Printf("ClaimEvent: Updating event with data: %+v", updateData)
 	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
 	if err != nil {
+		log.Printf("ClaimEvent: Failed to update event: %v", err)
 		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
+	log.Printf("ClaimEvent: Event successfully claimed by user: %s", payload.Id)
 
 	respn.Status = "Success"
 	respn.Data = map[string]interface{}{
