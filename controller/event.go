@@ -70,7 +70,6 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 		CreatedBy:   payload.Id,
 		CreatedAt:   time.Now(),
 		IsActive:    true,
-		IsSelesai:   false,
 	}
 
 	// Simpan ke database
@@ -102,13 +101,9 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get all active events yang belum selesai
+	// Get all active events
 	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{
 		"isactive": true,
-		"$or": []primitive.M{
-			{"isselesai": false},
-			{"isselesai": primitive.M{"$exists": false}},
-		},
 	})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data event"
@@ -272,6 +267,17 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	claimID, err := atdb.InsertOneDoc(config.Mongoconn, "eventclaims", eventClaim)
 	if err != nil {
 		respn.Status = "Error : Gagal claim event"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Set event menjadi tidak aktif (tidak bisa di-claim user lain)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjectID}, primitive.M{
+		"isactive": false,
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal update status event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
@@ -628,18 +634,8 @@ func ApproveEventClaim(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Update event status menjadi selesai
-	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{
-		"$set": primitive.M{
-			"isselesai": true,
-		},
-	})
-	if err != nil {
-		respn.Status = "Error : Gagal update status event"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
+	// Event tetap tidak aktif setelah di-approve (sudah selesai)
+	// Tidak perlu update isactive karena event sudah selesai
 
 	respn.Status = "Success"
 	respn.Response = fmt.Sprintf("Event claim berhasil di-approve. User %s mendapat %d points", user.Name, event.Points)
@@ -825,6 +821,54 @@ func GetEventApprovalData(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, responseData)
 }
 
+// CheckExpiredApprovals untuk mengecek approval yang sudah timeout (86400 detik = 24 jam)
+func CheckExpiredApprovals(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+
+	// Cari claims yang sudah submitted tapi belum approved dan sudah lewat 24 jam
+	timeoutLimit := time.Now().Add(-86400 * time.Second) // 24 jam yang lalu
+
+	expiredClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"status":      "submitted",
+		"isapproved":  false,
+		"submittedat": primitive.M{"$lt": timeoutLimit},
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data claims"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	expiredCount := 0
+	for _, claim := range expiredClaims {
+		// Update claim status ke expired
+		claim.Status = "expired"
+		_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, claim)
+		if err != nil {
+			continue
+		}
+
+		// Set event kembali aktif (bisa di-claim user lain)
+		_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": claim.EventID}, primitive.M{
+			"isactive": true,
+		})
+		if err != nil {
+			continue
+		}
+
+		expiredCount++
+	}
+
+	respn.Status = "Success"
+	respn.Response = fmt.Sprintf("Processed %d expired approvals", expiredCount)
+	respn.Data = map[string]interface{}{
+		"total_expired": len(expiredClaims),
+		"processed":     expiredCount,
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
 // PostEventApproval untuk approve claim event (mengikuti pola bimbingan POST)
 func PostEventApproval(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
@@ -945,18 +989,8 @@ func PostEventApproval(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Update event status menjadi selesai
-	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": event.ID}, primitive.M{
-		"$set": primitive.M{
-			"isselesai": true,
-		},
-	})
-	if err != nil {
-		respn.Status = "Error : Gagal update status event"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusInternalServerError, respn)
-		return
-	}
+	// Event tetap tidak aktif setelah di-approve (sudah selesai)
+	// Tidak perlu update isactive karena event sudah selesai
 
 	respn.Status = "Success"
 	respn.Response = fmt.Sprintf("Event berhasil di-approve. User %s mendapat %d poin.", user.Name, event.Points)
