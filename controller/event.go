@@ -8,8 +8,10 @@ import (
 
 	"github.com/gocroot/config"
 	"github.com/gocroot/helper/at"
+	"github.com/gocroot/helper/atapi"
 	"github.com/gocroot/helper/atdb"
 	"github.com/gocroot/helper/watoken"
+	"github.com/gocroot/helper/whatsauth"
 	"github.com/gocroot/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -387,7 +389,7 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Send notification ke owner dengan link approval
-	approvalLink := fmt.Sprintf("https://www.do.my.id/event-main/?claim=%s", claimObjectID.Hex())
+	approvalLink := fmt.Sprintf("https://www.do.my.id/event/#%s", claimObjectID.Hex())
 
 	// Prepare notification message for WhatsApp
 	message := fmt.Sprintf("🎯 *Event Task Submitted*\n\n"+
@@ -402,11 +404,20 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 	// Send to owner numbers
 	ownerNumbers := []string{"6285312924192", "6282117252716"}
 	for _, ownerNum := range ownerNumbers {
-		// Here you would send WhatsApp message to owner
-		// Implementation depends on your WhatsApp service
-		// Example: sendWhatsAppMessage(ownerNum, message)
-		_ = ownerNum // Suppress unused variable warning until WhatsApp service is implemented
-		_ = message  // Suppress unused variable warning until WhatsApp service is implemented
+		// Send WhatsApp message to owner
+		dt := &whatsauth.TextMessage{
+			To:       ownerNum,
+			IsGroup:  false,
+			Messages: message,
+		}
+
+		_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Failed to send WhatsApp to %s: %v, info: %s\n", ownerNum, err, resp.Info)
+		} else {
+			fmt.Printf("WhatsApp sent successfully to %s\n", ownerNum)
+		}
 	}
 
 	respn.Status = "Success"
@@ -691,17 +702,29 @@ func CheckExpiredClaims(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
-// GetEventApprovalPage untuk redirect ke halaman approval event di event-main
-func GetEventApprovalPage(respw http.ResponseWriter, req *http.Request) {
-	claimId := at.GetParam(req)
+// ServeEventApprovalPage untuk serve halaman approval event
+func ServeEventApprovalPage(respw http.ResponseWriter, req *http.Request) {
+	path := req.URL.Path
 
-	// Validate claim ID format
-	if claimId == "" {
-		http.Error(respw, "Invalid claim ID", http.StatusBadRequest)
+	// Serve static files from event folder
+	if path == "/event" || path == "/event/" {
+		// Serve index.html
+		http.ServeFile(respw, req, "./event/index.html")
 		return
 	}
 
-	// Redirect to event-main folder with claim ID
-	redirectURL := fmt.Sprintf("https://www.do.my.id/event-main/?claim=%s", claimId)
-	http.Redirect(respw, req, redirectURL, http.StatusTemporaryRedirect)
+	if path == "/event/main.js" {
+		respw.Header().Set("Content-Type", "application/javascript")
+		http.ServeFile(respw, req, "./event/main.js")
+		return
+	}
+
+	if path == "/event/main.css" {
+		respw.Header().Set("Content-Type", "text/css")
+		http.ServeFile(respw, req, "./event/main.css")
+		return
+	}
+
+	// Default to index.html for any other /event/* paths
+	http.ServeFile(respw, req, "./event/index.html")
 }

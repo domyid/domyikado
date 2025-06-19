@@ -358,9 +358,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		controller.GetUserEventClaims(w, r)
 	case method == "GET" && path == "/api/event/checkexpired":
 		controller.CheckExpiredClaims(w, r)
-	// Event approval page
-	case method == "GET" && at.URLParam(path, "/event/:claimid"):
-		controller.GetEventApprovalPage(w, r)
+		// Event approval page - serve static files
+	case method == "GET" && strings.HasPrefix(path, "/event"):
+		controller.ServeEventApprovalPage(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
