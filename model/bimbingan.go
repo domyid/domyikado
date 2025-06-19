@@ -119,6 +119,8 @@ type EventClaim struct {
 	SubmittedAt time.Time          `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
 	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
 	ApprovedBy  string             `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
+	IsApproved  bool               `bson:"isapproved" json:"isapproved"`
+	Points      int                `bson:"points" json:"points"`
 }
 
 // EventCreateRequest struct untuk request create event
@@ -143,6 +145,19 @@ type EventSubmitRequest struct {
 // EventApproveRequest struct untuk approve event claim
 type EventApproveRequest struct {
 	ClaimID string `json:"claim_id" bson:"claim_id"`
+}
+
+// EventUserPoint struct untuk tracking poin user dari event
+type EventUserPoint struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Name      string             `bson:"name" json:"name"`
+	Phone     string             `bson:"phone" json:"phone"`
+	NPM       string             `bson:"npm" json:"npm"`
+	EventID   primitive.ObjectID `bson:"eventid" json:"eventid"`
+	EventName string             `bson:"eventname" json:"eventname"`
+	Points    int                `bson:"points" json:"points"`
+	ClaimID   primitive.ObjectID `bson:"claimid" json:"claimid"`
+	CreatedAt time.Time          `bson:"createdat" json:"createdat"`
 }
 
 // TimeCodeResponse struct untuk response generate time code
