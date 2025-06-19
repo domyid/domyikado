@@ -22,23 +22,29 @@ import (
 // CreateEvent - Owner membuat event baru
 func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
+	log.Printf("CreateEvent called by method: %s", req.Method)
+
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
+		log.Printf("CreateEvent: Token validation failed: %v", err)
 		respn.Status = "Error : Token Tidak Valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
+	log.Printf("CreateEvent: User authenticated: %s", payload.Id)
 
 	// Parse request body
 	var eventReq model.EventCreateRequest
 	err = json.NewDecoder(req.Body).Decode(&eventReq)
 	if err != nil {
+		log.Printf("CreateEvent: Failed to parse request body: %v", err)
 		respn.Status = "Error : Body tidak valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
+	log.Printf("CreateEvent: Request data: %+v", eventReq)
 
 	// Validasi input
 	if eventReq.Name == "" {
@@ -79,14 +85,17 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Simpan ke database
+	log.Printf("CreateEvent: Saving event to database: %+v", event)
 	eventID, err := atdb.InsertOneDoc(config.Mongoconn, "events", event)
 	if err != nil {
+		log.Printf("CreateEvent: Failed to save event: %v", err)
 		respn.Status = "Error : Gagal menyimpan event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
 
+	log.Printf("CreateEvent: Event saved successfully with ID: %s", eventID.Hex())
 	respn.Status = "Success"
 	respn.Data = map[string]interface{}{
 		"event_id": eventID.Hex(),
@@ -99,28 +108,37 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 // GetEvents - Mendapatkan list event yang aktif
 func GetEvents(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
+	log.Printf("GetEvents called by method: %s", req.Method)
+
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
+		log.Printf("GetEvents: Token validation failed: %v", err)
 		respn.Status = "Error : Token Tidak Valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
+	log.Printf("GetEvents: User authenticated: %s", payload.Id)
 
 	// Cleanup expired claims first
 	cleanupExpiredEvents()
 
 	// Get active events (not approved yet)
-	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{
+	filter := primitive.M{
 		"isactive":   true,
 		"isapproved": false, // Only show events that haven't been approved
-	})
+	}
+	log.Printf("GetEvents: Querying events with filter: %+v", filter)
+
+	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", filter)
 	if err != nil {
+		log.Printf("GetEvents: Failed to query events: %v", err)
 		respn.Status = "Error : Gagal mengambil data event"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
+	log.Printf("GetEvents: Found %d events", len(events))
 
 	// Prepare response with availability info
 	var eventList []map[string]interface{}
@@ -165,6 +183,7 @@ func GetEvents(respw http.ResponseWriter, req *http.Request) {
 		eventList = append(eventList, eventInfo)
 	}
 
+	log.Printf("GetEvents: Returning %d events to user %s", len(eventList), payload.Id)
 	respn.Status = "Success"
 	respn.Data = eventList
 	at.WriteJSON(respw, http.StatusOK, respn)
@@ -245,21 +264,23 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	expiresAt := now.Add(time.Duration(claimReq.TimerSec) * time.Second)
 
 	updateData := primitive.M{
-		"claimedby":   payload.Id,
-		"claimedat":   now,
-		"expiresat":   expiresAt,
-		"timersec":    claimReq.TimerSec,
-		"issubmitted": false,
-		"tasklink":    "",
-		// Tambah data user untuk referensi
-		"claimeduser": map[string]interface{}{
-			"name":        user.Name,
-			"phonenumber": user.PhoneNumber,
-			"email":       user.Email,
+		"$set": primitive.M{
+			"claimedby":   payload.Id,
+			"claimedat":   now,
+			"expiresat":   expiresAt,
+			"timersec":    claimReq.TimerSec,
+			"issubmitted": false,
+			"tasklink":    "",
+			// Tambah data user untuk referensi
+			"claimeduser": map[string]interface{}{
+				"name":        user.Name,
+				"phonenumber": user.PhoneNumber,
+				"email":       user.Email,
+			},
 		},
 	}
 
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
 	if err != nil {
 		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
@@ -349,12 +370,14 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 
 	// Update event dengan task submission
 	updateData := primitive.M{
-		"tasklink":    submitReq.TaskLink,
-		"submittedat": time.Now(),
-		"issubmitted": true, // Mark as submitted
+		"$set": primitive.M{
+			"tasklink":    submitReq.TaskLink,
+			"submittedat": time.Now(),
+			"issubmitted": true, // Mark as submitted
+		},
 	}
 
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
 	if err != nil {
 		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
@@ -480,7 +503,7 @@ func ApproveEventTask(respw http.ResponseWriter, req *http.Request) {
 		updateData["issubmitted"] = false
 	}
 
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, primitive.M{"$set": updateData})
 	if err != nil {
 		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
@@ -860,7 +883,7 @@ func ReplaceEventApproval(respw http.ResponseWriter, req *http.Request) {
 		updateData["claimeduser"] = nil
 	}
 
-	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "events", primitive.M{"_id": objectId}, updateData)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": objectId}, primitive.M{"$set": updateData})
 	if err != nil {
 		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()

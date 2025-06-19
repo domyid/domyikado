@@ -109,9 +109,9 @@ type Event struct {
 	ClaimedUser map[string]interface{} `bson:"claimeduser,omitempty" json:"claimeduser,omitempty"`
 
 	// Submission fields
+	IsSubmitted bool      `bson:"issubmitted" json:"issubmitted"`
 	TaskLink    string    `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
 	SubmittedAt time.Time `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
-	IsSubmitted bool      `bson:"issubmitted" json:"issubmitted"`
 
 	// Approval fields
 	IsApproved bool      `bson:"isapproved" json:"isapproved"`
