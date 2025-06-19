@@ -91,78 +91,6 @@ type TimeCodeGenerateRequest struct {
 	DurationSeconds int `json:"duration_seconds" bson:"duration_seconds"`
 }
 
-// Event struct untuk event management - All in one collection
-type Event struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	Name        string             `bson:"name" json:"name"`
-	Description string             `bson:"description,omitempty" json:"description,omitempty"`
-	Points      int                `bson:"points" json:"points"`
-	CreatedBy   string             `bson:"createdby" json:"createdby"`
-	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
-	IsActive    bool               `bson:"isactive" json:"isactive"`
-
-	// Claim fields
-	ClaimedBy   string                 `bson:"claimedby,omitempty" json:"claimedby,omitempty"`
-	ClaimedAt   time.Time              `bson:"claimedat,omitempty" json:"claimedat,omitempty"`
-	ExpiresAt   time.Time              `bson:"expiresat,omitempty" json:"expiresat,omitempty"`
-	TimerSec    int                    `bson:"timersec,omitempty" json:"timersec,omitempty"`
-	ClaimedUser map[string]interface{} `bson:"claimeduser,omitempty" json:"claimeduser,omitempty"`
-
-	// Submission fields
-	IsSubmitted bool      `bson:"issubmitted" json:"issubmitted"`
-	TaskLink    string    `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
-	SubmittedAt time.Time `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
-
-	// Approval fields
-	IsApproved bool      `bson:"isapproved" json:"isapproved"`
-	ApprovedAt time.Time `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
-	ApprovedBy string    `bson:"approvedby,omitempty" json:"approvedby,omitempty"`
-	Komentar   string    `bson:"komentar,omitempty" json:"komentar,omitempty"`
-	Validasi   int       `bson:"validasi,omitempty" json:"validasi,omitempty"`
-}
-
-// EventClaim struct untuk tracking user yang claim event
-type EventClaim struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	EventID     primitive.ObjectID `bson:"eventid" json:"eventid"`
-	UserPhone   string             `bson:"userphone" json:"userphone"`
-	ClaimedAt   time.Time          `bson:"claimedat" json:"claimedat"`
-	ExpiresAt   time.Time          `bson:"expiresat" json:"expiresat"`
-	TimerSec    int                `bson:"timersec" json:"timersec"`
-	IsActive    bool               `bson:"isactive" json:"isactive"`
-	IsCompleted bool               `bson:"iscompleted" json:"iscompleted"`
-	IsSubmit    bool               `bson:"issubmit" json:"issubmit"`
-	TaskLink    string             `bson:"tasklink,omitempty" json:"tasklink,omitempty"`
-	SubmittedAt time.Time          `bson:"submittedat,omitempty" json:"submittedat,omitempty"`
-}
-
-// EventCreateRequest struct untuk request create event
-type EventCreateRequest struct {
-	Name        string `json:"name" bson:"name"`
-	Description string `json:"description,omitempty" bson:"description,omitempty"`
-	Points      int    `json:"points" bson:"points"`
-}
-
-// EventClaimRequest struct untuk request claim event
-type EventClaimRequest struct {
-	EventID  string `json:"event_id" bson:"event_id"`
-	TimerSec int    `json:"timer_sec" bson:"timer_sec"`
-}
-
-// EventSubmitRequest struct untuk submit task link
-type EventSubmitRequest struct {
-	EventID  string `json:"event_id" bson:"event_id"`
-	TaskLink string `json:"task_link" bson:"task_link"`
-}
-
-// EventApprovalRequest struct untuk approve/reject event
-type EventApprovalRequest struct {
-	EventID    string `json:"event_id" bson:"event_id"`
-	IsApproved bool   `json:"is_approved" bson:"is_approved"`
-	Komentar   string `json:"komentar,omitempty" bson:"komentar,omitempty"`
-	Validasi   int    `json:"validasi,omitempty" bson:"validasi,omitempty"`
-}
-
 // TimeCodeClaimRequest struct untuk request claim time code
 type TimeCodeClaimRequest struct {
 	Code string `json:"code" bson:"code"`
@@ -173,37 +101,4 @@ type TimeCodeResponse struct {
 	Code      string `json:"code"`
 	ExpiresAt string `json:"expires_at"`
 	Duration  int    `json:"duration"`
-}
-
-// EventUserPoint struct untuk tracking point yang didapat user dari event
-type EventUserPoint struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	UserPhone  string             `bson:"userphone" json:"userphone"`
-	EventID    primitive.ObjectID `bson:"eventid" json:"eventid"`
-	EventName  string             `bson:"eventname" json:"eventname"`
-	Points     int                `bson:"points" json:"points"`
-	TaskLink   string             `bson:"tasklink" json:"tasklink"`
-	ClaimID    primitive.ObjectID `bson:"claimid" json:"claimid"`
-	ApprovedBy string             `bson:"approvedby" json:"approvedby"`
-	ApprovedAt time.Time          `bson:"approvedat" json:"approvedat"`
-	CreatedAt  time.Time          `bson:"createdat" json:"createdat"`
-}
-
-// EventApproval struct untuk approval event task (seperti bimbingan)
-type EventApproval struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	EventID     primitive.ObjectID `bson:"eventid" json:"eventid"`
-	EventName   string             `bson:"eventname" json:"eventname"`
-	EventPoints int                `bson:"eventpoints" json:"eventpoints"`
-	UserPhone   string             `bson:"userphone" json:"userphone"`
-	UserName    string             `bson:"username" json:"username"`
-	UserEmail   string             `bson:"useremail" json:"useremail"`
-	TaskLink    string             `bson:"tasklink" json:"tasklink"`
-	ClaimID     primitive.ObjectID `bson:"claimid" json:"claimid"`
-	Approved    bool               `bson:"approved" json:"approved"`
-	Validasi    int                `bson:"validasi" json:"validasi"`
-	Komentar    string             `bson:"komentar" json:"komentar"`
-	Asesor      Userdomyikado      `bson:"asesor" json:"asesor"`
-	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
-	ApprovedAt  time.Time          `bson:"approvedat,omitempty" json:"approvedat,omitempty"`
 }
