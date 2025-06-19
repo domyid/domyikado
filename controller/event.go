@@ -288,24 +288,22 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	expiresAt := now.Add(time.Duration(claimReq.TimerSec) * time.Second)
 
 	updateData := primitive.M{
-		"$set": primitive.M{
-			"claimedby":   payload.Id,
-			"claimedat":   now,
-			"expiresat":   expiresAt,
-			"timersec":    claimReq.TimerSec,
-			"issubmitted": false,
-			"tasklink":    "",
-			// Tambah data user untuk referensi
-			"claimeduser": map[string]interface{}{
-				"name":        user.Name,
-				"phonenumber": user.PhoneNumber,
-				"email":       user.Email,
-			},
+		"claimedby":   payload.Id,
+		"claimedat":   now,
+		"expiresat":   expiresAt,
+		"timersec":    claimReq.TimerSec,
+		"issubmitted": false,
+		"tasklink":    "",
+		// Tambah data user untuk referensi
+		"claimeduser": map[string]interface{}{
+			"name":        user.Name,
+			"phonenumber": user.PhoneNumber,
+			"email":       user.Email,
 		},
 	}
 
 	log.Printf("ClaimEvent: Updating event with data: %+v", updateData)
-	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, primitive.M{"$set": updateData})
 	if err != nil {
 		log.Printf("ClaimEvent: Failed to update event: %v", err)
 		respn.Status = "Error : Gagal update event"
@@ -397,14 +395,12 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 
 	// Update event dengan task submission
 	updateData := primitive.M{
-		"$set": primitive.M{
-			"tasklink":    submitReq.TaskLink,
-			"submittedat": time.Now(),
-			"issubmitted": true, // Mark as submitted
-		},
+		"tasklink":    submitReq.TaskLink,
+		"submittedat": time.Now(),
+		"issubmitted": true, // Mark as submitted
 	}
 
-	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, updateData)
+	_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": eventObjID}, primitive.M{"$set": updateData})
 	if err != nil {
 		respn.Status = "Error : Gagal update event"
 		respn.Response = err.Error()
