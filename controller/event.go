@@ -1246,5 +1246,5 @@ func generateBimbinganCode() string {
 	for i := range code {
 		code[i] = charset[rand.Intn(len(charset))]
 	}
-	return string(code)
+	return "GLR-" + string(code)
 }
