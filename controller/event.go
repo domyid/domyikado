@@ -55,21 +55,30 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Validasi input
-	if eventReq.Name == "" || eventReq.Description == "" || eventReq.Points <= 0 {
+	if eventReq.Name == "" || eventReq.Description == "" || eventReq.Points <= 0 || eventReq.DeadlineSeconds <= 0 {
 		respn.Status = "Error : Data tidak lengkap"
-		respn.Response = "Nama, deskripsi, dan poin harus diisi dengan benar"
+		respn.Response = "Nama, deskripsi, poin, dan deadline harus diisi dengan benar"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Validasi deadline seconds
+	if eventReq.DeadlineSeconds > 3600 {
+		respn.Status = "Error : Deadline terlalu lama"
+		respn.Response = "Deadline maksimal 3600 detik (1 jam)"
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
 
 	// Buat event baru
 	event := model.Event{
-		Name:        eventReq.Name,
-		Description: eventReq.Description,
-		Points:      eventReq.Points,
-		CreatedBy:   payload.Id,
-		CreatedAt:   time.Now(),
-		IsActive:    true,
+		Name:            eventReq.Name,
+		Description:     eventReq.Description,
+		Points:          eventReq.Points,
+		DeadlineSeconds: eventReq.DeadlineSeconds,
+		CreatedBy:       payload.Id,
+		CreatedAt:       time.Now(),
+		IsActive:        true,
 	}
 
 	// Simpan ke database
@@ -153,6 +162,7 @@ func GetAllEvents(respw http.ResponseWriter, req *http.Request) {
 			"name":               event.Name,
 			"description":        event.Description,
 			"points":             event.Points,
+			"deadline_seconds":   event.DeadlineSeconds,
 			"created_at":         event.CreatedAt,
 			"is_claimed_by_user": false, // Selalu false karena sudah di-filter
 			"is_claimed_by_any":  allClaimedEventIDs[event.ID.Hex()],
@@ -239,16 +249,10 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validasi deadline seconds
-	deadlineSeconds := claimReq.DeadlineSeconds
-	if deadlineSeconds <= 0 || deadlineSeconds > 3600 {
-		respn.Status = "Error : Deadline tidak valid"
-		respn.Response = "Deadline harus antara 1-3600 detik"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+	// Gunakan deadline seconds dari event (yang sudah ditentukan owner)
+	deadlineSeconds := event.DeadlineSeconds
 
-	// Buat claim baru dengan deadline sesuai input user
+	// Buat claim baru dengan deadline sesuai setting event
 	now := time.Now()
 	deadline := now.Add(time.Duration(deadlineSeconds) * time.Second)
 

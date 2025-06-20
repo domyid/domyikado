@@ -98,13 +98,14 @@ type TimeCodeClaimRequest struct {
 
 // Event struct untuk menyimpan event yang dibuat owner
 type Event struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
-	Name        string             `bson:"name" json:"name"`
-	Description string             `bson:"description" json:"description"`
-	Points      int                `bson:"points" json:"points"`
-	CreatedBy   string             `bson:"createdby" json:"createdby"`
-	CreatedAt   time.Time          `bson:"createdat" json:"createdat"`
-	IsActive    bool               `bson:"isactive" json:"isactive"`
+	ID              primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Name            string             `bson:"name" json:"name"`
+	Description     string             `bson:"description" json:"description"`
+	Points          int                `bson:"points" json:"points"`
+	DeadlineSeconds int                `bson:"deadlineseconds" json:"deadlineseconds"`
+	CreatedBy       string             `bson:"createdby" json:"createdby"`
+	CreatedAt       time.Time          `bson:"createdat" json:"createdat"`
+	IsActive        bool               `bson:"isactive" json:"isactive"`
 }
 
 // EventClaim struct untuk tracking user yang claim event
@@ -124,15 +125,15 @@ type EventClaim struct {
 
 // EventCreateRequest struct untuk request create event
 type EventCreateRequest struct {
-	Name        string `json:"name" bson:"name"`
-	Description string `json:"description" bson:"description"`
-	Points      int    `json:"points" bson:"points"`
+	Name            string `json:"name" bson:"name"`
+	Description     string `json:"description" bson:"description"`
+	Points          int    `json:"points" bson:"points"`
+	DeadlineSeconds int    `json:"deadline_seconds" bson:"deadline_seconds"`
 }
 
 // EventClaimRequest struct untuk request claim event
 type EventClaimRequest struct {
-	EventID         string `json:"event_id" bson:"event_id"`
-	DeadlineSeconds int    `json:"deadline_seconds" bson:"deadline_seconds"`
+	EventID string `json:"event_id" bson:"event_id"`
 }
 
 // EventSubmitRequest struct untuk submit task link
