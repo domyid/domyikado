@@ -1110,30 +1110,39 @@ func GetUserEventPoints(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
 	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
 	if err != nil {
+		fmt.Printf("❌ GetUserEventPoints: Token decode error: %v\n", err)
 		respn.Status = "Error : Token Tidak Valid"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusForbidden, respn)
 		return
 	}
 
+	fmt.Printf("✅ GetUserEventPoints: Token valid for user: %s\n", payload.Id)
+
 	// Get user data
 	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{
 		"phonenumber": payload.Id,
 	})
 	if err != nil {
+		fmt.Printf("❌ GetUserEventPoints: User not found for phone: %s, error: %v\n", payload.Id, err)
 		respn.Status = "Error : User tidak ditemukan"
 		respn.Response = err.Error()
 		at.WriteJSON(respw, http.StatusNotFound, respn)
 		return
 	}
 
+	fmt.Printf("✅ GetUserEventPoints: User found: %s, PointEvent: %d\n", user.Name, user.PointEvent)
+
 	// Get user's event history
 	userEventPoints, err := atdb.GetAllDoc[[]model.EventUserPoint](config.Mongoconn, "eventuserpoint", primitive.M{
 		"phone": user.PhoneNumber,
 	})
 	if err != nil {
+		fmt.Printf("⚠️ GetUserEventPoints: Event history error: %v\n", err)
 		userEventPoints = []model.EventUserPoint{} // If error, assume no points
 	}
+
+	fmt.Printf("✅ GetUserEventPoints: Event history count: %d\n", len(userEventPoints))
 
 	respn.Status = "Success"
 	respn.Response = "Data poin event user berhasil diambil"
@@ -1143,6 +1152,8 @@ func GetUserEventPoints(respw http.ResponseWriter, req *http.Request) {
 		"total_event_points": user.PointEvent,
 		"event_history":      userEventPoints,
 	}
+
+	fmt.Printf("✅ GetUserEventPoints: Sending response with points: %d\n", user.PointEvent)
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
