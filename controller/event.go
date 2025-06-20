@@ -91,6 +91,28 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "🎯 **New Event Created!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "New Event Created",
+				Description: "A new event has been created by owner",
+				Color:       5763719, // Green color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "🎯 Points", Value: fmt.Sprintf("%d", event.Points), Inline: true},
+					{Name: "⏰ Deadline", Value: fmt.Sprintf("%d seconds", event.DeadlineSeconds), Inline: true},
+					{Name: "👤 Created By", Value: payload.Id, Inline: true},
+					{Name: "🆔 Event ID", Value: fmt.Sprintf("%v", eventID), Inline: true},
+					{Name: "📝 Description", Value: event.Description, Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
+
 	respn.Status = "Success"
 	respn.Response = "Event berhasil dibuat"
 	respn.Data = map[string]interface{}{
@@ -275,6 +297,38 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Get user data for Discord notification
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		// If user not found, use phone number only
+		docuser.Name = "Unknown User"
+		docuser.NPM = "Unknown"
+		docuser.PhoneNumber = payload.Id
+	}
+
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "📋 **Event Claimed!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Event Claimed",
+				Description: "A user has claimed an event",
+				Color:       39423, // Blue color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "👤 User Name", Value: docuser.Name, Inline: true},
+					{Name: "🎓 NPM", Value: docuser.NPM, Inline: true},
+					{Name: "📱 Phone", Value: docuser.PhoneNumber, Inline: true},
+					{Name: "🎯 Points", Value: fmt.Sprintf("%d", event.Points), Inline: true},
+					{Name: "⏰ Deadline", Value: deadline.Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🆔 Claim ID", Value: fmt.Sprintf("%v", claimID), Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
+
 	respn.Status = "Success"
 	respn.Response = "Event berhasil di-claim"
 	respn.Data = map[string]interface{}{
@@ -431,6 +485,31 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 			fmt.Printf("WhatsApp sent successfully to %s\n", ownerNum)
 		}
 	}
+
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "📝 **Task Submitted!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Task Submitted",
+				Description: "A user has submitted their task for approval",
+				Color:       16755200, // Orange color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "👤 User Name", Value: docuser.Name, Inline: true},
+					{Name: "🎓 NPM", Value: docuser.NPM, Inline: true},
+					{Name: "📱 Phone", Value: docuser.PhoneNumber, Inline: true},
+					{Name: "🎯 Points", Value: fmt.Sprintf("%d", event.Points), Inline: true},
+					{Name: "📅 Submitted At", Value: time.Now().Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🔗 Task Link", Value: submitReq.TaskLink, Inline: false},
+					{Name: "✅ Approval Link", Value: approvalLink, Inline: false},
+					{Name: "🆔 Claim ID", Value: claimObjectID.Hex(), Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
 
 	respn.Status = "Success"
 	respn.Response = "Tugas berhasil disubmit dan menunggu approval dari owner"
@@ -625,6 +704,31 @@ func ApproveEventClaim(respw http.ResponseWriter, req *http.Request) {
 		at.WriteJSON(respw, http.StatusInternalServerError, respn)
 		return
 	}
+
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "✅ **Event Approved!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Event Approved",
+				Description: "An event task has been approved and points awarded",
+				Color:       5763719, // Green color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "👤 User Name", Value: user.Name, Inline: true},
+					{Name: "🎓 NPM", Value: user.NPM, Inline: true},
+					{Name: "📱 Phone", Value: user.PhoneNumber, Inline: true},
+					{Name: "🎯 Points Awarded", Value: fmt.Sprintf("%d", event.Points), Inline: true},
+					{Name: "👨‍💼 Approved By", Value: payload.Id, Inline: true},
+					{Name: "📅 Approved At", Value: time.Now().Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🔗 Task Link", Value: claim.TaskLink, Inline: false},
+					{Name: "🆔 Claim ID", Value: claimObjectID.Hex(), Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
 
 	respn.Status = "Success"
 	respn.Response = fmt.Sprintf("Event claim berhasil di-approve. User %s mendapat %d points", user.Name, event.Points)
@@ -947,6 +1051,30 @@ func PostEventApproval(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "✅ **Event Approved (POST)!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Event Approved (POST)",
+				Description: "An event task has been approved via POST endpoint",
+				Color:       5763719, // Green color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "👤 User Name", Value: user.Name, Inline: true},
+					{Name: "🎓 NPM", Value: user.NPM, Inline: true},
+					{Name: "📱 Phone", Value: user.PhoneNumber, Inline: true},
+					{Name: "🎯 Points Awarded", Value: fmt.Sprintf("%d", event.Points), Inline: true},
+					{Name: "📊 Total Event Points", Value: fmt.Sprintf("%d", user.PointEvent), Inline: true},
+					{Name: "📅 Approved At", Value: claim.ApprovedAt.Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🆔 Claim ID", Value: claimObjectID.Hex(), Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
+
 	respn.Status = "Success"
 	respn.Response = fmt.Sprintf("Event berhasil di-approve. User %s mendapat %d poin. Total poin event: %d", user.Name, event.Points, user.PointEvent)
 	respn.Data = map[string]interface{}{
@@ -1224,6 +1352,30 @@ func BuyBimbinganCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "🛒 **Bimbingan Code Purchased!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Bimbingan Code Purchased",
+				Description: "A user has purchased a bimbingan code",
+				Color:       10038476, // Purple color
+				Fields: []DiscordEmbedeventField{
+					{Name: "👤 User Name", Value: user.Name, Inline: true},
+					{Name: "🎓 NPM", Value: user.NPM, Inline: true},
+					{Name: "📱 Phone", Value: user.PhoneNumber, Inline: true},
+					{Name: "🎫 Generated Code", Value: generatedCode, Inline: true},
+					{Name: "💰 Points Used", Value: fmt.Sprintf("%d", requiredPoints), Inline: true},
+					{Name: "📊 Remaining Points", Value: fmt.Sprintf("%d", user.PointEvent), Inline: true},
+					{Name: "📅 Created At", Value: eventCode.CreatedAt.Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🆔 Code ID", Value: fmt.Sprintf("%v", eventCodeID), Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
+
 	respn.Status = "Success"
 	respn.Response = fmt.Sprintf("Code bimbingan berhasil dibeli! Poin dikurangi %d, sisa %d poin", requiredPoints, user.PointEvent)
 	respn.Data = map[string]interface{}{
@@ -1238,9 +1390,9 @@ func BuyBimbinganCode(respw http.ResponseWriter, req *http.Request) {
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
 
-// generateBimbinganCode untuk generate code bimbingan (sama seperti generate event code)
+// generateBimbinganCode untuk generate code bimbingan dengan prefix GLR-
 func generateBimbinganCode() string {
-	// Generate random code dengan format yang sama
+	// Generate random code dengan prefix GLR-
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	code := make([]byte, 6)
 	for i := range code {
