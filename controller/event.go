@@ -663,15 +663,22 @@ func GetUserEventClaims(respw http.ResponseWriter, req *http.Request) {
 		// Check if expired
 		isExpired := time.Now().After(claim.Deadline) && claim.Status == "claimed"
 
+		// Calculate approval deadline (24 jam dari submitted_at)
+		var approvalDeadline time.Time
+		if !claim.SubmittedAt.IsZero() {
+			approvalDeadline = claim.SubmittedAt.Add(86400 * time.Second) // 24 jam
+		}
+
 		claimData := map[string]interface{}{
-			"claim_id":     claim.ID.Hex(),
-			"event":        event,
-			"claimed_at":   claim.ClaimedAt,
-			"deadline":     claim.Deadline,
-			"status":       claim.Status,
-			"task_link":    claim.TaskLink,
-			"submitted_at": claim.SubmittedAt,
-			"is_expired":   isExpired,
+			"claim_id":          claim.ID.Hex(),
+			"event":             event,
+			"claimed_at":        claim.ClaimedAt,
+			"deadline":          claim.Deadline,
+			"status":            claim.Status,
+			"task_link":         claim.TaskLink,
+			"submitted_at":      claim.SubmittedAt,
+			"approval_deadline": approvalDeadline,
+			"is_expired":        isExpired,
 		}
 		claimsWithEvents = append(claimsWithEvents, claimData)
 	}
@@ -1003,4 +1010,81 @@ func GetEventClaimDetails(respw http.ResponseWriter, req *http.Request) {
 	respn.Response = "Detail claim berhasil diambil"
 	respn.Data = responseData
 	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// CheckExpiredApprovals untuk check dan recovery expired approvals (24 jam timeout)
+func CheckExpiredApprovals(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+
+	// Jalankan fungsi internal untuk check dan fix expired approvals
+	processedCount := runExpiredApprovalsCheck()
+
+	respn.Status = "Success"
+	respn.Response = fmt.Sprintf("Processed %d expired approvals", processedCount)
+	respn.Data = map[string]interface{}{
+		"processed": processedCount,
+		"timestamp": time.Now(),
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// runExpiredApprovalsCheck - fungsi internal untuk check dan recovery
+func runExpiredApprovalsCheck() int {
+	now := time.Now()
+	processedCount := 0
+
+	// 1. Check deadline timeout (user tidak submit tepat waktu)
+	expiredDeadlineClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"status":   "claimed",
+		"deadline": primitive.M{"$lt": now},
+	})
+	if err == nil {
+		for _, claim := range expiredDeadlineClaims {
+			// Update claim status ke expired
+			claim.Status = "expired"
+			_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, claim)
+			if err != nil {
+				continue
+			}
+
+			// Set event kembali aktif
+			_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": claim.EventID}, primitive.M{
+				"isactive": true,
+			})
+			if err == nil {
+				processedCount++
+				fmt.Printf("✅ Recovered deadline expired event: %s\n", claim.EventID.Hex())
+			}
+		}
+	}
+
+	// 2. Check approval timeout (24 jam setelah submit)
+	timeoutLimit := now.Add(-86400 * time.Second) // 24 jam yang lalu
+
+	expiredApprovalClaims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"status":      "submitted",
+		"isapproved":  false,
+		"submittedat": primitive.M{"$lt": timeoutLimit},
+	})
+	if err == nil {
+		for _, claim := range expiredApprovalClaims {
+			// Update claim status ke expired
+			claim.Status = "expired"
+			_, err = atdb.ReplaceOneDoc(config.Mongoconn, "eventclaims", primitive.M{"_id": claim.ID}, claim)
+			if err != nil {
+				continue
+			}
+
+			// Set event kembali aktif
+			_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": claim.EventID}, primitive.M{
+				"isactive": true,
+			})
+			if err == nil {
+				processedCount++
+				fmt.Printf("✅ Recovered approval expired event: %s\n", claim.EventID.Hex())
+			}
+		}
+	}
+
+	return processedCount
 }
