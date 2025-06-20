@@ -936,14 +936,25 @@ func PostEventApproval(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Update user's total event points (PointEvent)
+	user.PointEvent += event.Points
+	_, err = atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": claim.UserPhone}, user)
+	if err != nil {
+		respn.Status = "Error : Gagal update poin user"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
 	respn.Status = "Success"
-	respn.Response = fmt.Sprintf("Event berhasil di-approve. User %s mendapat %d poin.", user.Name, event.Points)
+	respn.Response = fmt.Sprintf("Event berhasil di-approve. User %s mendapat %d poin. Total poin event: %d", user.Name, event.Points, user.PointEvent)
 	respn.Data = map[string]interface{}{
-		"approved":    true,
-		"user":        user.Name,
-		"event":       event.Name,
-		"points":      event.Points,
-		"approved_at": claim.ApprovedAt,
+		"approved":           true,
+		"user":               user.Name,
+		"event":              event.Name,
+		"points":             event.Points,
+		"total_event_points": user.PointEvent,
+		"approved_at":        claim.ApprovedAt,
 	}
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
@@ -1091,4 +1102,45 @@ func runExpiredApprovalsCheck() int {
 	}
 
 	return processedCount
+}
+
+// GetUserEventPoints untuk mendapatkan total poin event user
+func GetUserEventPoints(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get user data
+	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{
+		"phonenumber": payload.Id,
+	})
+	if err != nil {
+		respn.Status = "Error : User tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Get user's event history
+	userEventPoints, err := atdb.GetAllDoc[[]model.EventUserPoint](config.Mongoconn, "eventuserpoint", primitive.M{
+		"phone": user.PhoneNumber,
+	})
+	if err != nil {
+		userEventPoints = []model.EventUserPoint{} // If error, assume no points
+	}
+
+	respn.Status = "Success"
+	respn.Response = "Data poin event user berhasil diambil"
+	respn.Data = map[string]interface{}{
+		"user":               user.Name,
+		"phone":              user.PhoneNumber,
+		"total_event_points": user.PointEvent,
+		"event_history":      userEventPoints,
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
 }

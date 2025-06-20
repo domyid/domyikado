@@ -69,6 +69,7 @@ type Userdomyikado struct {
 	RVNwallet            string             `json:"rvnwallet,omitempty" bson:"rvnwallet,omitempty"`
 	WeeklyScore          []ActivityScore    `json:"weeklyscore,omitempty" bson:"weeklyscore,omitempty"` // aktifitas mingguan
 	IsDosen              bool               `json:"isdosen,omitempty" bson:"isdosen,omitempty"`
+	PointEvent           int                `bson:"pointevent,omitempty" json:"pointevent,omitempty"`
 }
 
 // skor asessment proyek1 dan lainnya aktifitas mingguan. ini pengganti kartu bimbingan

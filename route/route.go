@@ -371,6 +371,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// Check expired approvals untuk recovery 24 jam timeout
 	case method == "GET" && path == "/api/event/checkexpired":
 		controller.CheckExpiredApprovals(w, r)
+		// Get user event points
+	case method == "GET" && path == "/api/event/mypoints":
+		controller.GetUserEventPoints(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
