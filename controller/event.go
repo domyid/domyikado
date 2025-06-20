@@ -1157,25 +1157,7 @@ func BuyBimbinganCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Parse request body
-	var buyReq struct {
-		DurationSeconds int `json:"duration_seconds"`
-	}
-	err = json.NewDecoder(req.Body).Decode(&buyReq)
-	if err != nil {
-		respn.Status = "Error : Body tidak valid"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
-
-	// Validasi duration
-	if buyReq.DurationSeconds <= 0 || buyReq.DurationSeconds > 3600 {
-		respn.Status = "Error : Durasi tidak valid"
-		respn.Response = "Durasi harus antara 1-3600 detik"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+	// No request body needed for buying event code (sekali pakai)
 
 	// Get user data
 	user, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{
@@ -1210,63 +1192,18 @@ func BuyBimbinganCode(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get next bimbingan number
-	allDoc, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
+	// Create EventCode entry (sama seperti GenerateEventCode untuk referral)
+	eventCode := model.EventCode{
+		Code:      generatedCode,
+		CreatedBy: payload.Id,
+		CreatedAt: time.Now(),
+		IsUsed:    false,
+	}
+
+	// Save to eventcodes collection
+	eventCodeID, err := atdb.InsertOneDoc(config.Mongoconn, "eventcodes", eventCode)
 	if err != nil {
-		allDoc = []model.ActivityScore{} // If error, assume no previous bimbingan
-	}
-	nextBimbinganKe := len(allDoc) + 1
-
-	// Create asesor (default system)
-	asesor := model.Userdomyikado{
-		Name:        "System Store",
-		PhoneNumber: "system",
-	}
-
-	// Create bimbingan entry (sama seperti generate time code)
-	bimbingan := model.ActivityScore{
-		BimbinganKe: nextBimbinganKe,
-		Approved:    true,
-		Username:    user.Name,
-		PhoneNumber: payload.Id,
-		Asesor:      asesor,
-		CreatedAt:   time.Now(),
-		// Set semua activity scores ke 0
-		Trackerdata:     0,
-		Tracker:         0,
-		StravaKM:        0,
-		Strava:          0,
-		IQresult:        0,
-		IQ:              0,
-		MBC:             0,
-		MBCPoints:       0,
-		RVN:             0,
-		RavencoinPoints: 0,
-		QRIS:            0,
-		QRISPoints:      0,
-		Pomokitsesi:     0,
-		Pomokit:         0,
-		GTMetrixResult:  "",
-		GTMetrix:        0,
-		WebHookpush:     0,
-		WebHook:         0,
-		PresensiHari:    0,
-		Presensi:        0,
-		Sponsordata:     0,
-		Sponsor:         0,
-		BukuKatalog:     "",
-		BukPed:          0,
-		JurnalWeb:       "",
-		Jurnal:          0,
-		TotalScore:      0,
-		Komentar:        fmt.Sprintf("Bimbingan dari Store - Code: %s, Durasi: %d detik, Dibeli dengan %d poin", generatedCode, buyReq.DurationSeconds, requiredPoints),
-		Validasi:        5, // Rating 5 untuk store purchase
-	}
-
-	// Save to database
-	bimbinganID, err := atdb.InsertOneDoc(config.Mongoconn, "bimbingan", bimbingan)
-	if err != nil {
-		// Rollback points if failed to save bimbingan
+		// Rollback points if failed to save event code
 		user.PointEvent += requiredPoints
 		atdb.ReplaceOneDoc(config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id}, user)
 
@@ -1280,13 +1217,12 @@ func BuyBimbinganCode(respw http.ResponseWriter, req *http.Request) {
 	respn.Response = fmt.Sprintf("Code bimbingan berhasil dibeli! Poin dikurangi %d, sisa %d poin", requiredPoints, user.PointEvent)
 	respn.Data = map[string]interface{}{
 		"code":             generatedCode,
-		"duration_seconds": buyReq.DurationSeconds,
-		"bimbingan_id":     bimbinganID,
-		"bimbingan_ke":     nextBimbinganKe,
+		"eventcode_id":     eventCodeID,
 		"points_used":      requiredPoints,
 		"remaining_points": user.PointEvent,
-		"created_at":       bimbingan.CreatedAt,
-		"message":          fmt.Sprintf("Selamat! Anda mendapat bimbingan ke-%d dengan code: %s", nextBimbinganKe, generatedCode),
+		"created_at":       eventCode.CreatedAt,
+		"message":          fmt.Sprintf("Selamat! Anda mendapat code bimbingan: %s (sekali pakai)", generatedCode),
+		"usage_note":       "Code ini dapat digunakan sekali oleh satu user untuk mendapatkan bimbingan",
 	}
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
