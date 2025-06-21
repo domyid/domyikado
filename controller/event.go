@@ -63,13 +63,7 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validasi deadline seconds
-	if eventReq.DeadlineSeconds > 3600 {
-		respn.Status = "Error : Deadline terlalu lama"
-		respn.Response = "Deadline maksimal 3600 detik (1 jam)"
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
-		return
-	}
+	// No maximum deadline validation - owner can set any deadline they want
 
 	// Buat event baru
 	event := model.Event{
