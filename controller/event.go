@@ -23,7 +23,7 @@ func sendNewEventNotificationToGroup() {
 	targetGroupID := "120363298977628161"
 
 	// Message content as specified
-	message := "Hai.. hai.. ada event baru nih bisa di cek website domyid yakkk..."
+	message := "Hai..Hai..Hai.. Buat kalian yang masih butuh bimbingan tambahan atau merasa bimbingannya masih kurang, jangan khawatir karena kami akan memberikan kalian event tambahan untuk menambah bimbingan kalian yang tertinggal! Yuk, cek (https://www.do.my.id/dashboard/#proyek/bimbinganevent) Jangan sampai ketinggalan, ya!"
 
 	// Prepare WhatsApp message
 	dt := &whatsauth.TextMessage{
