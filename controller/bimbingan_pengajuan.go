@@ -109,9 +109,10 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 	}
 
 	// Validate if the user has at least 8 APPROVED bimbingan sessions
+	// Note: Field name is "approved" in MongoDB (lowercase) but "Approved" in Go struct
 	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{
 		"phonenumber": payload.Id,
-		"approved":    true, // Only count approved bimbingan
+		"approved":    true, // MongoDB field name is lowercase
 	})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data bimbingan"
