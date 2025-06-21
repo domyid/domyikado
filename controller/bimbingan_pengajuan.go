@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -107,8 +108,11 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Validate if the user has at least 8 bimbingan sessions
-	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
+	// Validate if the user has at least 8 APPROVED bimbingan sessions
+	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{
+		"phonenumber": payload.Id,
+		"approved":    true, // Only count approved bimbingan
+	})
 	if err != nil {
 		respn.Status = "Error : Gagal mengambil data bimbingan"
 		respn.Response = err.Error()
@@ -118,7 +122,7 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 
 	if len(bimbinganList) < 8 {
 		respn.Status = "Error : Syarat bimbingan belum terpenuhi"
-		respn.Response = "Anda memerlukan minimal 8 sesi bimbingan untuk mengajukan sidang"
+		respn.Response = fmt.Sprintf("Anda memerlukan minimal 8 sesi bimbingan yang sudah disetujui untuk mengajukan sidang. Saat ini: %d approved", len(bimbinganList))
 		at.WriteJSON(respw, http.StatusBadRequest, respn)
 		return
 	}
