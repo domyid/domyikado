@@ -17,6 +17,32 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// sendNewEventNotificationToGroup sends notification to specific WhatsApp group when new event is created
+func sendNewEventNotificationToGroup() {
+	// Target group ID as specified
+	targetGroupID := "120363298977628161"
+
+	// Message content as specified
+	message := "Hai.. hai.. ada event baru nih bisa di cek website domyid yakkk..."
+
+	// Prepare WhatsApp message
+	dt := &whatsauth.TextMessage{
+		To:       targetGroupID,
+		IsGroup:  true,
+		Messages: message,
+	}
+
+	// Send message asynchronously to not block the main request
+	go func() {
+		_, resp, err := atapi.PostStructWithToken[model.Response]("Token", config.WAAPIToken, dt, config.WAAPIMessage)
+		if err != nil {
+			fmt.Printf("Failed to send WhatsApp notification to group %s: %v, info: %s\n", targetGroupID, err, resp.Info)
+		} else {
+			fmt.Printf("WhatsApp notification sent successfully to group %s\n", targetGroupID)
+		}
+	}()
+}
+
 // CreateEvent untuk membuat event baru (khusus owner)
 func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 	var respn model.Response
@@ -106,6 +132,9 @@ func CreateEvent(respw http.ResponseWriter, req *http.Request) {
 		},
 	}
 	go sendDiscordNotification(discordPayload)
+
+	// Send WhatsApp notification to group
+	sendNewEventNotificationToGroup()
 
 	respn.Status = "Success"
 	respn.Response = "Event berhasil dibuat"
