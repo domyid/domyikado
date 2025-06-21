@@ -248,3 +248,60 @@ func GetPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 	respn.Data = pengajuanList
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
+
+// CheckSidangEligibility checks if user has enough approved bimbingan for sidang
+func CheckSidangEligibility(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Info = at.GetSecretFromHeader(req)
+		respn.Location = "Decode Token Error"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get all approved bimbingan for the user
+	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{
+		"phonenumber": payload.Id,
+		"approved":    true, // Only count approved bimbingan
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data bimbingan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Get all bimbingan (for total count)
+	allBimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{
+		"phonenumber": payload.Id,
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data bimbingan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	approvedCount := len(bimbinganList)
+	totalCount := len(allBimbinganList)
+	pendingCount := totalCount - approvedCount
+	eligibilityMet := approvedCount >= 8
+
+	// Prepare response data
+	eligibilityData := map[string]interface{}{
+		"approved_count":     approvedCount,
+		"total_count":        totalCount,
+		"pending_count":      pendingCount,
+		"eligibility_met":    eligibilityMet,
+		"required_count":     8,
+		"approved_bimbingan": bimbinganList,
+	}
+
+	respn.Status = "Success"
+	respn.Response = fmt.Sprintf("User memiliki %d bimbingan approved dari %d total. Eligibility: %t", approvedCount, totalCount, eligibilityMet)
+	respn.Data = eligibilityData
+	at.WriteJSON(respw, http.StatusOK, respn)
+}

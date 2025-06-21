@@ -377,6 +377,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// Store endpoints
 	case method == "POST" && path == "/api/store/buy-bimbingan-code":
 		controller.BuyBimbinganCode(w, r)
+		//cb yg baru pengajuan
+	case method == "GET" && path == "/api/bimbingan/eligibility":
+		controller.CheckSidangEligibility(w, r)
 	// Tugas Mingguan Kelas
 	// case method == "GET" && path == "/dataenroll/proyek":
 	// 	controller.GetProjectData(w, r)
