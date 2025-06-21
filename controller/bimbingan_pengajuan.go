@@ -98,6 +98,15 @@ func PostPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Check if user already has an existing pengajuan
+	existingPengajuan, err := atdb.GetAllDoc[[]model.BimbinganPengajuan](config.Mongoconn, "bimbingan_pengajuan", primitive.M{"phonenumber": payload.Id})
+	if err == nil && len(existingPengajuan) > 0 {
+		respn.Status = "Error : Pengajuan sudah ada"
+		respn.Response = "Anda sudah pernah mengajukan sidang sebelumnya. Tidak dapat mengajukan lagi."
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
 	// Validate if the user has at least 8 bimbingan sessions
 	bimbinganList, err := atdb.GetAllDoc[[]model.ActivityScore](config.Mongoconn, "bimbingan", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
@@ -221,11 +230,16 @@ func GetPengajuanSidang(respw http.ResponseWriter, req *http.Request) {
 	// Get user's submission
 	pengajuanList, err := atdb.GetAllDoc[[]model.BimbinganPengajuan](config.Mongoconn, "bimbingan_pengajuan", primitive.M{"phonenumber": payload.Id})
 	if err != nil {
-		respn.Status = "Error : Gagal mengambil data pengajuan"
-		respn.Response = err.Error()
-		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		// If no data found, return empty array instead of error
+		respn.Status = "Success"
+		respn.Response = "Tidak ada data pengajuan"
+		respn.Data = []model.BimbinganPengajuan{}
+		at.WriteJSON(respw, http.StatusOK, respn)
 		return
 	}
 
-	at.WriteJSON(respw, http.StatusOK, pengajuanList)
+	respn.Status = "Success"
+	respn.Response = "Data pengajuan berhasil diambil"
+	respn.Data = pengajuanList
+	at.WriteJSON(respw, http.StatusOK, respn)
 }
