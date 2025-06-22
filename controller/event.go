@@ -20,7 +20,7 @@ import (
 // sendNewEventNotificationToGroup sends notification to specific WhatsApp group when new event is created
 func sendNewEventNotificationToGroup() {
 	// Target group ID as specified
-	targetGroupID := "120363298977628161"
+	targetGroupID := "120363022595651310"
 
 	// Message content as specified
 	message := "Hai..Hai..Hai.. Buat kalian yang masih butuh bimbingan tambahan atau merasa bimbingannya masih kurang, jangan khawatir karena kami akan memberikan kalian event tambahan untuk menambah bimbingan kalian yang tertinggal! Yuk, cek (https://www.do.my.id/dashboard/#proyek/bimbinganevent) Jangan sampai ketinggalan, ya!"
