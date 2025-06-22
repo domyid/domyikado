@@ -1732,3 +1732,62 @@ func GetAllEventClaims(respw http.ResponseWriter, req *http.Request) {
 	respn.Data = enrichedClaims
 	at.WriteJSON(respw, http.StatusOK, respn)
 }
+
+// GetAllEventsForOwner untuk mendapatkan semua events untuk owner management
+func GetAllEventsForOwner(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Cek apakah user adalah owner
+	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	isOwner := false
+	for _, num := range allowedNumbers {
+		if payload.Id == num {
+			isOwner = true
+			break
+		}
+	}
+
+	if !isOwner {
+		respn.Status = "Error : Akses Ditolak"
+		respn.Response = "Hanya owner yang dapat melihat semua events"
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get all events (tidak filter berdasarkan isactive untuk management)
+	events, err := atdb.GetAllDoc[[]model.Event](config.Mongoconn, "events", primitive.M{})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data events"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Convert events to proper format for frontend
+	var eventsData []map[string]interface{}
+	for _, event := range events {
+		eventData := map[string]interface{}{
+			"_id":             event.ID,
+			"name":            event.Name,
+			"description":     event.Description,
+			"points":          event.Points,
+			"deadlineseconds": event.DeadlineSeconds,
+			"createdby":       event.CreatedBy,
+			"createdat":       event.CreatedAt,
+			"isactive":        event.IsActive,
+		}
+		eventsData = append(eventsData, eventData)
+	}
+
+	respn.Status = "Success"
+	respn.Response = "Data events berhasil diambil"
+	respn.Data = eventsData
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
