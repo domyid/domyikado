@@ -57,7 +57,8 @@ func CheckWeeklyBimbinganStatus(phoneNumber string) (hasApproved bool, hasUnappr
 	approvedBimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filterApproved)
 	if err == nil {
 		// Jika ada yang approved, cek apakah bonus event
-		if !strings.Contains(approvedBimbingan.Komentar, "Bonus Bimbingan dari Event Time Code") {
+		if !strings.Contains(approvedBimbingan.Komentar, "Bonus Bimbingan dari Event Time Code") &&
+			!strings.Contains(approvedBimbingan.Komentar, "Bonus Bimbingan dari Event Referral Code") {
 			hasApproved = true
 		}
 	}
@@ -338,14 +339,15 @@ func PostDosenAsesorLanjutan(respw http.ResponseWriter, req *http.Request) {
 	// Cek apakah ada bimbingan yang sudah disetujui minggu ini
 	existingBimbingan, err := atdb.GetOneDoc[model.ActivityScore](config.Mongoconn, "bimbingan", filter)
 	if err == nil {
-		// Cek apakah komentar mengandung "Bonus Bimbingan dari Event Time Code"
-		if !strings.Contains(existingBimbingan.Komentar, "Bonus Bimbingan dari Event Time Code") {
+		// Cek apakah komentar mengandung "Bonus Bimbingan dari Event Time Code" atau "Bonus Bimbingan dari Event Referral Code"
+		if !strings.Contains(existingBimbingan.Komentar, "Bonus Bimbingan dari Event Time Code") &&
+			!strings.Contains(existingBimbingan.Komentar, "Bonus Bimbingan dari Event Referral Code") {
 			respn.Status = "Info : Data bimbingan sudah di approve"
 			respn.Response = "Bimbingan sudah disetujui, tidak dapat mengajukan ulang untuk minggu ini."
 			at.WriteJSON(respw, http.StatusBadRequest, respn)
 			return
 		}
-		// Jika komentar mengandung "Bonus Bimbingan dari Event Time Code", lanjutkan proses
+		// Jika komentar mengandung "Bonus Bimbingan dari Event Time Code" atau "Bonus Bimbingan dari Event Referral Code", lanjutkan proses
 	}
 
 	score, _ := GetLastWeekActivityScoreData(payload.Id)
