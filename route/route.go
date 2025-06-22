@@ -377,6 +377,14 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		// Store endpoints
 	case method == "POST" && path == "/api/store/buy-bimbingan-code":
 		controller.BuyBimbinganCode(w, r)
+	// Delete endpoints for owner
+	case method == "DELETE" && at.URLParam(path, "/api/event/delete/:eventid"):
+		controller.DeleteEvent(w, r)
+	case method == "DELETE" && at.URLParam(path, "/api/event/claim/delete/:claimid"):
+		controller.DeleteEventClaim(w, r)
+	// Get all claims for owner
+	case method == "GET" && path == "/api/event/allclaims":
+		controller.GetAllEventClaims(w, r)
 		//cb yg baru pengajuan
 	case method == "GET" && path == "/api/bimbingan/eligibility":
 		controller.CheckSidangEligibility(w, r)

@@ -1423,3 +1423,312 @@ func generateBimbinganCode() string {
 	}
 	return "GLR-" + string(code)
 }
+
+// DeleteEvent untuk menghapus event (khusus owner)
+func DeleteEvent(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Cek apakah user adalah owner
+	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	isOwner := false
+	for _, num := range allowedNumbers {
+		if payload.Id == num {
+			isOwner = true
+			break
+		}
+	}
+
+	if !isOwner {
+		respn.Status = "Error : Akses Ditolak"
+		respn.Response = "Hanya owner yang dapat menghapus event"
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get event ID from URL parameter
+	eventId := at.GetParam(req)
+	if eventId == "" {
+		respn.Status = "Error : Event ID tidak ditemukan"
+		respn.Response = "Event ID harus disediakan"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Convert event ID to ObjectID
+	eventObjectID, err := primitive.ObjectIDFromHex(eventId)
+	if err != nil {
+		respn.Status = "Error : Event ID tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Check if event exists
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+		"_id": eventObjectID,
+	})
+	if err != nil {
+		respn.Status = "Error : Event tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Delete all related claims first
+	_, err = atdb.DeleteManyDocs(config.Mongoconn, "eventclaims", primitive.M{
+		"eventid": eventObjectID,
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal menghapus claims terkait"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Delete the event
+	_, err = atdb.DeleteOneDoc(config.Mongoconn, "events", primitive.M{
+		"_id": eventObjectID,
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal menghapus event"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "🗑️ **Event Dihapus!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Event Deleted",
+				Description: "An event has been deleted by owner",
+				Color:       16711680, // Red color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "🎯 Points", Value: fmt.Sprintf("%d", event.Points), Inline: true},
+					{Name: "👤 Deleted By", Value: payload.Id, Inline: true},
+					{Name: "🕒 Deleted At", Value: time.Now().Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🆔 Event ID", Value: eventId, Inline: true},
+					{Name: "📝 Description", Value: event.Description, Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
+
+	respn.Status = "Success"
+	respn.Response = fmt.Sprintf("Event '%s' berhasil dihapus beserta semua claims terkait", event.Name)
+	respn.Data = map[string]interface{}{
+		"deleted_event_id": eventId,
+		"event_name":       event.Name,
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// DeleteEventClaim untuk menghapus claim event (khusus owner)
+func DeleteEventClaim(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Cek apakah user adalah owner
+	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	isOwner := false
+	for _, num := range allowedNumbers {
+		if payload.Id == num {
+			isOwner = true
+			break
+		}
+	}
+
+	if !isOwner {
+		respn.Status = "Error : Akses Ditolak"
+		respn.Response = "Hanya owner yang dapat menghapus claim event"
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get claim ID from URL parameter
+	claimId := at.GetParam(req)
+	if claimId == "" {
+		respn.Status = "Error : Claim ID tidak ditemukan"
+		respn.Response = "Claim ID harus disediakan"
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Convert claim ID to ObjectID
+	claimObjectID, err := primitive.ObjectIDFromHex(claimId)
+	if err != nil {
+		respn.Status = "Error : Claim ID tidak valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusBadRequest, respn)
+		return
+	}
+
+	// Get claim data before deletion
+	claim, err := atdb.GetOneDoc[model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{
+		"_id": claimObjectID,
+	})
+	if err != nil {
+		respn.Status = "Error : Claim tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Get event data for notification
+	event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+		"_id": claim.EventID,
+	})
+	if err != nil {
+		respn.Status = "Error : Event tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
+	// Delete the claim
+	_, err = atdb.DeleteOneDoc(config.Mongoconn, "eventclaims", primitive.M{
+		"_id": claimObjectID,
+	})
+	if err != nil {
+		respn.Status = "Error : Gagal menghapus claim"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Set event back to active if it was claimed
+	if claim.Status == "claimed" || claim.Status == "submitted" {
+		_, err = atdb.UpdateOneDoc(config.Mongoconn, "events", primitive.M{"_id": claim.EventID}, primitive.M{
+			"isactive": true,
+		})
+		if err != nil {
+			fmt.Printf("Warning: Failed to reactivate event %s: %v\n", claim.EventID.Hex(), err)
+		}
+	}
+
+	// Send Discord notification
+	discordPayload := DiscordWebhookPayload{
+		Content: "🗑️ **Claim Event Dihapus!**",
+		Embeds: []DiscordEmbedevent{
+			{
+				Title:       "Event Claim Deleted",
+				Description: "An event claim has been deleted by owner",
+				Color:       16755200, // Orange color
+				Fields: []DiscordEmbedeventField{
+					{Name: "📋 Event Name", Value: event.Name, Inline: true},
+					{Name: "👤 User Phone", Value: claim.UserPhone, Inline: true},
+					{Name: "📊 Status", Value: claim.Status, Inline: true},
+					{Name: "👨‍💼 Deleted By", Value: payload.Id, Inline: true},
+					{Name: "🕒 Deleted At", Value: time.Now().Format("2006-01-02 15:04:05"), Inline: true},
+					{Name: "🔄 Event Reactivated", Value: fmt.Sprintf("%t", claim.Status == "claimed" || claim.Status == "submitted"), Inline: true},
+					{Name: "🆔 Claim ID", Value: claimId, Inline: false},
+				},
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+	go sendDiscordNotification(discordPayload)
+
+	respn.Status = "Success"
+	respn.Response = fmt.Sprintf("Claim untuk event '%s' oleh user %s berhasil dihapus", event.Name, claim.UserPhone)
+	respn.Data = map[string]interface{}{
+		"deleted_claim_id":  claimId,
+		"event_name":        event.Name,
+		"user_phone":        claim.UserPhone,
+		"event_reactivated": claim.Status == "claimed" || claim.Status == "submitted",
+	}
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
+
+// GetAllEventClaims untuk mendapatkan semua claims (khusus owner)
+func GetAllEventClaims(respw http.ResponseWriter, req *http.Request) {
+	var respn model.Response
+	payload, err := watoken.Decode(config.PublicKeyWhatsAuth, at.GetLoginFromHeader(req))
+	if err != nil {
+		respn.Status = "Error : Token Tidak Valid"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Cek apakah user adalah owner
+	allowedNumbers := []string{"6285312924192", "6282117252716"}
+	isOwner := false
+	for _, num := range allowedNumbers {
+		if payload.Id == num {
+			isOwner = true
+			break
+		}
+	}
+
+	if !isOwner {
+		respn.Status = "Error : Akses Ditolak"
+		respn.Response = "Hanya owner yang dapat melihat semua claims"
+		at.WriteJSON(respw, http.StatusForbidden, respn)
+		return
+	}
+
+	// Get all claims
+	claims, err := atdb.GetAllDoc[[]model.EventClaim](config.Mongoconn, "eventclaims", primitive.M{})
+	if err != nil {
+		respn.Status = "Error : Gagal mengambil data claims"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusInternalServerError, respn)
+		return
+	}
+
+	// Enrich claims with event data
+	var enrichedClaims []map[string]interface{}
+	for _, claim := range claims {
+		// Get event data
+		event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+			"_id": claim.EventID,
+		})
+
+		claimData := map[string]interface{}{
+			"_id":         claim.ID,
+			"eventid":     claim.EventID,
+			"userphone":   claim.UserPhone,
+			"claimedat":   claim.ClaimedAt,
+			"deadline":    claim.Deadline,
+			"status":      claim.Status,
+			"tasklink":    claim.TaskLink,
+			"submittedat": claim.SubmittedAt,
+			"approvedat":  claim.ApprovedAt,
+			"approvedby":  claim.ApprovedBy,
+			"isapproved":  claim.IsApproved,
+		}
+
+		if err == nil {
+			claimData["eventname"] = event.Name
+			claimData["eventpoints"] = event.Points
+		} else {
+			claimData["eventname"] = "Unknown Event"
+			claimData["eventpoints"] = 0
+		}
+
+		enrichedClaims = append(enrichedClaims, claimData)
+	}
+
+	respn.Status = "Success"
+	respn.Response = "Data claims berhasil diambil"
+	respn.Data = enrichedClaims
+	at.WriteJSON(respw, http.StatusOK, respn)
+}
