@@ -295,6 +295,15 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Get user data first
+	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
+	if err != nil {
+		respn.Status = "Error : Data user tidak ditemukan"
+		respn.Response = err.Error()
+		at.WriteJSON(respw, http.StatusNotFound, respn)
+		return
+	}
+
 	// Gunakan deadline seconds dari event (yang sudah ditentukan owner)
 	deadlineSeconds := event.DeadlineSeconds
 
@@ -305,6 +314,8 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 	eventClaim := model.EventClaim{
 		EventID:    eventObjectID,
 		UserPhone:  payload.Id,
+		UserName:   docuser.Name,
+		UserNPM:    docuser.NPM,
 		ClaimedAt:  now,
 		Deadline:   deadline,
 		Status:     "claimed",
@@ -320,14 +331,7 @@ func ClaimEvent(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get user data for Discord notification
-	docuser, err := atdb.GetOneDoc[model.Userdomyikado](config.Mongoconn, "user", primitive.M{"phonenumber": payload.Id})
-	if err != nil {
-		// If user not found, use phone number only
-		docuser.Name = "Unknown User"
-		docuser.NPM = "Unknown"
-		docuser.PhoneNumber = payload.Id
-	}
+	// User data already loaded above
 
 	// Send Discord notification
 	discordPayload := DiscordWebhookPayload{
@@ -414,6 +418,8 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 			ID:          claim.ID,
 			EventID:     claim.EventID,
 			UserPhone:   claim.UserPhone,
+			UserName:    claim.UserName,
+			UserNPM:     claim.UserNPM,
 			ClaimedAt:   claim.ClaimedAt,
 			Deadline:    claim.Deadline,
 			Status:      "expired",
@@ -442,6 +448,8 @@ func SubmitEventTask(respw http.ResponseWriter, req *http.Request) {
 		ID:          claim.ID,
 		EventID:     claim.EventID,
 		UserPhone:   claim.UserPhone,
+		UserName:    claim.UserName,
+		UserNPM:     claim.UserNPM,
 		ClaimedAt:   claim.ClaimedAt,
 		Deadline:    claim.Deadline,
 		Status:      "submitted",
@@ -626,6 +634,8 @@ func ApproveEventClaim(respw http.ResponseWriter, req *http.Request) {
 		ID:          claim.ID,
 		EventID:     claim.EventID,
 		UserPhone:   claim.UserPhone,
+		UserName:    claim.UserName,
+		UserNPM:     claim.UserNPM,
 		ClaimedAt:   claim.ClaimedAt,
 		Deadline:    claim.Deadline,
 		Status:      "approved",
@@ -844,6 +854,8 @@ func CheckExpiredClaims(respw http.ResponseWriter, req *http.Request) {
 			ID:          claim.ID,
 			EventID:     claim.EventID,
 			UserPhone:   claim.UserPhone,
+			UserName:    claim.UserName,
+			UserNPM:     claim.UserNPM,
 			ClaimedAt:   claim.ClaimedAt,
 			Deadline:    claim.Deadline,
 			Status:      "expired",
@@ -1694,37 +1706,48 @@ func GetAllEventClaims(respw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Debug log
+	fmt.Printf("Found %d claims in database\n", len(claims))
+
 	// Enrich claims with event data
 	var enrichedClaims []map[string]interface{}
-	for _, claim := range claims {
-		// Get event data
-		event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
-			"_id": claim.EventID,
-		})
 
-		claimData := map[string]interface{}{
-			"_id":         claim.ID,
-			"eventid":     claim.EventID,
-			"userphone":   claim.UserPhone,
-			"claimedat":   claim.ClaimedAt,
-			"deadline":    claim.Deadline,
-			"status":      claim.Status,
-			"tasklink":    claim.TaskLink,
-			"submittedat": claim.SubmittedAt,
-			"approvedat":  claim.ApprovedAt,
-			"approvedby":  claim.ApprovedBy,
-			"isapproved":  claim.IsApproved,
+	// If no claims found, return empty array instead of null
+	if len(claims) == 0 {
+		enrichedClaims = []map[string]interface{}{}
+	} else {
+		for _, claim := range claims {
+			// Get event data
+			event, err := atdb.GetOneDoc[model.Event](config.Mongoconn, "events", primitive.M{
+				"_id": claim.EventID,
+			})
+
+			claimData := map[string]interface{}{
+				"_id":         claim.ID,
+				"eventid":     claim.EventID,
+				"userphone":   claim.UserPhone,
+				"username":    claim.UserName,
+				"usernpm":     claim.UserNPM,
+				"claimedat":   claim.ClaimedAt,
+				"deadline":    claim.Deadline,
+				"status":      claim.Status,
+				"tasklink":    claim.TaskLink,
+				"submittedat": claim.SubmittedAt,
+				"approvedat":  claim.ApprovedAt,
+				"approvedby":  claim.ApprovedBy,
+				"isapproved":  claim.IsApproved,
+			}
+
+			if err == nil {
+				claimData["eventname"] = event.Name
+				claimData["eventpoints"] = event.Points
+			} else {
+				claimData["eventname"] = "Unknown Event"
+				claimData["eventpoints"] = 0
+			}
+
+			enrichedClaims = append(enrichedClaims, claimData)
 		}
-
-		if err == nil {
-			claimData["eventname"] = event.Name
-			claimData["eventpoints"] = event.Points
-		} else {
-			claimData["eventname"] = "Unknown Event"
-			claimData["eventpoints"] = 0
-		}
-
-		enrichedClaims = append(enrichedClaims, claimData)
 	}
 
 	respn.Status = "Success"

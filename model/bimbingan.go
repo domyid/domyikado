@@ -113,6 +113,8 @@ type EventClaim struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
 	EventID     primitive.ObjectID `bson:"eventid" json:"eventid"`
 	UserPhone   string             `bson:"userphone" json:"userphone"`
+	UserName    string             `bson:"username,omitempty" json:"username,omitempty"`
+	UserNPM     string             `bson:"usernpm,omitempty" json:"usernpm,omitempty"`
 	ClaimedAt   time.Time          `bson:"claimedat" json:"claimedat"`
 	Deadline    time.Time          `bson:"deadline" json:"deadline"`
 	Status      string             `bson:"status" json:"status"` // "claimed", "submitted", "approved", "expired"
