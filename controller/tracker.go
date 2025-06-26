@@ -237,12 +237,6 @@ func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hostnames := GetHostnameFromProject(authorization.Id)
-	if err != nil {
-		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
-			Response: err.Error(),
-		})
-		return
-	}
 
 	datatracker, err := report.GetStatistikTracker(config.Mongoconn, hostnames, startDate, endDate)
 	if err != nil {
