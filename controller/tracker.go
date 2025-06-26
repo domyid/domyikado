@@ -111,7 +111,7 @@ func GenerateTrackerToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userinfo.Tanggal_Ambil = waktusekarang
-	token, err := watoken.EncodeWithStructDuration("12345", &userinfo, config.PrivateKey, duration)
+	token, err := watoken.EncodeWithStructDuration("", &userinfo, config.PrivateKey, duration)
 	if err != nil {
 		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
 			Response: "Error: " + err.Error(),
@@ -251,17 +251,106 @@ func AmbilDataStatistik(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
-	hostnames := []string{"asd", "dsa"}
-	datatracker, _ := report.GetLastWeekDataTracker(config.Mongoconn, hostnames)
+func GenerateTrackerTokenTesting(w http.ResponseWriter, r *http.Request) {
+	var userinfo model.UserInfo
+	waktusekarang := time.Now()
+	jam00 := waktusekarang.Truncate(24 * time.Hour)
+	jam24 := jam00.Add(24*time.Hour - time.Second)
+
+	tomorrowMidnight := time.Date(
+		waktusekarang.Year(), waktusekarang.Month(), waktusekarang.Day()+1,
+		0, 0, 0, 0, waktusekarang.Location(),
+	)
+	duration := time.Until(tomorrowMidnight)
+
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Error parsing application/json: " + err.Error(),
+		})
+		return
+	}
+
+	if !FactCheck1(w, r, userinfo) {
+		return
+	}
+
+	filter := primitive.M{
+		"hostname":          userinfo.Hostname,
+		"browser":           userinfo.Browser,
+		"browser_language":  userinfo.Browser_Language,
+		"screen_resolution": userinfo.Screen_Resolution,
+		"timezone":          userinfo.Timezone,
+		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
+		"isp.ip":            userinfo.ISP.IP,
+	}
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
+	if err == nil && exist.Browser != "" {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Hari ini sudah absen",
+		})
+		return
+	}
+	userinfo.Tanggal_Ambil = waktusekarang
+	token, err := watoken.EncodeWithStructDuration("", &userinfo, config.PrivateKey, duration)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: "Error: " + err.Error(),
+		})
+		return
+	}
 	at.WriteJSON(w, http.StatusOK, model.Response{
-		Data: datatracker,
+		Response: token,
 	})
 }
 
-func TestAmbilValueRemoteAddr(w http.ResponseWriter, r *http.Request) {
+func SimpanInformasiUserTesting(w http.ResponseWriter, r *http.Request) {
+	var userinfo model.UserInfo
+	waktusekarang := time.Now()
+	jam00 := waktusekarang.Truncate(24 * time.Hour)
+	jam24 := jam00.Add(24*time.Hour - time.Second)
+
+	err := json.NewDecoder(r.Body).Decode(&userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusBadRequest, model.Response{
+			Response: "Error parsing application/json: " + err.Error(),
+		})
+		return
+	}
+
+	if !FactCheck1(w, r, userinfo) {
+		return
+	}
+
+	if !FactCheck2(w, r, userinfo) {
+		return
+	}
+	filter := primitive.M{
+		"hostname":          userinfo.Hostname,
+		"browser":           userinfo.Browser,
+		"browser_language":  userinfo.Browser_Language,
+		"screen_resolution": userinfo.Screen_Resolution,
+		"timezone":          userinfo.Timezone,
+		"tanggal_ambil":     primitive.M{"$gte": jam00, "$lte": jam24},
+		"isp.ip":            userinfo.ISP.IP,
+	}
+	exist, err := atdb.GetOneDoc[model.UserInfo](config.Mongoconn, "trackeriptest", filter)
+	if err == nil && exist.Browser != "" {
+		at.WriteJSON(w, http.StatusConflict, model.Response{
+			Response: "Hari ini sudah absen",
+		})
+		return
+	}
+	userinfo.Tanggal_Ambil = waktusekarang
+	_, err = atdb.InsertOneDoc(config.Mongoconn, "trackeriptest", userinfo)
+	if err != nil {
+		at.WriteJSON(w, http.StatusInternalServerError, model.Response{
+			Response: "Gagal Insert Database: " + err.Error(),
+		})
+		return
+	}
 	at.WriteJSON(w, http.StatusOK, model.Response{
-		Response: r.RemoteAddr,
+		Response: "Berhasil simpan data",
 	})
 }
 
