@@ -30,7 +30,7 @@ func URL(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if method == http.MethodOptions && (path == "/api/tracker/testing" || path == "/api/tracker/token") {
+	if method == http.MethodOptions && (path == "/api/tracker/testing" || path == "/api/tracker/token/testing" || path == "/api/tracker/token") {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Tracker")
@@ -248,6 +248,9 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	case method == "POST" && path == "/api/tracker/token":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.GenerateTrackerToken(w, r)
+	case method == "POST" && path == "/api/tracker/token/testing":
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		controller.GenerateTrackerTokenTesting(w, r)
 	case method == "POST" && path == "/api/tracker/testing":
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		controller.SimpanInformasiUserTesting(w, r)
