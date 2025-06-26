@@ -19,17 +19,68 @@ func FactCheck1(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 	origin := r.Header.Get("Origin")
 	referer := r.Header.Get("Referer")
 	userAgent := r.UserAgent()
+	botUserAgents := []string{
+		"curl",
+		"PostmanRuntime",
+		"bruno-runtime",
+		"Googlebot",
+		"bingbot",
+		"Slurp",
+		"DuckDuckBot",
+		"Baiduspider",
+		"YandexBot",
+		"Sogou",
+		"Exabot",
+		"facebot",
+		"facebookexternalhit",
+		"ia_archiver",
+		"Twitterbot",
+		"OAI-SearchBot",
+		"ChatGPT-User",
+		"GPTBot",
+		"anthropic-ai",
+		"ClaudeBot",
+		"claude-web",
+		"PerplexityBot",
+		"Perplexity-User",
+		"Google-Extended",
+		"BingBot",
+		"Amazonbot",
+		"Applebot",
+		"Applebot-Extended",
+		"FacebookBot",
+		"FacebookBot",
+		"meta-externalagent",
+		"LinkedInBot",
+		"Bytespider",
+		"DuckAssistBot",
+		"cohere-ai",
+		"AI2Bot",
+		"CCBot",
+		"Diffbot",
+		"omgili",
+		"TimpiBot",
+		"YouBot",
+	}
 	if origin == "" && referer == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
 		return false
 	}
-	if userAgent == "" || strings.Contains(userAgent, "curl") || strings.Contains(userAgent, "PostmanRuntime") || strings.Contains(userAgent, "bruno-runtime") {
+	if userAgent == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
 			Response: "Akses tidak diizinkan",
 		})
 		return false
+	}
+	for _, botUA := range botUserAgents {
+		if strings.Contains(userAgent, botUA) {
+			at.WriteJSON(w, http.StatusForbidden, model.Response{
+				Response: "Akses tidak diizinkan",
+			})
+			return false
+		}
 	}
 	if userinfo.Hostname == "" || userinfo.Url == "" || userinfo.Browser == "" || userinfo.Browser_Language == "" || userinfo.Screen_Resolution == "" || userinfo.Timezone == "" || userinfo.ISP.IP == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
