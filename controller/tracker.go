@@ -90,6 +90,17 @@ func FactCheck1(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 		})
 		return false
 	}
+
+	var allowedASNs = map[string]struct{}{
+		"AS16509": {},
+	}
+
+	if _, ok := allowedASNs[userinfo.ISP.Asn]; ok {
+		at.WriteJSON(w, http.StatusForbidden, model.Response{
+			Response: "Akses tidak diizinkan",
+		})
+		return false
+	}
 	return true
 }
 
