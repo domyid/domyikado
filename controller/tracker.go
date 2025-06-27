@@ -61,6 +61,8 @@ func FactCheck1(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 		"omgili",
 		"TimpiBot",
 		"YouBot",
+		"GTmetrix",
+		"HeadlessChrome",
 	}
 	if origin == "" && referer == "" {
 		at.WriteJSON(w, http.StatusForbidden, model.Response{
