@@ -92,7 +92,27 @@ func FactCheck1(w http.ResponseWriter, r *http.Request, userinfo model.UserInfo)
 	}
 
 	var allowedASNs = map[string]struct{}{
-		"AS16509": {},
+		"AS16509":  {},
+		"AS14618":  {},
+		"AS36352":  {},
+		"AS20473":  {},
+		"AS11404":  {},
+		"AS40676":  {},
+		"AS13335":  {},
+		"AS174":    {},
+		"AS32934":  {},
+		"AS15169":  {},
+		"AS396982": {},
+		"AS16591":  {},
+		"AS45566":  {},
+		"AS31898":  {},
+		"AS16276":  {},
+		"AS26548":  {},
+		"AS6079":   {},
+		"AS52048":  {},
+		"AS8075":   {},
+		"AS36483":  {},
+		"AS1680":   {},
 	}
 
 	if _, ok := allowedASNs[userinfo.ISP.Asn]; ok {
