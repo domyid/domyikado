@@ -2646,18 +2646,29 @@ func checkRavencoinAddressAPI() (bool, string, float64, error) {
 	url := "https://blockbook.ravencoin.org/api/v2/address/" + RavencoinWalletAddress
 
 	// Make the request
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second} // Increased timeout
 	resp, err := client.Get(url)
 	if err != nil {
+		log.Printf("Error fetching Ravencoin address data: %v", err)
 		return false, "", 0, err
 	}
 	defer resp.Body.Close()
 
+	// Check HTTP status
+	if resp.StatusCode != 200 {
+		log.Printf("Ravencoin API returned status %d", resp.StatusCode)
+		return false, "", 0, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
 	// Parse response
 	var addressResp model.RavencoinAddressResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addressResp); err != nil {
+		log.Printf("Error parsing Ravencoin address response: %v", err)
 		return false, "", 0, err
 	}
+
+	log.Printf("Ravencoin API response: Txs=%d, UnconfirmedTxs=%d, Balance=%s",
+		addressResp.Txs, addressResp.UnconfirmedTxs, addressResp.Balance)
 
 	// Check current transaction count against last saved transaction count
 	var lastTxData model.RavencoinLastTransactions
@@ -2665,6 +2676,7 @@ func checkRavencoinAddressAPI() (bool, string, float64, error) {
 
 	// If no record found, initialize with current txs count
 	if err == mongo.ErrNoDocuments {
+		log.Printf("No previous Ravencoin transaction record found, initializing with count: %d", addressResp.Txs)
 		_, err = config.Mongoconn.Collection("crowdfundinglastraventxs").InsertOne(
 			context.Background(),
 			bson.M{
@@ -2677,20 +2689,34 @@ func checkRavencoinAddressAPI() (bool, string, float64, error) {
 		}
 		return false, "", 0, nil
 	} else if err != nil {
+		log.Printf("Error fetching last Ravencoin transaction data: %v", err)
 		return false, "", 0, err
 	}
 
-	// No new transactions
-	if addressResp.Txs <= lastTxData.LastTxCount {
-		return false, "", 0, nil
-	}
+	log.Printf("Previous Ravencoin tx count: %d, Current: %d", lastTxData.LastTxCount, addressResp.Txs)
 
-	// New transaction(s) found! Get the latest txid (first in the list)
-	if len(addressResp.Txids) > 0 {
-		latestTxid := addressResp.Txids[0]
+	// Check if transaction count has increased OR if there are unconfirmed transactions
+	if addressResp.Txs > lastTxData.LastTxCount || addressResp.UnconfirmedTxs > 0 {
+		// New transaction detected, get the latest transaction ID
+		if len(addressResp.Txids) > 0 {
+			latestTxid := addressResp.Txids[0] // First txid is the latest
+			log.Printf("New Ravencoin transaction detected: %s", latestTxid)
 
-		// We'll get the actual amount in Step 3, for now just indicate we found a transaction
-		return true, latestTxid, 0, nil
+			// Update the transaction count immediately to prevent duplicate detection
+			_, updateErr := config.Mongoconn.Collection("crowdfundinglastraventxs").UpdateOne(
+				context.Background(),
+				bson.M{},
+				bson.M{"$set": bson.M{
+					"lastTxCount": addressResp.Txs,
+					"lastUpdated": time.Now(),
+				}},
+			)
+			if updateErr != nil {
+				log.Printf("Warning: Error updating Ravencoin transaction count: %v", updateErr)
+			}
+
+			return true, latestTxid, 0, nil // Amount will be determined in Step 3
+		}
 	}
 
 	return false, "", 0, nil
@@ -2750,37 +2776,55 @@ func checkRavencoinTxDetails(txid string) (bool, float64, error) {
 	url := "https://blockbook.ravencoin.org/api/tx/" + txid
 
 	// Make the request
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second} // Increased timeout
 	resp, err := client.Get(url)
 	if err != nil {
+		log.Printf("Error fetching Ravencoin transaction details for %s: %v", txid, err)
 		return false, 0, err
 	}
 	defer resp.Body.Close()
 
+	// Check HTTP status
+	if resp.StatusCode != 200 {
+		log.Printf("Ravencoin transaction API returned status %d for txid %s", resp.StatusCode, txid)
+		return false, 0, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
 	// Parse response
 	var txResp model.RavencoinTransactionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
+		log.Printf("Error parsing Ravencoin transaction response for %s: %v", txid, err)
 		return false, 0, err
 	}
 
+	log.Printf("Checking transaction %s with %d outputs", txid, len(txResp.Vout))
+
 	// Find the output that matches our wallet address
 	var amount float64 = 0
-	for _, vout := range txResp.Vout {
+	for i, vout := range txResp.Vout {
+		log.Printf("Output %d: Value=%s, Addresses=%v", i, vout.Value, vout.ScriptPubKey.Addresses)
+
 		// Check if this output is to our wallet address
 		for _, addr := range vout.ScriptPubKey.Addresses {
 			if addr == RavencoinWalletAddress {
 				// Convert from string to float
 				outputAmount, err := strconv.ParseFloat(vout.Value, 64)
 				if err != nil {
+					log.Printf("Error parsing amount %s: %v", vout.Value, err)
 					continue
 				}
 				amount = outputAmount
+				log.Printf("Found payment to our address: %f RVN", amount)
 				break
 			}
 		}
 		if amount > 0 {
 			break
 		}
+	}
+
+	if amount == 0 {
+		log.Printf("No payment found to our address %s in transaction %s", RavencoinWalletAddress, txid)
 	}
 
 	// Transaction is valid if we found our address with some value
