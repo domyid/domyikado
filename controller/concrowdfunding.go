@@ -2892,21 +2892,29 @@ func checkRavencoinTxHistory(txid string) (bool, error) {
 	return false, nil
 }
 
-// Step 3: Verify transaction details and get the actual amount
-func checkRavencoinTxDetails(txid string) (bool, float64, error) {
+// UPDATED: Step 1 - Check if transaction exists and is valid (NEW SIMPLE APPROACH)
+func checkRavencoinTxExists(txid string) (bool, float64, error) {
+	if txid == "" {
+		return false, 0, errors.New("transaction ID is empty")
+	}
+
 	// API URL for getting transaction details
 	url := "https://blockbook.ravencoin.org/api/tx/" + txid
 
 	// Make the request
-	client := &http.Client{Timeout: 15 * time.Second} // Increased timeout
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		log.Printf("Error fetching Ravencoin transaction details for %s: %v", txid, err)
+		log.Printf("Error fetching Ravencoin transaction %s: %v", txid, err)
 		return false, 0, err
 	}
 	defer resp.Body.Close()
 
 	// Check HTTP status
+	if resp.StatusCode == 404 {
+		log.Printf("Ravencoin transaction %s not found (404)", txid)
+		return false, 0, nil // Transaction doesn't exist yet
+	}
 	if resp.StatusCode != 200 {
 		log.Printf("Ravencoin transaction API returned status %d for txid %s", resp.StatusCode, txid)
 		return false, 0, fmt.Errorf("API returned status %d", resp.StatusCode)
@@ -2919,9 +2927,9 @@ func checkRavencoinTxDetails(txid string) (bool, float64, error) {
 		return false, 0, err
 	}
 
-	log.Printf("Checking transaction %s with %d outputs", txid, len(txResp.Vout))
+	log.Printf("Transaction %s exists, checking outputs...", txid)
 
-	// Find the output that matches our wallet address
+	// Find the output that matches our wallet address and get amount
 	var amount float64 = 0
 	for i, vout := range txResp.Vout {
 		log.Printf("Output %d: Value=%s, Addresses=%v", i, vout.Value, vout.ScriptPubKey.Addresses)
@@ -2947,10 +2955,69 @@ func checkRavencoinTxDetails(txid string) (bool, float64, error) {
 
 	if amount == 0 {
 		log.Printf("No payment found to our address %s in transaction %s", RavencoinWalletAddress, txid)
+		return false, 0, nil
 	}
 
-	// Transaction is valid if we found our address with some value
-	return amount > 0, amount, nil
+	// Transaction exists and has payment to our address
+	return true, amount, nil
+}
+
+// UPDATED: Step 2 - Check if transaction is confirmed (NEW SIMPLE APPROACH)
+func checkRavencoinTxConfirmed(txid string) (bool, int, error) {
+	if txid == "" {
+		return false, 0, errors.New("transaction ID is empty")
+	}
+
+	// API URL for getting transaction details
+	url := "https://blockbook.ravencoin.org/api/tx/" + txid
+
+	// Make the request
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("Error fetching Ravencoin transaction %s: %v", txid, err)
+		return false, 0, err
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status
+	if resp.StatusCode == 404 {
+		log.Printf("Ravencoin transaction %s not found (404)", txid)
+		return false, 0, nil
+	}
+	if resp.StatusCode != 200 {
+		log.Printf("Ravencoin transaction API returned status %d for txid %s", resp.StatusCode, txid)
+		return false, 0, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	// Parse response
+	var txResp model.RavencoinTransactionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
+		log.Printf("Error parsing Ravencoin transaction response for %s: %v", txid, err)
+		return false, 0, err
+	}
+
+	log.Printf("Transaction %s: Confirmations=%d, BlockHash=%s", txid, txResp.Confirmations, txResp.BlockHash)
+
+	// Check confirmation status
+	// If confirmations >= 1 and blockhash exists, transaction is confirmed
+	isConfirmed := txResp.Confirmations >= 1 && txResp.BlockHash != ""
+
+	// Handle the case where confirmations might be a very large number (indicating unconfirmed)
+	// In Ravencoin, unconfirmed transactions sometimes show as 4294967294 (which is -2 in int32)
+	if txResp.Confirmations > 1000000 {
+		log.Printf("Transaction %s appears to be unconfirmed (confirmations=%d)", txid, txResp.Confirmations)
+		isConfirmed = false
+		txResp.Confirmations = 0
+	}
+
+	return isConfirmed, txResp.Confirmations, nil
+}
+
+// LEGACY: Keep original function for backward compatibility
+func checkRavencoinTxDetails(txid string) (bool, float64, error) {
+	// Use new function for better accuracy
+	return checkRavencoinTxExists(txid)
 }
 
 // CheckRavencoinStep2Handler checks transaction history without the 7-minute delay
@@ -2988,8 +3055,8 @@ func CheckRavencoinStep2Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Check if transaction count has changed (no more timer)
-	historyStatus, err := checkRavencoinTxHistory(txid)
+	// Step 2: Check if transaction is confirmed (NEW SIMPLE APPROACH)
+	historyStatus, _, err := checkRavencoinTxConfirmed(txid)
 	if err != nil {
 		at.WriteJSON(w, http.StatusOK, model.CrowdfundingPaymentResponse{
 			Success:       true,
