@@ -189,6 +189,12 @@ func URL(w http.ResponseWriter, r *http.Request) {
 	// Ravencoin Payment Routes
 	case method == "POST" && path == "/api/crowdfunding/ravencoin/createOrder":
 		controller.CreateRavencoinOrder(w, r)
+	// NEW IMPROVED RAVENCOIN ROUTES
+	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep1/:orderId"):
+		controller.CheckRavencoinStep1(w, r)
+	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep2New/:orderId"):
+		controller.CheckRavencoinStep2New(w, r)
+	// ORIGINAL RAVENCOIN ROUTES (for backward compatibility)
 	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep2/:orderId"):
 		controller.CheckRavencoinStep2Handler(w, r)
 	case method == "GET" && at.URLParam(path, "/api/crowdfunding/ravencoin/checkStep3/:orderId"):

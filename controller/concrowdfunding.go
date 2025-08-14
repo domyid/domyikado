@@ -2722,6 +2722,128 @@ func checkRavencoinAddressAPI() (bool, string, float64, error) {
 	return false, "", 0, nil
 }
 
+// NEW IMPROVED SYSTEM: Step 1 - Check if transaction ID is valid and accessible
+func checkRavencoinTransactionExists(txid string) (bool, float64, error) {
+	if txid == "" {
+		return false, 0, errors.New("transaction ID is empty")
+	}
+
+	// API URL for getting transaction details
+	url := "https://blockbook.ravencoin.org/api/tx/" + txid
+
+	// Make the request
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("Error fetching Ravencoin transaction %s: %v", txid, err)
+		return false, 0, err
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status
+	if resp.StatusCode == 404 {
+		log.Printf("Ravencoin transaction %s not found (404)", txid)
+		return false, 0, nil // Transaction doesn't exist yet
+	}
+	if resp.StatusCode != 200 {
+		log.Printf("Ravencoin transaction API returned status %d for txid %s", resp.StatusCode, txid)
+		return false, 0, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	// Parse response
+	var txResp model.RavencoinTransactionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
+		log.Printf("Error parsing Ravencoin transaction response for %s: %v", txid, err)
+		return false, 0, err
+	}
+
+	log.Printf("Transaction %s exists, checking outputs...", txid)
+
+	// Find the output that matches our wallet address and get amount
+	var amount float64 = 0
+	for i, vout := range txResp.Vout {
+		log.Printf("Output %d: Value=%s, Addresses=%v", i, vout.Value, vout.ScriptPubKey.Addresses)
+
+		// Check if this output is to our wallet address
+		for _, addr := range vout.ScriptPubKey.Addresses {
+			if addr == RavencoinWalletAddress {
+				// Convert from string to float
+				outputAmount, err := strconv.ParseFloat(vout.Value, 64)
+				if err != nil {
+					log.Printf("Error parsing amount %s: %v", vout.Value, err)
+					continue
+				}
+				amount = outputAmount
+				log.Printf("Found payment to our address: %f RVN", amount)
+				break
+			}
+		}
+		if amount > 0 {
+			break
+		}
+	}
+
+	if amount == 0 {
+		log.Printf("No payment found to our address %s in transaction %s", RavencoinWalletAddress, txid)
+		return false, 0, nil
+	}
+
+	// Transaction exists and has payment to our address
+	return true, amount, nil
+}
+
+// NEW IMPROVED SYSTEM: Step 2 - Check transaction confirmation status
+func checkRavencoinTransactionConfirmation(txid string) (bool, int, error) {
+	if txid == "" {
+		return false, 0, errors.New("transaction ID is empty")
+	}
+
+	// API URL for getting transaction details
+	url := "https://blockbook.ravencoin.org/api/tx/" + txid
+
+	// Make the request
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("Error fetching Ravencoin transaction %s: %v", txid, err)
+		return false, 0, err
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status
+	if resp.StatusCode == 404 {
+		log.Printf("Ravencoin transaction %s not found (404)", txid)
+		return false, 0, nil
+	}
+	if resp.StatusCode != 200 {
+		log.Printf("Ravencoin transaction API returned status %d for txid %s", resp.StatusCode, txid)
+		return false, 0, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	// Parse response
+	var txResp model.RavencoinTransactionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
+		log.Printf("Error parsing Ravencoin transaction response for %s: %v", txid, err)
+		return false, 0, err
+	}
+
+	log.Printf("Transaction %s: Confirmations=%d, BlockHash=%s", txid, txResp.Confirmations, txResp.BlockHash)
+
+	// Check confirmation status
+	// If confirmations >= 1 and blockhash exists, transaction is confirmed
+	isConfirmed := txResp.Confirmations >= 1 && txResp.BlockHash != ""
+
+	// Handle the case where confirmations might be a very large number (indicating unconfirmed)
+	// In Ravencoin, unconfirmed transactions sometimes show as 4294967294 (which is -2 in int32)
+	if txResp.Confirmations > 1000000 {
+		log.Printf("Transaction %s appears to be unconfirmed (confirmations=%d)", txid, txResp.Confirmations)
+		isConfirmed = false
+		txResp.Confirmations = 0
+	}
+
+	return isConfirmed, txResp.Confirmations, nil
+}
+
 // Step 2: Check if transaction count has changed in the blockchain
 func checkRavencoinTxHistory(txid string) (bool, error) {
 	// API URL for checking Ravencoin address
@@ -4230,4 +4352,174 @@ func GetLastWeekDataQRISScoreKelas(db *mongo.Database, phoneNumber string, usedI
 	activityScore.QRIS = qrisScore
 
 	return resultid, activityScore, nil
+}
+
+// NEW IMPROVED HANDLERS FOR RAVENCOIN PAYMENT SYSTEM
+
+// Step 1: Check if transaction exists and is valid
+func CheckRavencoinStep1(w http.ResponseWriter, r *http.Request) {
+	orderID := at.GetParam(r)
+	txid := r.URL.Query().Get("txid")
+
+	if orderID == "" || txid == "" {
+		at.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"status":  "error",
+			"message": "Order ID and transaction ID are required",
+		})
+		return
+	}
+
+	log.Printf("Checking Ravencoin Step 1 for order %s with txid %s", orderID, txid)
+
+	// Check if transaction exists and get amount
+	exists, amount, err := checkRavencoinTransactionExists(txid)
+	if err != nil {
+		log.Printf("Error checking transaction existence: %v", err)
+		at.WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"status":  "error",
+			"message": "Failed to check transaction",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if !exists {
+		log.Printf("Transaction %s does not exist or has no payment to our address", txid)
+		at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"status":        "pending",
+			"message":       "Transaction not found or no payment to our address",
+			"step1Complete": false,
+		})
+		return
+	}
+
+	// Transaction exists and has payment to our address
+	log.Printf("Transaction %s exists with amount %.8f RVN", txid, amount)
+
+	// Update order with transaction details
+	filter := bson.M{"orderId": orderID}
+	update := bson.M{
+		"$set": bson.M{
+			"txid":          txid,
+			"amount":        amount,
+			"step1Complete": true,
+			"lastUpdated":   time.Now(),
+		},
+	}
+
+	_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		log.Printf("Error updating order: %v", err)
+		at.WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"status":  "error",
+			"message": "Failed to update order",
+		})
+		return
+	}
+
+	// Send Discord notification
+	sendCrowdfundingDiscordEmbed(
+		"🔍 Ravencoin Step 1 Complete",
+		"Transaction found and validated successfully.",
+		ColorBlue,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Transaction ID", Value: txid, Inline: true},
+			{Name: "Amount", Value: fmt.Sprintf("%.8f RVN", amount), Inline: true},
+			{Name: "Status", Value: "Transaction Exists", Inline: true},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":        "success",
+		"message":       "Transaction found and validated",
+		"orderId":       orderID,
+		"txid":          txid,
+		"amount":        amount,
+		"step1Complete": true,
+	})
+}
+
+// Step 2: Check transaction confirmation status (NEW IMPROVED VERSION)
+func CheckRavencoinStep2New(w http.ResponseWriter, r *http.Request) {
+	orderID := at.GetParam(r)
+	txid := r.URL.Query().Get("txid")
+
+	if orderID == "" || txid == "" {
+		at.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"status":  "error",
+			"message": "Order ID and transaction ID are required",
+		})
+		return
+	}
+
+	log.Printf("Checking Ravencoin Step 2 for order %s with txid %s", orderID, txid)
+
+	// Check transaction confirmation status
+	isConfirmed, confirmations, err := checkRavencoinTransactionConfirmation(txid)
+	if err != nil {
+		log.Printf("Error checking transaction confirmation: %v", err)
+		at.WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"status":  "error",
+			"message": "Failed to check transaction confirmation",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if !isConfirmed {
+		log.Printf("Transaction %s is still pending (confirmations: %d)", txid, confirmations)
+		at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"status":        "pending",
+			"message":       "Transaction is still pending confirmation",
+			"confirmations": confirmations,
+			"step2Complete": false,
+		})
+		return
+	}
+
+	// Transaction is confirmed
+	log.Printf("Transaction %s is confirmed with %d confirmations", txid, confirmations)
+
+	// Update order status
+	filter := bson.M{"orderId": orderID}
+	update := bson.M{
+		"$set": bson.M{
+			"confirmations": confirmations,
+			"step2Complete": true,
+			"lastUpdated":   time.Now(),
+		},
+	}
+
+	_, err = config.Mongoconn.Collection("crowdfundingorders").UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		log.Printf("Error updating order: %v", err)
+		at.WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"status":  "error",
+			"message": "Failed to update order",
+		})
+		return
+	}
+
+	// Send Discord notification
+	sendCrowdfundingDiscordEmbed(
+		"✅ Ravencoin Step 2 Complete",
+		"Transaction confirmed in blockchain successfully.",
+		ColorGreen,
+		[]DiscordEmbedField{
+			{Name: "Order ID", Value: orderID, Inline: true},
+			{Name: "Transaction ID", Value: txid, Inline: true},
+			{Name: "Confirmations", Value: fmt.Sprintf("%d", confirmations), Inline: true},
+			{Name: "Status", Value: "Confirmed", Inline: true},
+		},
+	)
+
+	at.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":        "success",
+		"message":       "Transaction confirmed in blockchain",
+		"orderId":       orderID,
+		"txid":          txid,
+		"confirmations": confirmations,
+		"step2Complete": true,
+	})
 }
